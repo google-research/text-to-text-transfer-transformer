@@ -1,0 +1,9 @@
+# -*-Python-*-
+# with relative attention instead of positional embedding
+include 'models/bi_bert_base.gin'
+
+transformer.Unitransformer.positional_embedding = False
+# relative attention is implemented as a bias (independent of context)
+# this bias differs across attention heads but is shared across different
+#  layers in a stack (to save time)
+transformer_layers.SelfAttention.relative_attention_type = "bias_shared"

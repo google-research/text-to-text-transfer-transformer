@@ -1,0 +1,11 @@
+# -*-Python-*-
+
+include 'objectives/denoise.gin'
+
+preprocessors.denoise.inputs_fn = @preprocessors.noise_span_to_unique_sentinel
+preprocessors.denoise.targets_fn = @preprocessors.nonnoise_span_to_unique_sentinel
+
+# maximum target sequence length should be about 512 * 0.15 * 2
+utils.run.sequence_length = {"inputs": 512, "targets": 192}
+
+sentencepiece_vocabulary.SentencePieceVocabulary.extra_ids = 100

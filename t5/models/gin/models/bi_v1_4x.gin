@@ -1,0 +1,8 @@
+# -*-Python-*-
+# bi_v1 but with ~4x the parameters and FLOPS
+# Basically BERT-large with 32 layers per stack instead of 24
+
+include 'models/bi_v1.gin'
+include 'models/bi_bert_large.gin'
+
+num_layers = 32

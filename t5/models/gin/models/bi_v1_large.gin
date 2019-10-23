@@ -1,0 +1,9 @@
+# -*-Python-*-
+# Encoder size similar to bert-large model.
+include 'models/bi_v1.gin'
+
+d_model = 1024
+num_layers = 24
+d_ff = 4096
+num_heads = 16
+utils.tpu_mesh_shape.model_parallelism = 2

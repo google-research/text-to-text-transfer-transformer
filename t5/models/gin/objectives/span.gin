@@ -1,0 +1,46 @@
+# -*-Python-*-
+
+# Random pattern of noise and non-noise spans.
+
+include 'objectives/denoise.gin'
+
+
+preprocessors.unsupervised.preprocessors = [
+@preprocessors.select_random_chunk,
+@preprocessors.reduce_concat_tokens,
+@preprocessors.split_tokens,
+@preprocessors.denoise,
+]
+
+inputs_length = 512
+noise_density = 0.15
+preprocessors.denoise.noise_density = %noise_density
+mean_noise_span_length = 3.0
+
+preprocessors.denoise.inputs_fn = @preprocessors.noise_span_to_unique_sentinel
+preprocessors.denoise.targets_fn = @preprocessors.nonnoise_span_to_unique_sentinel
+
+preprocessors.denoise.noise_mask_fn = @preprocessors.random_spans_noise_mask
+preprocessors.random_spans_noise_mask.mean_noise_span_length = %mean_noise_span_length
+
+# Based on this combination of noise_mask_fn, inputs_fn, and targets_fn, we
+# compute the exact split length and targets length so that the resulting
+# training examples fit perfectly without any padding.
+#
+# These settings still work (but leave some padding) if the inputs_fn or
+#  targets_fn is switched to drop instead of replacing spans by sentinels.
+
+# Compute the split length based on the other hyperparameters
+preprocessors.split_tokens.max_tokens_per_segment = @preprocessors.random_spans_tokens_length()
+targets_length = @preprocessors.random_spans_targets_length()
+
+preprocessors.random_spans_helper.inputs_length = %inputs_length
+preprocessors.random_spans_helper.noise_density = %noise_density
+preprocessors.random_spans_helper.mean_noise_span_length = %mean_noise_span_length
+preprocessors.random_spans_helper.extra_tokens_per_span_inputs = 1
+preprocessors.random_spans_helper.extra_tokens_per_span_targets = 1
+
+
+utils.run.sequence_length = {"inputs": %inputs_length, "targets": %targets_length}
+
+sentencepiece_vocabulary.SentencePieceVocabulary.extra_ids = 100

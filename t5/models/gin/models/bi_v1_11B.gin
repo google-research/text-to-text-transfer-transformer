@@ -1,0 +1,10 @@
+# -*-Python-*-
+# 11B parameters
+include 'models/bi_v1.gin'
+
+d_model = 1024
+num_layers = 24
+d_ff = 65536
+num_heads = 128
+d_kv = 128
+utils.tpu_mesh_shape.model_parallelism = 32

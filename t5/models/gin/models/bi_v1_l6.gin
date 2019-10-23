@@ -1,0 +1,6 @@
+# -*-Python-*-
+# half-depth so as to be nearly parameter-matched to lm_v1
+
+include 'models/bi_v1.gin'
+
+num_layers = 6

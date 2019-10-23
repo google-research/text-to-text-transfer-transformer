@@ -1,0 +1,17 @@
+# -*-Python-*-
+# Gets a dataset from tasks_v2 or mixtures
+
+import t5.data.mixtures
+import t5.data.sentencepiece_vocabulary
+import t5.models.mesh_transformer
+
+# Override these values
+MIXTURE_NAME = 'glue_v002_proportional'  # A mixture name from mixtures.py
+mesh_train_dataset_fn.use_cached = False
+
+# Plumbing
+utils.run.train_dataset_fn = @t5.models.mesh_transformer.mesh_train_dataset_fn
+utils.run.vocabulary = @t5.data.sentencepiece_vocabulary.SentencePieceVocabulary()
+SentencePieceVocabulary.sentencepiece_model_file = @t5.models.mesh_transformer.get_sentencepiece_model_path()
+mesh_train_dataset_fn.mixture_name = %MIXTURE_NAME
+get_sentencepiece_model_path.mixture_name = %MIXTURE_NAME

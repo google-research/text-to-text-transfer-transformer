@@ -1,0 +1,45 @@
+{
+  "features": {
+    "id": {
+      "dtype": "string",
+      "shape": []
+    },
+    "ids": {
+      "dtype": "string",
+      "shape": [
+        null
+      ]
+    },
+    "idx": {
+      "dtype": "int64",
+      "shape": []
+    },
+    "idxs": {
+      "dtype": "int64",
+      "shape": [
+        null
+      ]
+    },
+    "inputs": {
+      "dtype": "int64",
+      "shape": [
+        null
+      ]
+    },
+    "inputs_plaintext": {
+      "dtype": "string",
+      "shape": []
+    },
+    "targets": {
+      "dtype": "int64",
+      "shape": [
+        null
+      ]
+    },
+    "targets_plaintext": {
+      "dtype": "string",
+      "shape": []
+    }
+  },
+  "num_shards": 1
+}

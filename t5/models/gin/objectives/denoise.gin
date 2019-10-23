@@ -1,0 +1,19 @@
+# -*-Python-*-
+
+# Defaults for unsupervised denoising objectives.
+
+# select one chunk of at most 64k tokens from the document and chop it into
+# examples of length %sequence_length tokens or shorter.
+preprocessors.unsupervised.preprocessors = [
+@preprocessors.select_random_chunk,
+@preprocessors.reduce_concat_tokens,
+@preprocessors.split_tokens_to_inputs_length,
+@preprocessors.denoise,
+]
+preprocessors.select_random_chunk.max_length = 65536
+
+# Default setup is to mask out 15% of tokens and predict the original sequence
+preprocessors.denoise.noise_density = 0.15
+preprocessors.denoise.noise_mask_fn = @preprocessors.iid_noise_mask
+preprocessors.denoise.inputs_fn = @noise_token_to_sentinel
+preprocessors.denoise.targets_fn = None

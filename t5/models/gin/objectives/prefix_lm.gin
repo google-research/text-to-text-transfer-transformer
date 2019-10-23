@@ -1,0 +1,19 @@
+# -*-Python-*-
+# Unsupervised objective for prefix lm modeling
+
+include 'objectives/denoise.gin'
+
+# we chop some documents into shorter segments than necessary on the intuition
+# that the model learns more when there are input tokens and target tokens in
+# close proximity.
+preprocessors.unsupervised.preprocessors = [
+@preprocessors.select_random_chunk,
+@preprocessors.split_tokens_to_random_length,
+@preprocessors.denoise,
+]
+
+
+preprocessors.denoise.noise_mask_fn = @preprocessors.random_prefix_noise_mask
+preprocessors.denoise.noise_density = 0.5
+preprocessors.denoise.inputs_fn = @preprocessors.drop_noise_tokens
+preprocessors.denoise.targets_fn = @preprocessors.drop_nonnoise_tokens

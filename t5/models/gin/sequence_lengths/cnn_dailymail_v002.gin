@@ -1,0 +1,4 @@
+# -*-Python-*-
+# The 99th %ile input sequence length for CNN/DM is actually longer than this,
+# but AFAICT no one actually trains CNN/DM with super long input sequences.
+utils.run.sequence_length = {'inputs': 512, 'targets': 512}

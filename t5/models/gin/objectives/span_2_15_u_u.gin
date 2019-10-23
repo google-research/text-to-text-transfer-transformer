@@ -1,0 +1,5 @@
+# -*-Python-*-
+
+include 'objectives/span.gin'
+
+mean_noise_span_length = 2.0

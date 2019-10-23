@@ -1,0 +1,5 @@
+# -*-Python-*-
+
+Bitransformer.decode.beam_size = 1
+utils.get_variable_dtype.slice_dtype = "bfloat16"
+utils.get_variable_dtype.activation_dtype = "bfloat16"

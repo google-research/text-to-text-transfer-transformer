@@ -1,0 +1,9 @@
+# -*-Python-*-
+
+include 'objectives/denoise.gin'
+
+preprocessors.denoise.inputs_fn = @preprocessors.drop_noise_tokens
+preprocessors.denoise.targets_fn = @preprocessors.drop_nonnoise_tokens
+
+# 104 is the 99.9th percentile of expected target length with 15% drop prob
+utils.run.sequence_length = {"inputs": 512, "targets": 104}

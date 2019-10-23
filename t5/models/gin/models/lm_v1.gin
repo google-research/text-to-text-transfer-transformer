@@ -1,0 +1,5 @@
+# -*-Python-*-
+# LM version of bi_v1.gin
+include 'models/bi_v1.gin'
+
+utils.run.model_type = "lm"

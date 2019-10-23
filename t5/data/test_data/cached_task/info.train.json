@@ -1,0 +1,25 @@
+{
+  "features": {
+    "inputs": {
+      "dtype": "int64",
+      "shape": [
+        null
+      ]
+    },
+    "inputs_plaintext": {
+      "dtype": "string",
+      "shape": []
+    },
+    "targets": {
+      "dtype": "int64",
+      "shape": [
+        null
+      ]
+    },
+    "targets_plaintext": {
+      "dtype": "string",
+      "shape": []
+    }
+  },
+  "num_shards": 2
+}

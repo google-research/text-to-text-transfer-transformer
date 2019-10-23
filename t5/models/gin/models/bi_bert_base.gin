@@ -1,0 +1,9 @@
+# -*-Python-*-
+# same hyperparameters as bert_base and xlnet_base
+
+utils.run.model_type = "bitransformer"
+d_model = 768
+num_layers = 12
+d_ff = 3072
+num_heads = 12
+d_kv = 64

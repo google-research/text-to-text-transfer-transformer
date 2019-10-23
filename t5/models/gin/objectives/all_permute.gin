@@ -1,0 +1,12 @@
+# -*-Python-*-
+# Deshuffle all objective
+include 'objectives/denoise.gin'
+
+preprocessors.unsupervised.preprocessors = [
+@preprocessors.select_random_chunk,
+@preprocessors.split_tokens_to_inputs_length,
+@preprocessors.denoise,
+]
+
+preprocessors.denoise.noise_density = 1.0
+preprocessors.denoise.inputs_fn = @preprocessors.permute_noise_tokens

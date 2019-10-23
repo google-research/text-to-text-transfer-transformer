@@ -1,0 +1,8 @@
+# -*-Python-*-
+# BERT-like pretraining objective.
+# Replace 10% of noise tokens with random tokens and 90% with sentinels.
+
+include 'objectives/denoise.gin'
+
+preprocessors.denoise.inputs_fn = @preprocessors.noise_token_to_random_token_or_sentinel
+preprocessors.noise_token_to_random_token_or_sentinel.random_prob = 0.1

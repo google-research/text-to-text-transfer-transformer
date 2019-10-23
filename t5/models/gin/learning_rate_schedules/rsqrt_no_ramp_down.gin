@@ -1,0 +1,6 @@
+# -*-Python-*-
+
+import mesh_tensorflow.transformer.learning_rate_schedules
+
+utils.run.learning_rate_schedule = @learning_rate_schedules.learning_rate_schedule_noam
+learning_rate_schedule_noam.linear_decay_fraction = 0.0

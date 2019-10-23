@@ -1,0 +1,5 @@
+# -*-Python-*-
+# with relative-attention-bias instead of positional embedding
+include 'models/lm_v1.gin'
+
+Unitransformer.input_full_attention = True

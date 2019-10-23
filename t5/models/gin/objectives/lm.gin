@@ -1,0 +1,10 @@
+# -*-Python-*-
+
+# language model - inputs are empty - targets formed by first concatenating
+#  tokenized documents and then chopping them into chunks of %sequence_length
+#  tokens.
+
+include 'objectives/denoise.gin'
+
+preprocessors.denoise.inputs_fn = @preprocessors.drop_noise_tokens
+preprocessors.denoise.noise_density = 1.0

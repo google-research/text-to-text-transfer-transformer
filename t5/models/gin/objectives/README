@@ -1,0 +1,35 @@
+This directory contains configurations for unsupervised training objectives.
+
+Naming conventions:
+
+Most files follow the follwing naming scheme:
+
+<noise-pattern>_<noise-density-percentage>_<inputs-encoding>_<targets-encoding>
+
+<noise-pattern>:
+   iid: positions are chosen independently to be noise/non-noise
+   span_<n>: random spans are chosen to be noise.  The average length of a noise
+     span is n tokens.
+   reg_<n>: regular pattern of spans of n noise tokens interspersed with the
+      number of non-noise tokens necessary to reach the desired noise-density.
+   reg_<min-n>-<max-n>: same as above, but for each sequence we first pick n
+      randomly within the given bounds
+
+<noise-density-percentage>:
+   a two-digit number indicating what percentage of tokens should be noise'
+
+<inputs-encoding>:
+   m: (mask) - replace each noise token with the same sentinel
+   r: replace each noise token with a random token from the vocab
+   g: replace each noise token with a random token gathered from the sequence
+   p: randomly permute all noise tokens within the sequence
+   d: drop noise tokens
+   s: replace each span of consecutive noise tokens with the same sentinel.
+   u: replace each span of consecutive noise tokens with a different sentinel.
+
+<targets-encoding>:
+   f: full original sequence
+   d: drop non-noise tokens
+   s: replace each span of consecutive non-noise tokens with the same sentinel.
+   u: replace each span of consecutive non-noise tokens with a different
+      sentinel (aligned with the sentinels used in the inputs)
