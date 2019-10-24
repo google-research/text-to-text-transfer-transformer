@@ -1,6 +1,6 @@
 # T5: Text-To-Text Transfer Transformer
 
-T5 serves primarily as code for reproducing the experiments in _Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer_.
+T5 serves primarily as code for reproducing the experiments in [_Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer_][paper].
 The bulk of the code in this repository is used for loading, preprocessing, mixing, and evaluating datasets.
 It also provides a way to fine-tune the [pre-trained models](#released-model-checkpoints) released alongside the publication.
 
@@ -8,7 +8,7 @@ T5 can be used as a library for future model development by providing useful mod
 
 ## Organization
 
-T5 is organized into 3 core packages plus configurations for reproducing experiments from the paper:
+T5 is organized into 3 core packages plus configurations for reproducing experiments from the [paper][paper]:
 
 #### t5.data
 
@@ -124,7 +124,7 @@ Alternatively, you could fine-tune with a TSV file where each line is formatted 
 --gin_param="tsv_dataset_fn.filename = 'gs:/path/to/tsv'"
 ```
 
-To fine-tune with the same hyperparameters we used in the paper (using a constant learning rate of 0.001), you can pass in this gin file which is included in the T5 package:
+To fine-tune with the same hyperparameters we used in the [paper][paper] (using a constant learning rate of 0.001), you can pass in this gin file which is included in the T5 package:
 
 ```
 --gin_file="learning_rate_schedules/constant_0_001.gin"
@@ -172,7 +172,7 @@ To use greedy decoding, use the `greedy.gin` file instead of `beam_search.gin` i
 
 ### Reproducing our experiments
 
-We provide operative configs for all of the experiments in the paper in [gs://t5-data/experiments](https://console.cloud.google.com/storage/browser/t5-data/experiments).
+We provide operative configs for all of the experiments in the [paper][paper] in [gs://t5-data/experiments](https://console.cloud.google.com/storage/browser/t5-data/experiments).
 The `experiments` folder has different subdirectories corresponding to the different sections in our paper.
 For example, [gs://t5-data/experiments/objectives](https://console.cloud.google.com/storage/browser/t5-data/experiments/objectives) contains the experiments from Section 3.3 ("Unsupervised objectives").
 Each subdirectory of the `objectives` folder contains operative configs for some particular experiment (where loosely speaking an "experiment" is one of the rows in one of the tables in our paper).
@@ -212,7 +212,7 @@ t5_mesh_transformer  \
 
 ## Released Model Checkpoints
 
-We have released the following checkpoints for pre-trained models described in our paper:
+We have released the following checkpoints for pre-trained models described in our [paper][paper]:
 
 * **T5-Small** (60 million parameters): [gs://t5-data/pretrained_models/small](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/small/)
 * **T5-Base** (220 million parameters): [gs://t5-data/pretrained_models/base](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/base/)
@@ -222,17 +222,20 @@ We have released the following checkpoints for pre-trained models described in o
 
 
 # How to cite
-If you extend or use this work, please cite the paper where it was introduced:
+If you extend or use this work, please cite the [paper][paper] where it was introduced:
 
 ```
 @article{2019t5,
   author = {Colin Raffel and Noam Shazeer and Adam Roberts and Katherine Lee and Sharan Narang and Michael Matena and Yanqi Zhou and Wei Li and Peter Liu},
   title = {Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer},
   journal = {arXiv e-prints},
-  year = {2019}
+  year = {2019},
+  archivePrefix = {arXiv},
+  eprint = {1910.10683},
 }
 ```
 
+[paper]: https://arxiv.org/abs/1910.10683
 [beam]: https://beam.apache.org
 [c4]: https://www.tensorflow.org/datasets/catalog/c4
 [cc]: https://commoncrawl.org
