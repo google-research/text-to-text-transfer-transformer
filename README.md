@@ -226,7 +226,7 @@ If you extend or use this work, please cite the [paper][paper] where it was intr
 
 ```
 @article{2019t5,
-  author = {Colin Raffel and Noam Shazeer and Adam Roberts and Katherine Lee and Sharan Narang and Michael Matena and Yanqi Zhou and Wei Li and Peter Liu},
+  author = {Colin Raffel and Noam Shazeer and Adam Roberts and Katherine Lee and Sharan Narang and Michael Matena and Yanqi Zhou and Wei Li and Peter J. Liu},
   title = {Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer},
   journal = {arXiv e-prints},
   year = {2019},
