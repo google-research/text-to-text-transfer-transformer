@@ -119,6 +119,7 @@ GLUE_METRICS = collections.OrderedDict([
     ("qnli", [metrics.accuracy]),
     ("rte", [metrics.accuracy]),
     ("wnli", [metrics.accuracy]),
+    ("ax", []),  # Only test set available.
 ])
 
 for b in tfds.text.glue.Glue.builder_configs.values():
@@ -137,6 +138,7 @@ for b in tfds.text.glue.Glue.builder_configs.values():
       metric_fns=GLUE_METRICS[b.name],
       sentencepiece_model_path=DEFAULT_SPM_PATH,
       postprocess_fn=_get_glue_postprocess_fn(b),
+      splits=["test"] if b.name == "ax" else None,
   )
 
 # =============================== CNN DailyMail ================================
@@ -204,19 +206,34 @@ SUPERGLUE_METRICS = collections.OrderedDict([
     ("record", [metrics.qa]),
     ("rte", [metrics.accuracy]),
     ("wic", [metrics.accuracy]),
+    ("axb", []),  # Only test set available.
+    ("axg", []),  # Only test set available.
 ])
 
 for b in tfds.text.super_glue.SuperGlue.builder_configs.values():
   # We use a simplified version of WSC, defined below
   if "wsc" in b.name:
     continue
+  if b == "axb":
+    text_preprocessor = [
+        functools.partial(
+            preprocessors.rekey,
+            key_map={
+                "premise": "sentence1",
+                "hypothesis": "sentence2"
+            }),
+        _get_glue_text_preprocessor(b)
+    ]
+  else:
+    text_preprocessor = _get_glue_text_preprocessor(b)
   TaskRegistry.add(
       "super_glue_%s_v102" % b.name,
       tfds_name="super_glue/%s:1.0.2" % b.name,
-      text_preprocessor=_get_glue_text_preprocessor(b),
+      text_preprocessor=text_preprocessor,
       metric_fns=SUPERGLUE_METRICS[b.name],
       sentencepiece_model_path=DEFAULT_SPM_PATH,
-      postprocess_fn=_get_glue_postprocess_fn(b))
+      postprocess_fn=_get_glue_postprocess_fn(b),
+      splits=["test"] if b.name in ["axb", "axg"] else None)
 
 # ======================== Definite Pronoun Resolution =========================
 TaskRegistry.add(
