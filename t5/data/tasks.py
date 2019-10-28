@@ -73,8 +73,12 @@ def _get_glue_text_preprocessor(builder_config):
   elif builder_config.name == "record":
     return preprocessors.record
   else:
-    if "mnli" in builder_config.name:
+    if "mnli" in builder_config.name or builder_config.name == "ax":
+      # Cast the GLUE diagnostic task as MNLI.
       benchmark_name = "mnli"
+    elif builder_config.name in ["axb", "axg"]:
+      # Cast the SuperGLUE diagnostic tasks as RTE.
+      benchmark_name = "rte"
     else:
       benchmark_name = builder_config.name
     if builder_config.name == "multirc":
