@@ -168,7 +168,7 @@ To evaluate a specific checkpoint, simply set the `eval_checkpoint_step` paramet
 --gin_param="eval_checkpoint_step = 100000"
 ```
 
-To use greedy decoding, use the `greedy.gin` file instead of `beam_search.gin` in the command above.
+To use greedy decoding, use the `greedy_decode.gin` file instead of `beam_search.gin` in the command above.
 
 ### Reproducing our experiments
 
