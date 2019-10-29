@@ -38,7 +38,7 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_list(
     "t5_tasks_additional_cache_dirs", [],
-    "Additional directories to search for cached OGM Tasks after checking the "
+    "Additional directories to search for cached Tasks after checking the "
     "global caches.")
 
 flags.DEFINE_string(
