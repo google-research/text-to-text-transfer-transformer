@@ -156,7 +156,6 @@ t5_mesh_transformer \
   --t5_tfds_data_dir=${DATA_DIR} \
   --gin_file="eval.gin" \
   --gin_file="beam_search.gin" \
-  --gin_param="utils.tpu_mesh_shape.model_parallelism = 1" \
   --gin_param="utils.tpu_mesh_shape.tpu_topology = '2x2'" \
   --gin_param="MIXTURE_NAME = 'glue_mrpc_v002'" \
   --gin_param="eval_checkpoint_step = 'all'"
@@ -168,7 +167,35 @@ To evaluate a specific checkpoint, simply set the `eval_checkpoint_step` paramet
 --gin_param="eval_checkpoint_step = 100000"
 ```
 
-To use greedy decoding, use the `greedy_decode.gin` file instead of `beam_search.gin` in the command above.
+You can also use `greedy_decode.gin` or `sample_decode.gin` instead of `beam_search.gin` in the command above.
+
+
+#### Decode
+
+In order to produce predictions from a model in the T5 framework, you need to specify the model directory, decoding method, and which checkpoint step(s) to use for decoding. Assuming you have a text file of input sequences stored at `/path/to/intputs.txt`, an example command would be:
+
+```sh
+t5_mesh_transformer \
+  --tpu="${TPU_NAME}" \
+  --gcp_project="${PROJECT}" \
+  --tpu_zone="${ZONE}" \
+  --model_dir="${MODEL_DIR}" \
+  --gin_file="${MODEL_DIR}/operative_config.gin" \
+  --gin_file="sample_decode.gin" \
+  --gin_param="utils.run.mode == 'infer'" \
+  --gin_param="input_filename = '/path/to/inputs.txt'"\
+  --gin_param="output_filename = '/tmp/outputs.txt'"\
+  --gin_param="utils.tpu_mesh_shape.tpu_topology = '2x2'"\
+  --gin_param="eval_checkpoint_step = 'all'"
+```
+
+To predict with a specific checkpoint, simply set the `eval_checkpoint_step` parameter to appropriate checkpoint.
+
+```
+--gin_param="eval_checkpoint_step = 100000"
+```
+
+You can also use `beam_search.gin` or `greedy_decode.gin` instead of `sample_decode.gin` in the command above.
 
 ### Reproducing our experiments
 
