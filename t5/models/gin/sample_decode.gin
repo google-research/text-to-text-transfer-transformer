@@ -1,0 +1,6 @@
+# -*-Python-*-
+
+Bitransformer.decode.beam_size = 1
+Bitransformer.decode.temperature = 1.0
+utils.get_variable_dtype.slice_dtype = "bfloat16"
+utils.get_variable_dtype.activation_dtype = "bfloat16"
