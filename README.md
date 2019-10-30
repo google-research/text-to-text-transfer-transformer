@@ -183,8 +183,8 @@ t5_mesh_transformer \
   --gin_file="${MODEL_DIR}/operative_config.gin" \
   --gin_file="sample_decode.gin" \
   --gin_param="utils.run.mode = 'infer'" \
-  --gin_param="input_filename = '/path/to/inputs.txt'"\
-  --gin_param="output_filename = '/tmp/outputs.txt'"\
+  --gin_param="decode_from_file.input_filename = '/path/to/inputs.txt'"\
+  --gin_param="decode_from_file.output_filename = '/tmp/outputs.txt'"\
   --gin_param="utils.tpu_mesh_shape.tpu_topology = '2x2'"\
   --gin_param="eval_checkpoint_step = 'all'"
 ```
