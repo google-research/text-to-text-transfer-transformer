@@ -127,18 +127,10 @@ GLUE_METRICS = collections.OrderedDict([
 ])
 
 for b in tfds.text.glue.Glue.builder_configs.values():
-  if b == "rte":
-    text_preprocessor = [
-        functools.partial(
-            preprocessors.rekey,
-            key_map={"premise": "sentence1", "hypothesis": "sentence2"}),
-        _get_glue_text_preprocessor(b)]
-  else:
-    text_preprocessor = _get_glue_text_preprocessor(b)
   TaskRegistry.add(
       "glue_%s_v002" % b.name,
       tfds_name="glue/%s:0.0.2" % b.name,
-      text_preprocessor=text_preprocessor,
+      text_preprocessor=_get_glue_text_preprocessor(b),
       metric_fns=GLUE_METRICS[b.name],
       sentencepiece_model_path=DEFAULT_SPM_PATH,
       postprocess_fn=_get_glue_postprocess_fn(b),
@@ -218,13 +210,15 @@ for b in tfds.text.super_glue.SuperGlue.builder_configs.values():
   # We use a simplified version of WSC, defined below
   if "wsc" in b.name:
     continue
-  if b == "axb":
+  if b.name == "axb":
     text_preprocessor = [
         functools.partial(
             preprocessors.rekey,
             key_map={
                 "premise": "sentence1",
-                "hypothesis": "sentence2"
+                "hypothesis": "sentence2",
+                "label": "label",
+                "idx": "idx",
             }),
         _get_glue_text_preprocessor(b)
     ]
