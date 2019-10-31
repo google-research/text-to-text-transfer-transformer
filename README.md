@@ -158,13 +158,13 @@ t5_mesh_transformer \
   --gin_file="beam_search.gin" \
   --gin_param="utils.tpu_mesh_shape.tpu_topology = '2x2'" \
   --gin_param="MIXTURE_NAME = 'glue_mrpc_v002'" \
-  --gin_param="utils.run.eval_checkpoint_step = 'all'"
+  --gin_param="eval_checkpoint_step = 'all'"
 ```
 
 To evaluate a specific checkpoint, simply set the `eval_checkpoint_step` parameter to appropriate checkpoint.
 
 ```
---gin_param="utils.run.eval_checkpoint_step = 100000"
+--gin_param="eval_checkpoint_step = 100000"
 ```
 
 You can also use `greedy_decode.gin` or `sample_decode.gin` instead of `beam_search.gin` in the command above.
@@ -181,18 +181,18 @@ t5_mesh_transformer \
   --tpu_zone="${ZONE}" \
   --model_dir="${MODEL_DIR}" \
   --gin_file="${MODEL_DIR}/operative_config.gin" \
+  --gin_file="infer.gin" \
   --gin_file="sample_decode.gin" \
-  --gin_param="utils.run.mode = 'infer'" \
-  --gin_param="decode_from_file.input_filename = '/path/to/inputs.txt'"\
-  --gin_param="decode_from_file.output_filename = '/tmp/outputs.txt'"\
+  --gin_param="input_filename = '/path/to/inputs.txt'"\
+  --gin_param="output_filename = '/tmp/outputs.txt'"\
   --gin_param="utils.tpu_mesh_shape.tpu_topology = '2x2'"\
-  --gin_param="utils.run.eval_checkpoint_step = 'all'"
+  --gin_param="infer_checkpoint_step = 'all'"
 ```
 
-To predict with a specific checkpoint, simply set the `eval_checkpoint_step` parameter to appropriate checkpoint.
+To predict with a specific checkpoint, simply set the `infer_checkpoint_step` parameter to appropriate checkpoint.
 
 ```
---gin_param="utils.run.eval_checkpoint_step = 100000"
+--gin_param="infer_checkpoint_step = 100000"
 ```
 
 You can also use `beam_search.gin` or `greedy_decode.gin` instead of `sample_decode.gin` in the command above.
