@@ -140,7 +140,7 @@ def tsv_dataset_fn(
     filename,
     sequence_length,
     dataset_split,
-    vocabulary=DEFAULT_SPM_PATH,
+    vocabulary,
     shuffle_buffer_size=10000):
   r"""Returns a dataset based on a TSV file formatted as `<input>\t<target>`."""
   # Currently `tf.gfile.glob` is broken on GCS, so we only read a file or

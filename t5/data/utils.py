@@ -26,27 +26,12 @@ import json
 import os
 import re
 
-from absl import flags
 from absl import logging
 import gin
 import numpy as np
 from t5.data import sentencepiece_vocabulary
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
-
-FLAGS = flags.FLAGS
-
-flags.DEFINE_list(
-    "t5_tasks_additional_cache_dirs", [],
-    "Additional directories to search for cached Tasks after checking the "
-    "global caches.")
-
-flags.DEFINE_string(
-    "t5_tfds_data_dir", None,
-    "If set, this directory will be used to store datasets prepared by "
-    "TensorFlow Datasets that are not available in the public TFDS GCS bucket. "
-    "Note that this flag overrides the `tfds_data_dir` attribute of all "
-    "`Task`s.")
 
 _DEFAULT_FEATURE_KEYS = ["inputs", "targets"]
 
@@ -57,13 +42,23 @@ _TFRECORD_PREFIX = "{split}.tfrecord"
 _MAX_EXAMPLES_TO_MEM_CACHE = 1000
 _SHUFFLE_BUFFER_SIZE = 1000
 
-
+_TFDS_DATA_DIR_OVERRIDE = None
 _GLOBAL_CACHE_DIRECTORIES = []
+
+
+def set_tfds_data_dir_override(tfds_data_dir):
+  global _TFDS_DATA_DIR_OVERRIDE
+  _TFDS_DATA_DIR_OVERRIDE = tfds_data_dir
 
 
 def set_global_cache_dirs(global_cache_dirs):
   global _GLOBAL_CACHE_DIRECTORIES
   _GLOBAL_CACHE_DIRECTORIES = global_cache_dirs
+
+
+def add_global_cache_dirs(global_cache_dirs):
+  global _GLOBAL_CACHE_DIRECTORIES
+  _GLOBAL_CACHE_DIRECTORIES += global_cache_dirs
 
 
 class DatasetProviderBase(object):
@@ -173,12 +168,12 @@ class LazyTfdsLoader(object):
 
   @property
   def data_dir(self):
-    if FLAGS.t5_tfds_data_dir:
+    if _TFDS_DATA_DIR_OVERRIDE:
       if self._data_dir:
         logging.warning(
             "Overriding TFDS data directory '%s' with '%s' for dataset '%s'.",
-            self._data_dir, FLAGS.t5_tfds_data_dir, self.name)
-      return FLAGS.t5_tfds_data_dir
+            self._data_dir, _TFDS_DATA_DIR_OVERRIDE, self.name)
+      return _TFDS_DATA_DIR_OVERRIDE
     return self._data_dir
 
   @property
@@ -569,8 +564,7 @@ class Task(DatasetProviderBase):
 
     # See if cached data exists in any of the cache directories.
     potential_cache_dirs = [
-        os.path.join(d, self.name) for d in
-        _GLOBAL_CACHE_DIRECTORIES + FLAGS.t5_tasks_additional_cache_dirs]
+        os.path.join(d, self.name) for d in _GLOBAL_CACHE_DIRECTORIES]
     for cache_dir in potential_cache_dirs:
       if tf.io.gfile.exists(os.path.join(cache_dir, "COMPLETED")):
         self._cache_dir = cache_dir

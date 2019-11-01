@@ -57,11 +57,17 @@ flags.DEFINE_string(
     "GCE zone where the Cloud TPU is located in. If not specified, we "
     "will attempt to automatically detect the GCE project from metadata.")
 
-# TFDS Module Import
 flags.DEFINE_multi_string(
     "module_import", None,
-    "Modules to import. Use this when your DatasetBuilder is defined outside "
-    "of tensorflow_datasets so that it is registered.")
+    "Modules to import. Use this, for example, to add new `Task`s to the "
+    "global `TaskRegistry`.")
+
+flags.DEFINE_string(
+    "t5_tfds_data_dir", None,
+    "If set, this directory will be used to store datasets prepared by "
+    "TensorFlow Datasets that are not available in the public TFDS GCS bucket. "
+    "Note that this flag overrides the `tfds_data_dir` attribute of all "
+    "`Task`s.")
 
 flags.DEFINE_multi_string(
     "tasks_cache_dir", None,
@@ -75,6 +81,8 @@ def main(_):
     for module in FLAGS.module_import:
       importlib.import_module(module)
 
+  if FLAGS.t5_tfds_data_dir:
+    t5.data.set_tfds_data_dir_override(FLAGS.tfds_data_dir)
   if FLAGS.tasks_cache_dir:
     t5.data.set_global_cache_dirs(FLAGS.tasks_cache_dir)
 

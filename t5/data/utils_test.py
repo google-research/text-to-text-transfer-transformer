@@ -88,11 +88,11 @@ class TasksTest(test_utils.FakeTaskTest):
         "'uncached_task' does not exist in any of the task cache directories"):
       self.uncached_task.get_cached_stats("train")
 
-  def test_additional_cache_directories_flag(self):
-    test_utils.set_global_cache_dirs([])
+  def test_set_global_cache_dirs(self):
+    utils.set_global_cache_dirs([])
     self.assertFalse(self.cached_task.cached)
 
-    flags.FLAGS.t5_tasks_additional_cache_dirs = [self.test_data_dir]
+    utils.set_global_cache_dirs([self.test_data_dir])
     self.cached_task._initialized = False
     self.assertTrue(self.cached_task.cached)
 

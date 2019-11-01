@@ -373,10 +373,6 @@ def add_task(name,
       splits=splits)
 
 
-def set_global_cache_dirs(dirs):
-  dataset_utils._GLOBAL_CACHE_DIRECTORIES = dirs  # pylint:disable=protected-access
-
-
 def clear_tasks():
   TaskRegistry._REGISTRY = {}  # pylint:disable=protected-access
 
@@ -447,7 +443,7 @@ class FakeTaskTest(absltest.TestCase):
         os.chmod(os.path.join(root, d), 0o777)
 
     # Register a cached test Task.
-    set_global_cache_dirs([self.test_data_dir])
+    dataset_utils.set_global_cache_dirs([self.test_data_dir])
     clear_tasks()
     add_task("cached_task")
 
