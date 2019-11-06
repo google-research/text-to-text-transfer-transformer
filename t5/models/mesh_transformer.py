@@ -25,7 +25,6 @@ import gin
 import mesh_tensorflow.transformer.dataset as transformer_dataset
 from t5.data import MixtureRegistry
 from t5.data import SentencePieceVocabulary
-from t5.data.tasks import DEFAULT_SPM_PATH
 import tensorflow as tf
 import tensorflow_datasets as tfds
 

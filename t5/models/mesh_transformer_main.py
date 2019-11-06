@@ -69,9 +69,9 @@ flags.DEFINE_string(
     "Note that this flag overrides the `tfds_data_dir` attribute of all "
     "`Task`s.")
 
-flags.DEFINE_multi_string(
-    "tasks_cache_dir", None,
-    "Directories to search for cached Tasks.")
+flags.DEFINE_list(
+    "additional_task_cache_dirs", [],
+    "Directories to search for Tasks in addition to defaults.")
 
 FLAGS = flags.FLAGS
 
@@ -83,8 +83,7 @@ def main(_):
 
   if FLAGS.t5_tfds_data_dir:
     t5.data.set_tfds_data_dir_override(FLAGS.tfds_data_dir)
-  if FLAGS.tasks_cache_dir:
-    t5.data.set_global_cache_dirs(FLAGS.tasks_cache_dir)
+  t5.data.add_global_cache_dirs(FLAGS.additional_task_cache_dirs)
 
   # Add search path for gin files stored in package.
   gin.add_config_file_search_path(
