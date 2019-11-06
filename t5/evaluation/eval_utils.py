@@ -36,10 +36,7 @@ class Metric(object):
 # This OrderedDict maps TensorBoard tags to nice-looking metric names.
 # The order of the keys in the dict determine the order they get logged.
 METRIC_NAMES = collections.OrderedDict([
-    ("wmt_t2t_ende_v003/bleu", Metric("WMT T2T En-De")),
-    ("wmt14_ende_v003/bleu", Metric("WMT14 En-De")),
-    ("wmt15_enfr_v003/bleu", Metric("WMT15 En-Fr")),
-    ("wmt16_enro_v003/bleu", Metric("WMT16 En-Ro")),
+    ("glue_average", Metric("Average GLUE Score")),
     ("glue_cola_v002/matthews_corrcoef", Metric("CoLA")),
     ("glue_sst2_v002/accuracy", Metric("SST-2")),
     ("glue_mrpc_v002/f1", Metric("MRPC (F1)", "MRPC")),
@@ -52,7 +49,6 @@ METRIC_NAMES = collections.OrderedDict([
     ("glue_mnli_mismatched_v002/accuracy", Metric("MNLImm", "MNLI")),
     ("glue_qnli_v002/accuracy", Metric("QNLI")),
     ("glue_rte_v002/accuracy", Metric("GLUE RTE")),
-    ("glue_average", Metric("Average GLUE Score")),
     ("cnn_dailymail_v002/rouge1", Metric("CNN/DM (ROUGE-1)", "CNN/DM")),
     ("cnn_dailymail_v002/rouge2", Metric("CNN/DM (ROUGE-2)", "CNN/DM")),
     ("cnn_dailymail_v002/rougeL", Metric("CNN/DM (ROUGE-L)", "CNN/DM")),
@@ -63,6 +59,7 @@ METRIC_NAMES = collections.OrderedDict([
     ("squad_v010_allanswers_span/f1", Metric("SQuAD (F1)", "SQuAD")),
     ("squad_v010/em", Metric("SQuAD (EM)", "SQuAD")),
     ("squad_v010/f1", Metric("SQuAD (F1)", "SQuAD")),
+    ("super_glue_average", Metric("Average SuperGLUE Score")),
     ("super_glue_boolq_v102/accuracy", Metric("BoolQ (accuracy)")),
     ("super_glue_cb_v102/mean_3class_f1", Metric("CB (F1)", "CB")),
     ("super_glue_cb_v102/accuracy", Metric("CB (accuracy)", "CB")),
@@ -74,8 +71,11 @@ METRIC_NAMES = collections.OrderedDict([
     ("super_glue_rte_v102/accuracy", Metric("SuperGLUE RTE")),
     ("super_glue_wic_v102/accuracy", Metric("WiC")),
     ("super_glue_wsc_v102_simple_eval/accuracy", Metric("WSC")),
-    ("super_glue_average", Metric("Average SuperGLUE Score")),
     ("dpr_v001_simple/accuracy", Metric("DPR")),
+    ("wmt_t2t_ende_v003/bleu", Metric("WMT T2T En-De")),
+    ("wmt14_ende_v003/bleu", Metric("WMT14 En-De")),
+    ("wmt15_enfr_v003/bleu", Metric("WMT15 En-Fr")),
+    ("wmt16_enro_v003/bleu", Metric("WMT16 En-Ro")),
 ])
 
 Event = collections.namedtuple("event", ["step", "value"])
@@ -119,76 +119,50 @@ def get_eval_metric_values(events):
   return eval_values
 
 
-def compute_avg_glue(scores, metric_names=None):
-  """Average GLUE and SuperGLUE scores and add them to the `scores` dict.
+def sort_columns(df, metric_names=None):
+  metric_names = metric_names or METRIC_NAMES
+  column_order = list(collections.OrderedDict.fromkeys(
+      [m.name for m in metric_names.values() if m.name in df.columns]
+  ))
+  return df.reindex(columns=column_order)
 
-  Returns a new dictionary (no side effects on "scores")
 
-  This function will potentially add or replace the keys `"glue_average"` and
-  `"super_glue_average"` to the provided `scores` dict. The keys will not be
-  added or modified if there are no scores to add.
+def compute_avg_glue(df, metric_names=None):
+  """Compute average GLUE and SuperGLUE scores from a DataFrame.
+
+  Will only compute a given average score if all of the metrics for that
+  benchmark appear as columns in the DataFrame.
 
   Args:
-    scores: dictionary of metric_names to a list of tuples. The elements of the
-      tuples are the checkpoint and metric value. Example element:
-        "glue_cola_v002/matthews_corrcoef": [(20, 1), (30, 2)],
-    metric_names: dictionary mapping TensorBoard tags to metric names and
-      groups. Defaults to METRIC_NAMES.
+    df: pandas.DataFrame, columns should be metric names.
+    metric_names: dict mapping tensorboard tag to metric name.
   Returns:
-    a dicitonary (the modified version of the scores dict)
+    A pandas.DataFrame which has GLUE and SuperGLUE averages calculated.
   """
-  scores = scores.copy()
-  if "glue_mnli_v002/accuracy" in scores:
-    # This is an eval-on-training-set run.  Convert the metric keys to be
-    #  the same as the eval-on-dev-set run, so that we get average glue and
-    #  superglue scores, and so that the csv line is aligned with the one
-    #  for the dev set.
-    v = scores.pop("glue_mnli_v002/accuracy")
-    scores["glue_mnli_matched_v002/accuracy"] = v
-    scores["glue_mnli_mismatched_v002/accuracy"] = v
   # Use METRIC_NAMES defined at the top as default
   metric_names = metric_names or METRIC_NAMES
-  all_glue_metric_names = {
+  all_glue_tags = {
       k for k in metric_names.keys() if "glue" in k and "average" not in k
   }
-  superglue_metric_names = {k for k in all_glue_metric_names if "super" in k}
-  glue_metric_names = all_glue_metric_names - superglue_metric_names
-
-  average_keys = ["glue_average", "super_glue_average"]
-  average_key_to_group_metrics = {
-      k: collections.defaultdict(set) for k in average_keys
-  }
-  key_names = [glue_metric_names, superglue_metric_names]
-  for key, names in zip(average_keys, key_names):
-    for name in names:
-      metric = metric_names[name]
-      average_key_to_group_metrics[key][metric.group].add(name)
-
-  metric_name_lists = [glue_metric_names, superglue_metric_names]
-  for average_key, metric_names in zip(average_keys, metric_name_lists):
-    glue_scores = {k: scores[k] for k in scores.keys() if k in metric_names}
-
-    events = collections.defaultdict(dict)
-    for k, score in glue_scores.items():
-      for checkpoint, value in score:
-        # Sometimes a checkpoint is duplicated in the variable `score.`
-        events[checkpoint][k] = value
-
-    named_events = []
-    for checkpoint in sorted(events):
-      # Check if all GLUE scores were computed.
-      if set(metric_names) == set(events[checkpoint].keys()):
-        accumulator = 0
-        group_to_metrics = average_key_to_group_metrics[average_key]
-        for metrics in group_to_metrics.values():
-          accumulator += np.mean(
-              [events[checkpoint][metric] for metric in metrics]
-          )
-        average = accumulator/len(group_to_metrics)
-        named_events.append(Event(checkpoint, average))
-    if named_events:
-      scores[average_key] = named_events
-  return scores
+  superglue_tags = {k for k in all_glue_tags if "super" in k}
+  glue_tags = all_glue_tags - superglue_tags
+  average_keys = ["Average GLUE Score", "Average SuperGLUE Score"]
+  for average_key, tags in zip(average_keys, [glue_tags, superglue_tags]):
+    # Only compute average if all metric names appear as columns in the DF
+    if {metric_names[t].name for t in tags}.issubset(set(df.columns)):
+      # Compute average over each metric group
+      group_to_metrics = collections.defaultdict(set)
+      for tag in tags:
+        metric = metric_names[tag]
+        group_to_metrics[metric.group].add(metric.name)
+      accum = None
+      for metrics in group_to_metrics.values():
+        group_avg = np.mean([df[k] for k in metrics], axis=0)
+        accum = group_avg if accum is None else accum + group_avg
+      # Compute average across all groups
+      average = accum/len(group_to_metrics)
+      df[average_key] = average
+  return df
 
 
 def scores_to_df(scores, metric_names=None):
@@ -250,9 +224,8 @@ def metric_group_max(df, metric_names=None):
   return metric_max, metric_max_step
 
 
-def log_csv(scores, metric_names=None, output_file=None):
+def log_csv(df, metric_names=None, output_file=None):
   """Log scores to be copy/pasted into a spreadsheet."""
-  df = scores_to_df(scores, metric_names)
   logging.info(",".join(df.columns))
   metric_max, metric_max_step = metric_group_max(df, metric_names)
   max_row = "max," + ",".join("{:.3f}".format(m) for m in metric_max)

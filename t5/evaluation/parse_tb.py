@@ -41,8 +41,10 @@ def main(_):
   if not scores:
     logging.info("No evaluation events found in %s", FLAGS.summary_dir)
     return
-  scores = eval_utils.compute_avg_glue(scores)
-  eval_utils.log_csv(scores, output_file=FLAGS.out_file)
+  df = eval_utils.scores_to_df(scores)
+  df = eval_utils.compute_avg_glue(df)
+  df = eval_utils.sort_columns(df)
+  eval_utils.log_csv(df, output_file=FLAGS.out_file)
 
 if __name__ == "__main__":
   app.run(main)

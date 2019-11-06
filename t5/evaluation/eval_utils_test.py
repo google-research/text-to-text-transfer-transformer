@@ -22,6 +22,7 @@ import collections
 import os
 
 from absl.testing import absltest
+import numpy as np
 import pandas as pd
 from t5.evaluation import eval_utils
 import tensorflow.compat.v1 as tf
@@ -69,52 +70,37 @@ class EvalUtilsTest(absltest.TestCase):
     )
 
   def test_glue_average(self):
-    score_names = [
-        "glue_cola_v002/matthews_corrcoef",
-        "glue_sst2_v002/accuracy",
-        "glue_mrpc_v002/f1",
-        "glue_mrpc_v002/accuracy",
-        "glue_stsb_v002/pearson_corrcoef",
-        "glue_stsb_v002/spearman_corrcoef",
-        "glue_qqp_v002/f1",
-        "glue_qqp_v002/accuracy",
-        "glue_mnli_matched_v002/accuracy",
-        "glue_mnli_mismatched_v002/accuracy",
-        "glue_qnli_v002/accuracy",
-        "glue_rte_v002/accuracy",
-        "super_glue_boolq_v102/accuracy",
-        "super_glue_cb_v102/mean_3class_f1",
-        "super_glue_cb_v102/accuracy",
-        "super_glue_copa_v102/accuracy",
-        "super_glue_multirc_v102/f1",
-        "super_glue_multirc_v102/exact_match",
-        "super_glue_record_v102/f1",
-        "super_glue_record_v102/em",
-        "super_glue_rte_v102/accuracy",
-        "super_glue_wic_v102/accuracy",
-        "super_glue_wsc_v102_simple_eval/accuracy",
-        "super_glue_average",
-        "random/accuracy",
-        "glue_average",
+    mets = eval_utils.METRIC_NAMES.items()
+    glue_metric_names = [
+        v.name for k, v in mets if k.startswith("glue") and "average" not in k
     ]
-    scores = {k: [(20, n), (30, n*2)] for n, k in enumerate(score_names)}
-    scores = eval_utils.compute_avg_glue(scores)
+    super_glue_metric_names = [
+        v.name for k, v in mets if k.startswith("super") and "average" not in k
+    ]
+    extra_metric_names = ["Fake metric", "Average GLUE Score"]
+    columns = glue_metric_names + super_glue_metric_names + extra_metric_names
+    n_total_metrics = len(columns)
+    df = pd.DataFrame(
+        [np.arange(n_total_metrics), 2*np.arange(n_total_metrics)],
+        columns=columns,
+    )
+    df = eval_utils.compute_avg_glue(df)
     expected_glue = (
         0 + 1 + (2 + 3)/2. + (4 + 5)/2. + (6 + 7)/2. + (8 + 9)/2. + 10 + 11
     )/8.
-    expected_glue_average = [(20, expected_glue), (30, expected_glue * 2)]
-    self.assertEqual(scores["glue_average"], expected_glue_average)
+    self.assertSequenceAlmostEqual(
+        df["Average GLUE Score"], [expected_glue, 2*expected_glue]
+    )
     expected_super = (
         12 + (13 + 14)/2. + 15 + (16 + 17)/2. + (18 + 19)/2. + 20 + 21 + 22
     )/8.
-    expected_super_average = [(20, expected_super), (30, expected_super * 2)]
-    self.assertEqual(scores["super_glue_average"], expected_super_average)
-    # Test that keys don't get added when GLUE scores are not computed
-    scores = {k: [(20, n), (30, n*2)] for n, k in enumerate(score_names)}
-    del scores["glue_cola_v002/matthews_corrcoef"]
-    del scores["glue_average"]
-    scores = eval_utils.compute_avg_glue(scores)
-    self.assertNoCommonElements(scores.keys(), ["glue_average"])
+    self.assertSequenceAlmostEqual(
+        df["Average SuperGLUE Score"], [expected_super, 2*expected_super]
+    )
+    del df["CoLA"]
+    del df["Average GLUE Score"]
+    df = eval_utils.compute_avg_glue(df)
+    self.assertNoCommonElements(df.columns, ["Average GLUE Score"])
 
   def test_metric_group_max(self):
     df = pd.DataFrame(
@@ -137,17 +123,18 @@ class EvalUtilsTest(absltest.TestCase):
     self.assertSequenceEqual(list(metric_max_step.values), [40, 20, 20])
 
   def test_log_csv(self):
-    with self.assertRaises(ValueError):
-      eval_utils.log_csv({"foo_task/unknown_metric": [(10, 30.)]})
-    metric_keys = list(eval_utils.METRIC_NAMES.keys())
     metric_names = list(eval_utils.METRIC_NAMES.values())
-    scores = {
-        metric_keys[0]: [(20, 1.), (30, 2.)],
-        metric_keys[1]: [(10, 3.)],
-        metric_keys[2]: [(10, 4.)],
-    }
+    df = pd.DataFrame(
+        collections.OrderedDict([
+            (metric_names[0].name, [np.nan, 1., 2.]),
+            (metric_names[1].name, [3., np.nan, np.nan]),
+            (metric_names[2].name, [4., np.nan, np.nan]),
+        ]),
+        index=[10, 20, 30],
+    )
+    df.index.name = "step"
     output_file = os.path.join(self.create_tempdir().full_path, "results.csv")
-    eval_utils.log_csv(scores, output_file=output_file)
+    eval_utils.log_csv(df, output_file=output_file)
     with tf.gfile.Open(output_file) as f:
       output = f.read()
     expected = """step,{},{},{}
