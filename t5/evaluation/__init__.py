@@ -13,5 +13,6 @@
 # limitations under the License.
 
 """Import eval modules."""
+from __future__ import absolute_import
 
 import t5.evaluation.metrics

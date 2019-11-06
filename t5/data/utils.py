@@ -80,7 +80,7 @@ class DatasetProviderBase(object):
 
   @abc.abstractmethod
   def get_dataset(
-      self, sequence_length, split, use_cached=True, shuffle=True):
+      self, sequence_length, split, use_cached=False, shuffle=True):
     raise NotImplementedError
 
 
@@ -120,7 +120,7 @@ class DatasetProviderRegistry(object):
 
   @classmethod
   def get_dataset(
-      cls, name, sequence_length, split, use_cached=True, shuffle=True):
+      cls, name, sequence_length, split, use_cached=False, shuffle=True):
     return cls.get(name).get_dataset(
         sequence_length=sequence_length, split=split, use_cached=use_cached,
         shuffle=shuffle)
@@ -614,7 +614,7 @@ class Task(DatasetProviderBase):
       self,
       sequence_length,
       split=tfds.Split.TRAIN,
-      use_cached=True,
+      use_cached=False,
       shuffle=True,
       shuffle_buffer_size=_SHUFFLE_BUFFER_SIZE,
   ):
@@ -768,7 +768,7 @@ class Mixture(DatasetProviderBase):
       self,
       sequence_length,
       split=tfds.Split.TRAIN,
-      use_cached=True,
+      use_cached=False,
       shuffle=True,
       compute_stats_empirically=False,
   ):

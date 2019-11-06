@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Import data modules."""
+from __future__ import absolute_import
 
 import t5.data.mixtures
 import t5.data.postprocessors

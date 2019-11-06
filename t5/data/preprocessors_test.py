@@ -176,7 +176,7 @@ class PreprocessorsTest(tf.test.TestCase):
     if six.PY2:
       expected_output = [733, 999, 2, 3, 999, 5, 990, 999, 999, 999]
     else:
-      expected_output = [436, 999,   2,   3, 999,   5, 999, 999, 999, 999]
+      expected_output = [436, 999, 2, 3, 999, 5, 999, 999, 999, 999]
     output = self.evaluate(prep.noise_token_to_random_token_or_sentinel(
         tokens, noise_mask, vocabulary, random_prob=0.2))
     self.assertAllEqual(output, expected_output)
@@ -496,6 +496,7 @@ class PreprocessorsTest(tf.test.TestCase):
     dataset = prep.fill_in_the_blank(dataset)
     for data in test_utils.dataset_as_text(dataset):
       # Remove the prefix from the start of the input string
+      self.assertTrue(data['inputs'].startswith('fill: '))
       inp = data['inputs'].replace('fill: ', '')
       # Split output into chunks according to X locations.
       out_split = data['targets'].split('X')
