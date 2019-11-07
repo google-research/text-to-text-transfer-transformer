@@ -42,6 +42,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import re
 from absl import app
 from absl import flags
 from absl import logging
@@ -97,7 +98,11 @@ def main(_):
       checkpoint_state = tf.train.get_checkpoint_state(path)
       if FLAGS.operation == "average_last_n":
         ckpt_paths = tf.io.gfile.glob(os.path.join(path, "model.ckpt*index"))
-        ckpts = sorted([c.replace(".index", "") for c in ckpt_paths])
+        def sort_fn(ckpt):
+          return int(re.sub(".*ckpt-", "", ckpt))
+
+        ckpts = sorted([c.replace(".index", "") for c in ckpt_paths],
+                       key=sort_fn)
         checkpoints.extend(ckpts[-FLAGS.number_of_checkpoints:])
       else:
         checkpoints.append(checkpoint_state.all_model_checkpoint_paths[-1])
