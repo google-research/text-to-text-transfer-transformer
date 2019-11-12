@@ -87,7 +87,7 @@ t5_mesh_transformer  \
   --gcp_project="${PROJECT}" \
   --tpu_zone="${ZONE}" \
   --model_dir="${MODEL_DIR}" \
-  --t5_tfds_data_dir=${DATA_DIR} \
+  --t5_tfds_data_dir="${DATA_DIR}" \
   --gin_file="dataset.gin" \
   --gin_file="models/bi_v1.gin" \
   --gin_param="utils.tpu_mesh_shape.model_parallelism = 1" \
@@ -103,18 +103,23 @@ python -c "import t5; print(t5.data.MixtureRegistry.names())"
 
 ### Fine-tuning
 
-In order to fine-tune one of our [pre-trained models](#released-model-checkpoints), you need to pass the operative config and pre-trained checkpoint to the training script. The operative config should be passed in as a `gin_file` flag. It specifies the model architecture and other hyperparameters. For example, to use the T5-small model:
+In order to fine-tune one of our [pre-trained models](#released-model-checkpoints), you need to pass the operative config of the pre-trained model to the training script. The operative config should be passed in as a `gin_file` flag. It specifies the model architecture and other hyperparameters. In addition, you need to specify the mixture to fine-tune on. For example, to fine-tune the T5-small model on the `glue_mrpc_v002` mixture, please run:
 
 ```sh
---gin_file="gs://t5-data/pretrained_models/small/operative_config.gin"
+t5_mesh_transformer  \
+  --tpu="${TPU_NAME}" \
+  --gcp_project="${PROJECT}" \
+  --tpu_zone="${ZONE}" \
+  --model_dir="${MODEL_DIR}" \
+  --t5_tfds_data_dir="${DATA_DIR}" \
+  --gin_file="dataset.gin" \
+  --gin_param="utils.tpu_mesh_shape.model_parallelism = 1" \
+  --gin_param="utils.tpu_mesh_shape.tpu_topology = '2x2'" \
+  --gin_param="MIXTURE_NAME = 'glue_mrpc_v002'"
+  --gin_file="gs://t5-data/pretrained_models/small/operative_config.gin"
 ```
 
 The correct pre-trained checkpoint path is included in the operative config.
-Then, you need to specify a mixture to fine-tune on. Say you want to fine-tune on the MRPC task from GLUE, which is called glue_mrpc_v002. You can specify this mixture for fine-tuning by setting:
-
-```sh
---gin_param="MIXTURE_NAME = 'glue_mrpc_v002'"
-```
 
 Alternatively, you could fine-tune with a TSV file where each line is formatted as `<input>\t<target>`. For example, you could try one of the paired translation datasets from WMT '19 [News Commentary 14](http://data.statmt.org/news-commentary/v14/training/) training set
 (e.g., [English-French](http://data.statmt.org/news-commentary/v14/training/)). When using a TSV file, you would replace the `MIXTURE_NAME` flag with:
