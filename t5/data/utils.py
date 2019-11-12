@@ -916,3 +916,27 @@ class MixtureRegistry(DatasetProviderRegistry):
   @classmethod
   def add(cls, name, tasks, default_rate=None):
     super(MixtureRegistry, cls).add(name, Mixture, tasks, default_rate)
+
+
+def get_mixture_or_task(task_or_mixture_name):
+  """Return the Task or Mixture from the appropriate registry."""
+  mixtures = MixtureRegistry.names()
+  tasks = TaskRegistry.names()
+  if task_or_mixture_name in mixtures:
+    if task_or_mixture_name in tasks:
+      logging.warning("%s is both a Task and a Mixture, returning Mixture",
+                      task_or_mixture_name)
+    return MixtureRegistry.get(task_or_mixture_name)
+  if task_or_mixture_name in tasks:
+    return TaskRegistry.get(task_or_mixture_name)
+  else:
+    raise ValueError("No Task or Mixture found with name: %s" %
+                     task_or_mixture_name)
+
+
+def get_subtasks(task_or_mixture):
+  """Returns all the Tasks in a Mixture as a list or the Task itself."""
+  if isinstance(task_or_mixture, Task):
+    return [task_or_mixture]
+  else:
+    return task_or_mixture.tasks()

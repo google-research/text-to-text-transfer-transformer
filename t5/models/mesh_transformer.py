@@ -23,20 +23,21 @@ import functools
 from absl import logging
 import gin
 import mesh_tensorflow.transformer.dataset as transformer_dataset
-from t5.data import MixtureRegistry
-from t5.data import SentencePieceVocabulary
+
+import t5.data
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
 
 @gin.configurable()
-def get_sentencepiece_model_path(mixture_name):
-  return MixtureRegistry.get(mixture_name).sentencepiece_model_path
+def get_sentencepiece_model_path(mixture_or_task_name):
+  return t5.data.get_mixture_or_task(
+      mixture_or_task_name).sentencepiece_model_path
 
 
 @gin.configurable()
 def mesh_train_dataset_fn(
-    mixture_name,
+    mixture_or_task_name,
     sequence_length,
     vocabulary,
     dataset_split=tfds.Split.TRAIN,
@@ -47,8 +48,8 @@ def mesh_train_dataset_fn(
   the Mesh TF transformer standalone.
 
   Args:
-    mixture_name: string, an identifier for a mixture in MixtureRegistry.
-      Must be specified via gin.
+    mixture_or_task_name: string, an identifier for a Mixture or Task in the
+      appropriate registry. Must be specified via gin.
     sequence_length: dict mapping feature key to the int length for that feature
       the max sequence length.
     vocabulary: a SentencePieceVocabulary.
@@ -59,20 +60,22 @@ def mesh_train_dataset_fn(
   Returns:
     A tf.data.Dataset of preprocessed, tokenized, and batched examples.
   """
-  if not isinstance(vocabulary, SentencePieceVocabulary):
+  if not isinstance(vocabulary, t5.data.SentencePieceVocabulary):
     raise ValueError("vocabulary must be a SentencePieceVocabulary")
-  mixture = MixtureRegistry.get(mixture_name)
-  ds = mixture.get_dataset(
+
+  mixture_or_task = t5.data.get_mixture_or_task(mixture_or_task_name)
+
+  ds = mixture_or_task.get_dataset(
       sequence_length, split=dataset_split, use_cached=use_cached, shuffle=True)
   ds = transformer_dataset.pack_or_pad(
       ds, sequence_length, pack=True,
-      feature_keys=tuple(mixture.output_features), ensure_eos=True)
+      feature_keys=tuple(mixture_or_task.output_features), ensure_eos=True)
   return ds
 
 
 @gin.configurable()
 def mesh_eval_dataset_fn(
-    mixture_name,
+    mixture_or_task_name,
     sequence_length,
     vocabulary,
     dataset_split,
@@ -84,8 +87,8 @@ def mesh_eval_dataset_fn(
   the Mesh TF transformer standalone.
 
   Args:
-    mixture_name: string, an identifier for a mixture in the MixtureRegistry.
-      Must be specified via gin.
+    mixture_or_task_name: string, an identifier for a Mixture or Task in the
+      appropriate registry. Must be specified via gin.
     sequence_length: dict mapping feature key to the int length for that feature
       the max sequence length.
     vocabulary: a SentencePieceVocabulary.
@@ -97,9 +100,10 @@ def mesh_eval_dataset_fn(
   Returns:
     A list of mesh_tensorflow.transformer.dataset.EvalDataset tuples.
   """
-  if not isinstance(vocabulary, SentencePieceVocabulary):
+  if not isinstance(vocabulary, t5.data.SentencePieceVocabulary):
     raise ValueError("vocabulary must be a SentencePieceVocabulary")
-  mixture = MixtureRegistry.get(mixture_name)
+
+  mixture = t5.data.get_mixture_or_task(mixture_or_task_name)
 
   def _get_dataset_for_single_task(task):
     """Get a tensorflow.data.Dataset for the provided task."""
@@ -115,7 +119,8 @@ def mesh_eval_dataset_fn(
     return ds
 
   outputs = []
-  for task in mixture.tasks:
+
+  for task in t5.data.get_subtasks(mixture):
     if dataset_split not in task.splits:
       logging.info(
           "Task %s has no '%s' split, skipping eval.", task.name, dataset_split

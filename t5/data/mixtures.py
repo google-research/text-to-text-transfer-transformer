@@ -27,13 +27,8 @@ import t5.data.tasks  # pylint: disable=unused-import
 from t5.data.utils import MixtureRegistry
 from t5.data.utils import rate_num_examples
 from t5.data.utils import rate_unsupervised
-from t5.data.utils import TaskRegistry
 import tensorflow_datasets as tfds
 
-
-# Add single-task "mixture" for each individual task
-for task_name in TaskRegistry.names():
-  MixtureRegistry.add(task_name, [(task_name, 1.0)])
 
 # We omit WNLI because we train on WSC/DPR simple instead
 _glue_tasks = [
