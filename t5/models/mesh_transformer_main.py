@@ -12,10 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-r"""Main file for launching training/eval/inference of mesh-transformer model.
-
-#TODO(sharannarang): Update instructions for running the model in the README.
-"""
+r"""Main file for launching training/eval/predictions of mesh-transformer model."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -23,6 +20,7 @@ from __future__ import print_function
 
 import importlib
 import os
+import re
 import sys
 
 from absl import app
@@ -31,6 +29,7 @@ import gin
 from mesh_tensorflow.transformer import utils
 import pkg_resources
 import t5
+from t5.models import mtf_model
 import tensorflow.compat.v1 as tf
 
 flags.DEFINE_string(
@@ -73,6 +72,38 @@ flags.DEFINE_list(
     "additional_task_cache_dirs", [],
     "Directories to search for Tasks in addition to defaults.")
 
+flags.DEFINE_boolean("use_model_api", False,
+                     "Use model API instead of utils.run.")
+
+# Note: All the args from here on are only used when use_model_api is set
+flags.DEFINE_enum("mode", "train", ["train", "eval", "predict"],
+                  "Mode with which to run the model.")
+
+# Train mode args
+flags.DEFINE_integer("train_steps", 1000, "Number of training iterations.")
+
+flags.DEFINE_string("mixture_or_task", "wmt_t2t_ende_v003",
+                    "Name of Mixture or Task to use for training/evaluation.")
+
+# Eval mode args
+flags.DEFINE_enum(
+    "checkpoint_mode", "all", ["all", "latest", "specific"],
+    "Checkpoint steps to use when running 'eval' or 'predict' modes. "
+    "Can specify a list of checkpoints or all or the latest checkpoint.")
+
+flags.DEFINE_list(
+    "checkpoint_steps", [],
+    "Checkpoint step numbers used for 'eval' and 'predict' modes. "
+    "This argument is only used when which_checkpoint='specific'.")
+
+flags.DEFINE_string("eval_summary_dir", "", "Path to save eval summaries")
+flags.DEFINE_string("eval_split", "validation",
+                    "Dataset split to use for evaluation.")
+
+# Predict mode args
+flags.DEFINE_string("input_file", "", "Path to input file for decoding.")
+flags.DEFINE_string("output_file", "", "Path to output file to save decodes.")
+
 FLAGS = flags.FLAGS
 
 
@@ -100,12 +131,46 @@ def main(_):
     f.write(" ".join(sys.argv))
 
   utils.parse_gin_defaults_and_flags()
-  utils.run(
-      tpu_job_name=FLAGS.tpu_job_name,
-      tpu=FLAGS.tpu,
-      gcp_project=FLAGS.gcp_project,
-      tpu_zone=FLAGS.tpu_zone,
-      model_dir=FLAGS.model_dir)
+
+  if FLAGS.use_model_api:
+    model = mtf_model.MtfModel(
+        tpu_job_name=FLAGS.tpu_job_name,
+        tpu=FLAGS.tpu,
+        gcp_project=FLAGS.gcp_project,
+        tpu_zone=FLAGS.tpu_zone,
+        model_dir=FLAGS.model_dir)
+
+    if FLAGS.checkpoint_mode == "latest":
+      ckpts = tf.io.gfile.glob(FLAGS.model_dir+"model.*index")
+      ckpts = [re.sub(".*ckpt-", "", c) for c in ckpts]
+      ckpts = sorted([int(c.replace(".index", "")) for c in ckpts])
+      checkpoint_step = ckpts[-1]
+    elif FLAGS.checkpoint_mode == "all":
+      checkpoint_step = "all"
+    else:
+      checkpoint_step = [int(c) for c in FLAGS.checkpoint_steps]
+
+    if FLAGS.mode == "train":
+      model.train(mixture_or_task_name=FLAGS.mixture_or_task,
+                  steps=FLAGS.train_steps)
+    elif FLAGS.mode == "eval":
+      model.eval(mixture_or_task_name=FLAGS.mixture_or_task,
+                 checkpoint_step=checkpoint_step,
+                 summary_dir=FLAGS.eval_summary_dir,
+                 split=FLAGS.eval_split)
+    else:
+      model.predict(
+          checkpoint_step=checkpoint_step,
+          input_file=FLAGS.input_file,
+          output_file=FLAGS.output_file)
+
+  else:
+    utils.run(
+        tpu_job_name=FLAGS.tpu_job_name,
+        tpu=FLAGS.tpu,
+        gcp_project=FLAGS.gcp_project,
+        tpu_zone=FLAGS.tpu_zone,
+        model_dir=FLAGS.model_dir)
 
 
 def console_entry_point():
