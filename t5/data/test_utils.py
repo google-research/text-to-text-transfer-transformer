@@ -357,13 +357,15 @@ def sentencepiece_vocab(extra_ids=0):
       extra_ids=extra_ids)
 
 
-def add_task(name,
-             tfds_name="fake:0.0.0",
-             text_preprocessor=test_text_preprocessor,
-             token_preprocessor=None,
-             splits=None):
+def add_tfds_task(
+    name,
+    tfds_name="fake:0.0.0",
+    text_preprocessor=test_text_preprocessor,
+    token_preprocessor=None,
+    splits=None):
   TaskRegistry.add(
       name,
+      dataset_utils.TfdsTask,
       tfds_name=tfds_name,
       text_preprocessor=text_preprocessor,
       token_preprocessor=token_preprocessor,
@@ -371,6 +373,23 @@ def add_task(name,
                                             "sentencepiece.model"),
       metric_fns=[],
       splits=splits)
+
+
+def add_task(
+    name,
+    dataset_fn,
+    text_preprocessor=test_text_preprocessor,
+    token_preprocessor=None,
+    splits=("train", "validation")):
+  TaskRegistry.add(
+      name,
+      dataset_fn=dataset_fn,
+      splits=splits,
+      text_preprocessor=text_preprocessor,
+      token_preprocessor=token_preprocessor,
+      sentencepiece_model_path=os.path.join(
+          TEST_DATA_DIR, "sentencepiece", "sentencepiece.model"),
+      metric_fns=[])
 
 
 def clear_tasks():
@@ -445,7 +464,7 @@ class FakeTaskTest(absltest.TestCase):
     # Register a cached test Task.
     dataset_utils.set_global_cache_dirs([self.test_data_dir])
     clear_tasks()
-    add_task("cached_task")
+    add_tfds_task("cached_task")
 
     self.cached_task = TaskRegistry.get("cached_task")
     cached_task_dir = os.path.join(self.test_data_dir, "cached_task")
@@ -457,7 +476,7 @@ class FakeTaskTest(absltest.TestCase):
         "validation", [2])
 
     # Register an uncached test Task.
-    add_task("uncached_task")
+    add_tfds_task("uncached_task")
     self.uncached_task = TaskRegistry.get("uncached_task")
 
     # Auto-verify any split by just retuning the split name

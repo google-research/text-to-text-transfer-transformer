@@ -195,14 +195,16 @@ def sequence_accuracy(targets, predictions):
   return {"sequence_accuracy": seq_acc}
 
 
-def pearson_corrcoef(x, y):
+def pearson_corrcoef(targets, predictions):
   """Pearson correlation coefficient."""
-  return {"pearson_corrcoef": 100 * scipy.stats.pearsonr(x, y)[0]}
+  return {"pearson_corrcoef":
+              100 * scipy.stats.pearsonr(targets, predictions)[0]}
 
 
-def spearman_corrcoef(x, y):
+def spearman_corrcoef(targets, predictions):
   """Spearman correlation coefficient."""
-  return {"spearman_corrcoef": 100 * scipy.stats.spearmanr(x, y)[0]}
+  return {"spearman_corrcoef":
+              100 * scipy.stats.spearmanr(targets, predictions)[0]}
 
 
 def matthews_corrcoef(targets, predictions):
@@ -213,13 +215,15 @@ def matthews_corrcoef(targets, predictions):
   }
 
 
-def mean_multiclass_f1(targets, predictions, num_classes):
+def mean_multiclass_f1(num_classes):
   """Computes the unweighted average of the F1 per class."""
-  return {
-      "mean_%dclass_f1" % num_classes: 100 * sklearn.metrics.fbeta_score(
-          targets, predictions, beta=1, labels=range(num_classes),
-          average="macro")
-  }
+  def my_metric(targets, predictions):
+    return {
+        "mean_%dclass_f1" % num_classes: 100 * sklearn.metrics.fbeta_score(
+            targets, predictions, beta=1, labels=range(num_classes),
+            average="macro")
+    }
+  return my_metric
 
 
 def exact_match(targets, predictions):

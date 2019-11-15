@@ -22,6 +22,7 @@ from __future__ import division
 from __future__ import print_function
 
 import abc
+import inspect
 import json
 import os
 import re
@@ -349,32 +350,32 @@ def get_stats_path(data_dir, split):
 
 
 class Task(DatasetProviderBase):
-  """A wrapper for a TFDS dataset along with preprocessing information.
+  """A wrapper for a `tf.data.Dataset` along with preprocessing information.
 
   Tasks handle preprocessing (via arbitrary TF function) and tokenization
   (via SentencePiece). Non-train splits also pass through the original
   plaintext strings with a "_plaintext" suffix added to the key.
-
   """
 
   def __init__(self,
                name,
-               tfds_name,
+               dataset_fn,
+               splits,
                text_preprocessor,
                sentencepiece_model_path,
                metric_fns,
                postprocess_fn=None,
                token_preprocessor=None,
-               tfds_data_dir=None,
-               output_features=None,
-               splits=None):
+               output_features=None):
     """Task constructor.
 
     Args:
       name: string, a unique name for the Task. A ValueError will be raised if
         another task with this name is already registered.
-      tfds_name: string, the name and version number of a TFDS dataset,
-        optionally with a config.
+      dataset_fn: callable, a function with the signature
+        `dataset_fn(split, shuffle_files)' that returns a `tf.data.Dataset`.
+      splits: list(string), a list of allowable splits to request from the
+        `dataset_fn`.
       text_preprocessor: a function (or list of functions) that (each) takes in
         a tf.data.Dataset of string features and returns a tf.data.Dataset of
         string features. Can be set to None as a no-op. If a list is given,
@@ -382,7 +383,7 @@ class Task(DatasetProviderBase):
       sentencepiece_model_path: string, path to a SentencePiece model file to
         use for tokenization.
       metric_fns: list(callable), list of metric functions with the signature
-        metric_fn(targets, predictions) to use during evaluation.
+        `metric_fn(targets, predictions)` to use during evaluation.
       postprocess_fn: function, a function that takes in decoded model outputs
         (strings) and returns a string which is ready for evaluation using the
         metric functions in `metric_fns`. Can be set to None as a no-op.
@@ -393,23 +394,20 @@ class Task(DatasetProviderBase):
         executed sequentially.
         The functions are also passed `sequence_length` and `vocabulary`
         keyword arguments.
-      tfds_data_dir: string, an optional path to a specific TFDS data directory
-        to use.
       output_features: list(string), a list of the primary output features of
         the dataset that will be prepared for the model. Defaults to 'inputs'
         and 'targets'.
-      splits: list(string) or None, a list of allowable splits to load. The
-        default, None, uses all available splits from the TFDS dataset info.
     """
     if not _VALID_TASK_NAME_REGEX.match(name):
       raise ValueError(
           "Task name '%s' contains invalid characters. Must match regex: %s" % (
               name, _VALID_TASK_NAME_REGEX.pattern))
-    if ":" not in tfds_name:
-      raise ValueError(
-          "TFDS name must contain a version number, got: %s" % tfds_name)
+    _validate_args(dataset_fn, ["split", "shuffle_files"])
+    for metric_fn in metric_fns:
+      _validate_args(metric_fn, ["targets", "predictions"])
+
     self._name = name
-    self._tfds = LazyTfdsLoader(tfds_name, tfds_data_dir)
+    self._dataset_fn = dataset_fn
     self._text_preprocessor = (
         [] if text_preprocessor is None else text_preprocessor)
     self._token_preprocessor = (
@@ -427,10 +425,6 @@ class Task(DatasetProviderBase):
   @property
   def name(self):
     return self._name
-
-  @property
-  def tfds_dataset(self):
-    return self._tfds
 
   @property
   def postprocess_fn(self):
@@ -454,7 +448,7 @@ class Task(DatasetProviderBase):
 
   @property
   def splits(self):
-    return self._splits or self.tfds_dataset.info.splits
+    return self._splits
 
   def _preprocess_dataset(self, dataset, preprocessors, **preprocess_kwargs):
     if not hasattr(preprocessors, "__iter__"):
@@ -634,12 +628,15 @@ class Task(DatasetProviderBase):
     if use_cached:
       ds = self._get_cached_dataset(split, shuffle)
     else:
-      ds = self.tfds_dataset.load(split, shuffle_files=shuffle)
+      ds = self._dataset_fn(split=split, shuffle_files=shuffle)
       ds = self.preprocess_text(ds)
       # Tokenize
       ds = encode_string_features(
           ds, self.get_vocabulary(), keys=self.output_features,
           copy_plaintext=True)
+
+    # TODO(adarob): We should use `tf.data.Dataset` caching here if the dataset
+    # is small enough.
 
     # Post tokenization processing.
     ds = self.preprocess_tokens(ds, sequence_length)
@@ -683,13 +680,76 @@ class Task(DatasetProviderBase):
     return ds
 
 
+class TfdsTask(Task):
+  """A `Task` that uses TensorFlow Datasets to provide the input dataset."""
+
+  def __init__(
+      self,
+      name,
+      tfds_name,
+      text_preprocessor,
+      sentencepiece_model_path,
+      metric_fns,
+      tfds_data_dir=None,
+      splits=None,
+      **task_kwargs):
+    """TfdsTask constructor.
+
+    Args:
+      name: string, a unique name for the Task. A ValueError will be raised if
+        another task with this name is already registered.
+      tfds_name: string, the name and version number of a TFDS dataset,
+        optionally with a config.
+      text_preprocessor: a function (or list of functions) that (each) takes in
+        a tf.data.Dataset of string features and returns a tf.data.Dataset of
+        string features. Can be set to None as a no-op. If a list is given,
+        they will be executed sequentially.
+      sentencepiece_model_path: string, path to a SentencePiece model file to
+        use for tokenization.
+      metric_fns: list(callable), list of metric functions with the signature
+        metric_fn(targets, predictions) to use during evaluation.
+      tfds_data_dir: string, an optional path to a specific TFDS data directory
+        to use.
+      splits: list(string) or None, a list of allowable splits to load. The
+        default, None, uses all available splits from the TFDS dataset info.
+      **task_kwargs: dict, additional keyword arguments for the parent `Task`
+        class.
+    """
+    if ":" not in tfds_name:
+      raise ValueError(
+          "TFDS name must contain a version number, got: %s" % tfds_name)
+
+    self._tfds_dataset = LazyTfdsLoader(tfds_name, tfds_data_dir)
+
+    def dataset_fn(split, shuffle_files):
+      return self._tfds_dataset.load(split, shuffle_files)
+
+    super(TfdsTask, self).__init__(
+        name,
+        dataset_fn=dataset_fn,
+        splits=splits,
+        text_preprocessor=text_preprocessor,
+        sentencepiece_model_path=sentencepiece_model_path,
+        metric_fns=metric_fns,
+        **task_kwargs)
+
+  @property
+  def splits(self):
+    """Override since we can't call `info.splits` until after init."""
+    return self._splits or self._tfds_dataset.info.splits
+
+  @property
+  def tfds_dataset(self):
+    return self._tfds_dataset
+
+
 class TaskRegistry(DatasetProviderRegistry):
   _REGISTRY = {}
   _PROVIDER_TYPE = Task
 
   @classmethod
-  def add(cls, name, **kwargs):
-    super(TaskRegistry, cls).add(name, Task, name, **kwargs)
+  def add(cls, name, task_cls=Task, **kwargs):
+    super(TaskRegistry, cls).add(name, task_cls, name, **kwargs)
 
 
 # ================================ Mixtures ====================================
@@ -814,6 +874,7 @@ class Mixture(DatasetProviderBase):
 @gin.configurable
 def rate_num_examples(task, maximum=None, temperature=1.0, scale=1.0):
   """Mixing rate equal to the number of examples for the task."""
+  # TODO(adarob): Support case when there are no cached stats.
   ret = task.get_cached_stats("train")["examples"]
   ret *= scale
   if maximum:
@@ -940,3 +1001,21 @@ def get_subtasks(task_or_mixture):
     return [task_or_mixture]
   else:
     return task_or_mixture.tasks
+
+
+def _validate_args(fn, expected_pos_args):
+  """Ensure function has exactly expected positional args."""
+  argspec = inspect.getargspec(fn)
+  expected_pos_args = tuple(expected_pos_args)
+  actual_args = tuple(argspec.args)
+  if actual_args[:len(expected_pos_args)] != expected_pos_args:
+    raise ValueError(
+        "'%s' must have positional args %s, got: %s" % (
+            fn.__name__, expected_pos_args, actual_args))
+  actual_pos_args = tuple(
+      argspec.args[:-len(argspec.defaults)]
+      if argspec.defaults else argspec.args)
+  if actual_pos_args != expected_pos_args[:len(actual_pos_args)]:
+    raise ValueError(
+        "'%s' may only have positional args %s, got: %s" % (
+            fn.__name__, expected_pos_args, actual_pos_args))
