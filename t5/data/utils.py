@@ -939,4 +939,4 @@ def get_subtasks(task_or_mixture):
   if isinstance(task_or_mixture, Task):
     return [task_or_mixture]
   else:
-    return task_or_mixture.tasks()
+    return task_or_mixture.tasks
