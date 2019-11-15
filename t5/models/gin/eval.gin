@@ -1,5 +1,5 @@
 # -*-Python-*-
-# Mixed datset using a Task object
+# Mixed dataset using a Task object
 
 import t5.models.mesh_transformer
 
