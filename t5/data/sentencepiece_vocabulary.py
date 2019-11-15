@@ -50,17 +50,12 @@ class SentencePieceVocabulary(object):
     # Handle cases where SP can't load the file, but gfile can.
     self._sp_model = tf.gfile.GFile(sentencepiece_model_file, "rb").read()
     self._tokenizer.LoadFromSerializedProto(self._sp_model)
-    # We load the tokenizer when first used so it's in the correct graph.
-    self._tf_tokenizer_cached = None
     self._extra_ids = extra_ids
 
   @property
   def _tf_tokenizer(self):
-    """Instantiate (if needed) and return the TF tokenizer."""
-    if not self._tf_tokenizer_cached:
-      self._tf_tokenizer_cached = tf_text.SentencepieceTokenizer(
-          model=self._sp_model)
-    return self._tf_tokenizer_cached
+    """Instantiate and return a TF tokenizer."""
+    return tf_text.SentencepieceTokenizer(model=self._sp_model)
 
   @property
   def vocab_size(self):
