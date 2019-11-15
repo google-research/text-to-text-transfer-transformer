@@ -23,7 +23,7 @@ import collections
 
 import re
 from absl import logging
-from allennlp.tools import squad_eval
+from allennlp.common import squad_eval
 import numpy as np
 import sacrebleu
 import scipy.stats
