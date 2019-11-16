@@ -134,7 +134,7 @@ for b in tfds.text.glue.Glue.builder_configs.values():
   TaskRegistry.add(
       "glue_%s_v002" % b.name,
       TfdsTask,
-      tfds_name="glue/%s:0.0.2" % b.name,
+      tfds_name="glue/%s:%s" % (b.name, "1.0.0" if b.name == "ax" else "0.0.2"),
       text_preprocessor=_get_glue_text_preprocessor(b),
       metric_fns=GLUE_METRICS[b.name],
       sentencepiece_model_path=DEFAULT_SPM_PATH,
