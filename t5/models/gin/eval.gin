@@ -9,7 +9,7 @@ eval_checkpoint_step = "all"
 utils.run.batch_size = ("tokens_per_replica", 32768)  # Decrease this if OOM errors are encountered
 
 # Plumbing
-mesh_eval_dataset_fn.mixture_name = %MIXTURE_NAME
+mesh_eval_dataset_fn.mixture_or_task_name = %MIXTURE_NAME
 utils.run.eval_dataset_fn = @t5.models.mesh_transformer.mesh_eval_dataset_fn
 utils.run.mode = "eval"
 
