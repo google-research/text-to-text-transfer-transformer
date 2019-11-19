@@ -22,8 +22,10 @@ from __future__ import print_function
 import abc
 
 
-class T5Model(abc.ABC):
+class T5Model(object):
   """Abstract Base class for T5 Model API."""
+
+  __metaclass__ = abc.ABCMeta
 
   @abc.abstractmethod
   def train(self, mixture_or_task_name, steps):
