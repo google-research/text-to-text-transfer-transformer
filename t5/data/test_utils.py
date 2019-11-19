@@ -450,7 +450,7 @@ class FakeTaskTest(absltest.TestCase):
         info=FakeTfdsInfo(splits={"train": None, "validation": None}),
         files=fake_tfds_paths.get,
         verify_split=lambda x: x,
-        size=lambda x: 30)
+        size=lambda x: 30 if x == "train" else 10)
     add_fake_tfds(fake_tfds)
 
     # Set up data directory.

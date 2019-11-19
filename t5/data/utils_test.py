@@ -100,6 +100,10 @@ class TasksTest(test_utils.FakeTaskTest):
   def test_splits(self):
     self.assertCountEqual(("train", "validation"), self.cached_task.splits)
 
+  def test_num_input_examples(self):
+    self.assertEqual(30, self.cached_task.num_input_examples("train"))
+    self.assertEqual(10, self.cached_task.num_input_examples("validation"))
+
   def test_cache_exists(self):
     self.assertTrue(self.cached_task.cached)
     self.cached_task.assert_cached()

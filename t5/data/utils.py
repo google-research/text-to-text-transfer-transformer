@@ -40,7 +40,7 @@ _VALID_TASK_NAME_REGEX = re.compile(r"^[\w\d\._]+$")
 _INFO_FILENAME = "info.{split}.json"
 _STATS_FILENAME = "stats.{split}.json"
 _TFRECORD_PREFIX = "{split}.tfrecord"
-_MAX_EXAMPLES_TO_MEM_CACHE = 1000
+_MAX_EXAMPLES_TO_MEM_CACHE = 10000
 _SHUFFLE_BUFFER_SIZE = 1000
 
 _TFDS_DATA_DIR_OVERRIDE = None
@@ -82,6 +82,10 @@ class DatasetProviderBase(object):
   @abc.abstractmethod
   def get_dataset(
       self, sequence_length, split, use_cached=False, shuffle=True):
+    raise NotImplementedError
+
+  @abc.abstractmethod
+  def num_input_examples(self, split):
     raise NotImplementedError
 
 
@@ -366,7 +370,8 @@ class Task(DatasetProviderBase):
                metric_fns,
                postprocess_fn=None,
                token_preprocessor=None,
-               output_features=None):
+               output_features=None,
+               num_input_examples=None):
     """Task constructor.
 
     Args:
@@ -397,6 +402,9 @@ class Task(DatasetProviderBase):
       output_features: list(string), a list of the primary output features of
         the dataset that will be prepared for the model. Defaults to 'inputs'
         and 'targets'.
+      num_input_examples: dict(string: int) or None, a dictionary mapping split
+        to its size in number of input examples (before preprocessing). The
+        `num_input_examples` method will return None if not provided.
     """
     if not _VALID_TASK_NAME_REGEX.match(name):
       raise ValueError(
@@ -421,6 +429,7 @@ class Task(DatasetProviderBase):
     self._output_features = sorted(
         set(output_features or _DEFAULT_FEATURE_KEYS))
     self._splits = splits
+    self._num_input_examples = num_input_examples
 
   @property
   def name(self):
@@ -449,6 +458,11 @@ class Task(DatasetProviderBase):
   @property
   def splits(self):
     return self._splits
+
+  def num_input_examples(self, split):
+    if self._num_input_examples is None:
+      return None
+    return self._num_input_examples[split]
 
   def _preprocess_dataset(self, dataset, preprocessors, **preprocess_kwargs):
     if not hasattr(preprocessors, "__iter__"):
@@ -635,8 +649,9 @@ class Task(DatasetProviderBase):
           ds, self.get_vocabulary(), keys=self.output_features,
           copy_plaintext=True)
 
-    # TODO(adarob): We should use `tf.data.Dataset` caching here if the dataset
-    # is small enough.
+    if (not use_cached and self.num_input_examples(split) and
+        self.num_input_examples(split) < _MAX_EXAMPLES_TO_MEM_CACHE):
+      ds = ds.cache()
 
     # Post tokenization processing.
     ds = self.preprocess_tokens(ds, sequence_length)
@@ -742,6 +757,9 @@ class TfdsTask(Task):
   def tfds_dataset(self):
     return self._tfds_dataset
 
+  def num_input_examples(self, split):
+    return self.tfds_dataset.size(split)
+
 
 class TaskRegistry(DatasetProviderRegistry):
   _REGISTRY = {}
@@ -807,6 +825,9 @@ class Mixture(DatasetProviderBase):
   def get_rate(self, task):
     rate = self._task_to_rate[task.name]
     return float(rate(task) if callable(rate) else rate)
+
+  def num_input_examples(self, split):
+    return sum(t.num_input_examples(split) for t in self.tasks)
 
   @property
   def output_features(self):
