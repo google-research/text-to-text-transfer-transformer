@@ -113,7 +113,7 @@ def main(_):
       importlib.import_module(module)
 
   if FLAGS.t5_tfds_data_dir:
-    t5.data.set_tfds_data_dir_override(FLAGS.tfds_data_dir)
+    t5.data.set_tfds_data_dir_override(FLAGS.t5_tfds_data_dir)
   t5.data.add_global_cache_dirs(FLAGS.additional_task_cache_dirs)
 
   # Add search path for gin files stored in package.

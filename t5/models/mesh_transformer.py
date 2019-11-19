@@ -103,7 +103,7 @@ def mesh_eval_dataset_fn(
   if not isinstance(vocabulary, t5.data.SentencePieceVocabulary):
     raise ValueError("vocabulary must be a SentencePieceVocabulary")
 
-  mixture = t5.data.get_mixture_or_task(mixture_or_task_name)
+  mixture_or_task = t5.data.get_mixture_or_task(mixture_or_task_name)
 
   def _get_dataset_for_single_task(task):
     """Get a tensorflow.data.Dataset for the provided task."""
@@ -120,7 +120,7 @@ def mesh_eval_dataset_fn(
 
   outputs = []
 
-  for task in t5.data.get_subtasks(mixture):
+  for task in t5.data.get_subtasks(mixture_or_task):
     if dataset_split not in task.splits:
       logging.info(
           "Task %s has no '%s' split, skipping eval.", task.name, dataset_split

@@ -166,7 +166,7 @@ class MetricsTest(absltest.TestCase):
 
   def test_multiclass_f1(self):
     self.assertDictClose(
-        metrics.mean_multiclass_f1([0, 1, 1, 2], [0, 0, 2, 2], num_classes=3),
+        metrics.mean_multiclass_f1(num_classes=3)([0, 1, 1, 2], [0, 0, 2, 2]),
         {"mean_3class_f1": 44.44444444444444})
 
   def test_exact_match(self):
