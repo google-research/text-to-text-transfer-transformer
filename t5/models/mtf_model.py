@@ -46,15 +46,16 @@ class MtfModel(T5Model):
       self,
       model_dir,
       tpu,
-      tpu_job_name,
-      tpu_zone,
-      gcp_project,
+      tpu_job_name=None,
+      tpu_zone=None,
+      gcp_project=None,
+      tpu_topology="2x2",
+      model_parallelism=8,
       batch_size=("tokens_per_batch", 1024),
       sequence_length=None,
       vocabulary=None,
       model_type="bitransformer",
       layout_rules="ensemble:ensemble,batch:batch,d_ff:model,heads:model,vocab:model,experts:batch",
-      mesh_shape=None,
       autostack=True,
       learning_rate_schedule=None,
       keep_checkpoint_max=None,
@@ -68,11 +69,13 @@ class MtfModel(T5Model):
     """Constructor for MtfModel class.
 
     Args:
-      model_dir: a string, directory to save the model.
-      tpu: string, the Cloud TPU to use for training.
+      model_dir: string, directory to save the model.
+      tpu: string, the TPU address to use.
       tpu_job_name: string, name of the TPU worker binary.
       tpu_zone: string, GCE zone where the Cloud TPU is located
       gcp_project: string, project name for the Cloud TPU-enabled project.
+      tpu_topology: string, e.g. "2x2".
+      model_parallelism: integer, the number of cores per model replica.
       batch_size: An integer or a (method, value) pair to pass to
         compute_batch_size(). Note that this is the global batch size and not
         the per-shard batch size.
@@ -82,7 +85,6 @@ class MtfModel(T5Model):
         targets_vocabulary) tuple.
       model_type: string, a model type from mesh tf models.
       layout_rules: an input to mtf.convert_to_layout_rules()
-      mesh_shape: a function that returns mtf.shape
       autostack: boolean, internally combine variables.
       learning_rate_schedule: an optional function taking the scalar name
         argument `step` and the numeric argument `total_train_steps` and return
@@ -106,7 +108,7 @@ class MtfModel(T5Model):
         checkpoint path when initializing variables.
     """
 
-    mesh_shape = mesh_shape or []
+    mesh_shape = utils.tpu_mesh_shape(tpu_topology, model_parallelism)
     vocabulary = vocabulary or SentencePieceVocabulary()
 
     sequence_length = sequence_length or {"inputs": 512, "targets": 512}
