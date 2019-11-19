@@ -36,5 +36,6 @@ class T5Model(object):
     raise NotImplementedError()
 
   @abc.abstractmethod
-  def predict(self, checkpoint_steps, input_file, output_file):
+  def predict(self, checkpoint_steps, input_file, output_file, beam_size,
+              temperature):
     raise NotImplementedError()

@@ -69,12 +69,12 @@ class MtfModel(T5Model):
     """Constructor for MtfModel class.
 
     Args:
-      model_dir: string, directory to save the model.
-      tpu: string, the TPU address to use.
-      tpu_job_name: string, name of the TPU worker binary.
-      tpu_zone: string, GCE zone where the Cloud TPU is located
-      gcp_project: string, project name for the Cloud TPU-enabled project.
-      tpu_topology: string, e.g. "2x2".
+      model_dir: str, directory to save the model.
+      tpu: str, the TPU address to use.
+      tpu_job_name: str, name of the TPU worker binary.
+      tpu_zone: str, GCE zone where the Cloud TPU is located
+      gcp_project: str, project name for the Cloud TPU-enabled project.
+      tpu_topology: str, e.g. "2x2".
       model_parallelism: integer, the number of cores per model replica.
       batch_size: An integer or a (method, value) pair to pass to
         compute_batch_size(). Note that this is the global batch size and not
@@ -83,7 +83,7 @@ class MtfModel(T5Model):
         the (packed) sequence length, e.g. {"inputs": 512, "targets": 128}
       vocabulary: a vocabulary.Vocabulary or (inputs_vocabulary,
         targets_vocabulary) tuple.
-      model_type: string, a model type from mesh tf models.
+      model_type: str, a model type from mesh tf models.
       layout_rules: an input to mtf.convert_to_layout_rules()
       autostack: boolean, internally combine variables.
       learning_rate_schedule: an optional function taking the scalar name
@@ -100,11 +100,11 @@ class MtfModel(T5Model):
           - features: a dict representing an example. Every value will be an
             mtf.Tensor with shape [batch_dim, length_dim].
           - variable_dtype: an mtf.VariableDType
-      variable_filter: a string, a variable will only be trained if its name
+      variable_filter: a str, a variable will only be trained if its name
         matches this regex. If None (default), train all trainable variables.
       ensemble_inputs: an integer, see `train_model` docstring for details.
       iterations_per_loop: integer, steps per train loop
-      init_checkpoint: a string, if not None the read in varialbes from this
+      init_checkpoint: a str, if not None the read in varialbes from this
         checkpoint path when initializing variables.
     """
 
@@ -163,27 +163,69 @@ class MtfModel(T5Model):
         init_checkpoint=init_checkpoint)
 
   def train(self, mixture_or_task_name, steps):
+    """Train the model on the given Mixture or Task.
+
+    Args:
+      mixture_or_task_name: str, the name of the Mixture or Task to train on.
+        Must be pre-registered in the global `TaskRegistry` or
+        `MixtureRegistry.`
+      steps: int, the total number of steps to train for.
+    """
     dataset_fn = functools.partial(
         mesh_train_dataset_fn, mixture_or_task_name=mixture_or_task_name)
     utils.train_model(self._estimator, self._vocabulary, self._sequence_length,
                       self._batch_size, dataset_fn, steps,
                       self._ensemble_inputs)
 
-  def eval(self, mixture_or_task_name, checkpoint_step, summary_dir, split):
+  def eval(self, mixture_or_task_name, checkpoint_step=None, summary_dir=None,
+           split="validation"):
+    """Evaluate the model on the given Mixture or Task.
+
+    Args:
+      mixture_or_task_name: str, the name of the Mixture or Task to evaluate on.
+        Must be pre-registered in the global `TaskRegistry` or
+        `MixtureRegistry.`
+      checkpoint_step: int, list of ints, or None. If an int or list of ints,
+        evaluation will be run on the checkpoint files in `model_dir` whose
+        global steps are closest to the global steps provided. If None, run eval
+        continuously waiting for new checkpoints.
+      summary_dir: str, path to write TensorBoard events file summaries for
+        eval. If None, use model_dir/eval_{split}.
+      split: str, the split to evaluate on.
+    """
     dataset_fn = functools.partial(
         mesh_eval_dataset_fn, mixture_or_task_name=mixture_or_task_name)
     utils.eval_model(self._estimator, self._vocabulary, self._sequence_length,
                      self._batch_size, split, self._model_dir, dataset_fn,
                      summary_dir, checkpoint_step)
 
-  def predict(self, checkpoint_step, input_file, output_file):
-    # TODO(sharannarang) : Add the ability to decode from a collection of
-    # strings instead of always requiring an input file.
+  def predict(self, checkpoint_step, input_file, output_file,
+              beam_size=1, temperature=1.0):
+    """Predicts targets from the given inputs.
+
+    Args:
+      checkpoint_step: int, list of ints, or None. If an int or list of ints,
+        inference will be run on the checkpoint files in `model_dir` whose
+        global steps are closest to the global steps provided. If None, run
+        inference continuously waiting for new checkpoints.
+      input_file: str, path to a text file containing newline-separated input
+        prompts to predict from.
+      output_file: str, path prefix of output file to write predictions to. Note
+        the checkpoint step will be appended to the given filename.
+      beam_size: int, a number >= 1 specifying the number of beams to use for
+        beam search.
+      temperature: float, a value between 0 and 1 (must be 0 if beam_size > 1)
+        0.0 means argmax, 1.0 means sample according to predicted distribution.
+    """
     # TODO(sharannarang) : It would be nice to have a function like
     # load_checkpoint that loads the model once and then call decode_from_file
     # multiple times without having to restore the checkpoint weights again.
     # This would be particularly useful in colab demo.
-    utils.infer_model(self._estimator, self._vocabulary, self._sequence_length,
-                      self._batch_size, self._model_type, self._model_dir,
-                      checkpoint_step, input_file, output_file)
+    with gin.unlock_config(), gin.config_scope("decode"):
+      gin.bind_parameter("Bitransformer.decode.beam_size", beam_size)
+      gin.bind_parameter("Bitransformer.decode.temperature", temperature)
+      utils.infer_model(self._estimator, self._vocabulary,
+                        self._sequence_length, self._batch_size,
+                        self._model_type, self._model_dir, checkpoint_step,
+                        input_file, output_file)
 
