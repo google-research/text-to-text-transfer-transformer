@@ -76,7 +76,7 @@ flags.DEFINE_boolean("use_model_api", False,
                      "Use model API instead of utils.run.")
 
 # Note: All the args from here on are only used when use_model_api is set
-flags.DEFINE_enum("mode", "train", ["train", "eval", "predict"],
+flags.DEFINE_enum("mode", "train", ["train", "eval", "predict", "finetune"],
                   "Mode with which to run the model.")
 
 # Train mode args
@@ -84,17 +84,22 @@ flags.DEFINE_integer("train_steps", 1000, "Number of training iterations.")
 
 flags.DEFINE_string("mixture_or_task", "wmt_t2t_ende_v003",
                     "Name of Mixture or Task to use for training/evaluation.")
+flags.DEFINE_string("pretrained_model_dir", "",
+                    "Pretrained model dir for finetuning a model.")
 
 # Eval mode args
 flags.DEFINE_enum(
     "checkpoint_mode", "all", ["all", "latest", "specific"],
-    "Checkpoint steps to use when running 'eval' or 'predict' modes. "
-    "Can specify a list of checkpoints or all or the latest checkpoint.")
+    "Checkpoint steps to use when running 'eval', 'predict', and 'finetune' "
+    "modes. Can specify a list of checkpoints or all or the latest checkpoint. "
+    "'finetune' mode works with 'latest' or 'specific' with a single "
+    "checkpoint.")
 
 flags.DEFINE_list(
     "checkpoint_steps", [],
-    "Checkpoint step numbers used for 'eval' and 'predict' modes. "
-    "This argument is only used when which_checkpoint='specific'.")
+    "Checkpoint step numbers used for 'eval', 'predict', and 'finetune' modes. "
+    "This argument is only used when which_checkpoint='specific'. "
+    "For the 'finetune' mode, only a single checkpoint must be specified.")
 
 flags.DEFINE_string("eval_summary_dir", "", "Path to save eval summaries")
 flags.DEFINE_string("eval_split", "validation",
@@ -141,10 +146,7 @@ def main(_):
         model_dir=FLAGS.model_dir)
 
     if FLAGS.checkpoint_mode == "latest":
-      ckpts = tf.io.gfile.glob(FLAGS.model_dir+"model.*index")
-      ckpts = [re.sub(".*ckpt-", "", c) for c in ckpts]
-      ckpts = sorted([int(c.replace(".index", "")) for c in ckpts])
-      checkpoint_step = ckpts[-1]
+      checkpoint_step = -1
     elif FLAGS.checkpoint_mode == "all":
       checkpoint_step = "all"
     else:
@@ -158,6 +160,20 @@ def main(_):
                  checkpoint_step=checkpoint_step,
                  summary_dir=FLAGS.eval_summary_dir,
                  split=FLAGS.eval_split)
+    elif FLAGS.mode == "finetune":
+      assert (FLAGS.checkpoint_mode == "latest" or
+              (FLAGS.checkpoint_mode == "specific" and
+               len(FLAGS.checkpoint_steps) == 1)), \
+          "Must specify a single checkpoint for finetuning a model."
+
+      if isinstance(checkpoint_step, list):
+        checkpoint_step = checkpoint_step[0]
+
+      model.finetune(
+          mixture_or_task_name=FLAGS.mixture_or_task,
+          steps=FLAGS.train_steps,
+          pretrained_model_dir=FLAGS.pretrained_model_dir,
+          checkpoint_step=checkpoint_step)
     else:
       model.predict(
           checkpoint_step=checkpoint_step,
