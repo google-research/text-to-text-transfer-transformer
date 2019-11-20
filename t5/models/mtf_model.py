@@ -32,7 +32,7 @@ from mesh_tensorflow import optimize
 from mesh_tensorflow.transformer import learning_rate_schedules
 from mesh_tensorflow.transformer import utils
 
-from t5.data.sentencepiece_vocabulary import SentencePieceVocabulary
+import t5.data
 from t5.models.mesh_transformer import mesh_eval_dataset_fn
 from t5.models.mesh_transformer import mesh_train_dataset_fn
 from t5.models.t5_model import T5Model
@@ -68,7 +68,6 @@ class MtfModel(T5Model):
       model_parallelism=8,
       batch_size=("tokens_per_batch", 1024),
       sequence_length=None,
-      vocabulary=None,
       model_type="bitransformer",
       layout_rules="ensemble:ensemble,batch:batch,d_ff:model,heads:model,vocab:model,experts:batch",
       autostack=True,
@@ -95,8 +94,6 @@ class MtfModel(T5Model):
         the per-shard batch size.
       sequence_length: an integer or a dict from feature-key to integer
         the (packed) sequence length, e.g. {"inputs": 512, "targets": 128}
-      vocabulary: a vocabulary.Vocabulary or (inputs_vocabulary,
-        targets_vocabulary) tuple.
       model_type: str, a model type from mesh tf models.
       layout_rules: an input to mtf.convert_to_layout_rules()
       autostack: boolean, internally combine variables.
@@ -121,7 +118,6 @@ class MtfModel(T5Model):
     """
 
     mesh_shape = utils.tpu_mesh_shape(tpu_topology, model_parallelism)
-    self._vocabulary = vocabulary or SentencePieceVocabulary()
 
     sequence_length = sequence_length or {"inputs": 512, "targets": 512}
 
@@ -143,7 +139,6 @@ class MtfModel(T5Model):
 
     self._sequence_length = sequence_length
     self._model_dir = model_dir
-    self._init_checkpoint = None
     self._model_type = model_type
     self._ensemble_inputs = ensemble_inputs
 
@@ -164,36 +159,31 @@ class MtfModel(T5Model):
     self._tpu_job_name = tpu_job_name
     self._estimator = None
 
-  @property
-  def estimator(self):
-    if not self._estimator:
-      self._estimator = utils.get_estimator(
-          model_type=self._model_type,
-          input_vocab_size=utils.inputs_vocabulary(self._vocabulary).vocab_size,
-          output_vocab_size=utils.targets_vocabulary(
-              self._vocabulary).vocab_size,
-          layout_rules=self._layout_rules,
-          mesh_shape=self._mesh_shape,
-          model_dir=self._model_dir,
-          batch_size=self._batch_size,
-          sequence_length=self._sequence_length,
-          autostack=self._autostack,
-          learning_rate_schedule=self._learning_rate_schedule,
-          keep_checkpoint_max=self._keep_checkpoint_max,
-          save_checkpoints_steps=self._save_checkpoints_steps,
-          optimizer=self._optimizer,
-          predict_fn=self._predict_fn,
-          variable_filter=self._variable_filter,
-          ensemble_inputs=self._ensemble_inputs,
-          use_tpu=self._tpu,
-          tpu_job_name=self._tpu_job_name,
-          iterations_per_loop=self._iterations_per_loop,
-          cluster=self._cluster,
-          init_checkpoint=self._init_checkpoint)
+  def estimator(self, vocabulary, init_checkpoint=None):
+    return utils.get_estimator(
+        model_type=self._model_type,
+        input_vocab_size=utils.inputs_vocabulary(vocabulary).vocab_size,
+        output_vocab_size=utils.targets_vocabulary(vocabulary).vocab_size,
+        layout_rules=self._layout_rules,
+        mesh_shape=self._mesh_shape,
+        model_dir=self._model_dir,
+        batch_size=self._batch_size,
+        sequence_length=self._sequence_length,
+        autostack=self._autostack,
+        learning_rate_schedule=self._learning_rate_schedule,
+        keep_checkpoint_max=self._keep_checkpoint_max,
+        save_checkpoints_steps=self._save_checkpoints_steps,
+        optimizer=self._optimizer,
+        predict_fn=self._predict_fn,
+        variable_filter=self._variable_filter,
+        ensemble_inputs=self._ensemble_inputs,
+        use_tpu=self._tpu,
+        tpu_job_name=self._tpu_job_name,
+        iterations_per_loop=self._iterations_per_loop,
+        cluster=self._cluster,
+        init_checkpoint=init_checkpoint)
 
-    return self._estimator
-
-  def train(self, mixture_or_task_name, steps):
+  def train(self, mixture_or_task_name, steps, init_checkpoint=None):
     """Train the model on the given Mixture or Task.
 
     Args:
@@ -201,12 +191,17 @@ class MtfModel(T5Model):
         Must be pre-registered in the global `TaskRegistry` or
         `MixtureRegistry.`
       steps: int, the total number of steps to train for.
+      init_checkpoint: a string, if not None then read in variables from this
+        checkpoint path when initializing variables. Will only initialize
+        variables that appear both in the current graph and the checkpoint.
     """
+    vocabulary = t5.data.get_mixture_or_task(
+        mixture_or_task_name).get_vocabulary()
     dataset_fn = functools.partial(
         mesh_train_dataset_fn, mixture_or_task_name=mixture_or_task_name)
-    utils.train_model(self.estimator, self._vocabulary, self._sequence_length,
-                      self._batch_size, dataset_fn, steps,
-                      self._ensemble_inputs)
+    utils.train_model(self.estimator(vocabulary, init_checkpoint), vocabulary,
+                      self._sequence_length, self._batch_size, dataset_fn,
+                      steps, self._ensemble_inputs)
 
   def eval(self, mixture_or_task_name, checkpoint_step=None, summary_dir=None,
            split="validation"):
@@ -227,14 +222,17 @@ class MtfModel(T5Model):
     """
     if checkpoint_step == -1:
       checkpoint_step = get_latest_checkpoint_from_dir(self._model_dir)
+    vocabulary = t5.data.get_mixture_or_task(
+        mixture_or_task_name).get_vocabulary()
     dataset_fn = functools.partial(
         mesh_eval_dataset_fn, mixture_or_task_name=mixture_or_task_name)
-    utils.eval_model(self.estimator, self._vocabulary, self._sequence_length,
-                     self._batch_size, split, self._model_dir, dataset_fn,
-                     summary_dir, checkpoint_step)
+    utils.eval_model(self.estimator(vocabulary), vocabulary,
+                     self._sequence_length, self._batch_size, split,
+                     self._model_dir, dataset_fn, summary_dir, checkpoint_step)
 
   def predict(self, checkpoint_step, input_file, output_file,
-              beam_size=1, temperature=1.0):
+              beam_size=1, temperature=1.0,
+              sentencepiece_model_path=t5.data.DEFAULT_SPM_PATH):
     """Predicts targets from the given inputs.
 
     Args:
@@ -251,6 +249,8 @@ class MtfModel(T5Model):
         beam search.
       temperature: float, a value between 0 and 1 (must be 0 if beam_size > 1)
         0.0 means argmax, 1.0 means sample according to predicted distribution.
+      sentencepiece_model_path: str, path to the SentencePiece model file to use
+        for decoding. Must match the one used during training.
     """
     # TODO(sharannarang) : It would be nice to have a function like
     # load_checkpoint that loads the model once and then call decode_from_file
@@ -260,15 +260,19 @@ class MtfModel(T5Model):
     if checkpoint_step == -1:
       checkpoint_step = get_latest_checkpoint_from_dir(self._model_dir)
 
-    with gin.unlock_config(), gin.config_scope("decode"):
+    with gin.unlock_config():
+      gin.parse_config_file(
+          os.path.join(self._model_dir, "operative_config.gin"))
       gin.bind_parameter("Bitransformer.decode.beam_size", beam_size)
       gin.bind_parameter("Bitransformer.decode.temperature", temperature)
-      utils.infer_model(self.estimator, self._vocabulary,
-                        self._sequence_length, self._batch_size,
-                        self._model_type, self._model_dir, checkpoint_step,
-                        input_file, output_file)
 
-  def finetune(self, mixture_or_task_name, steps, pretrained_model_dir,
+    vocabulary = t5.data.SentencePieceVocabulary(sentencepiece_model_path)
+    utils.infer_model(self.estimator(vocabulary), vocabulary,
+                      self._sequence_length, self._batch_size,
+                      self._model_type, self._model_dir, checkpoint_step,
+                      input_file, output_file)
+
+  def finetune(self, mixture_or_task_name, finetune_steps, pretrained_model_dir,
                checkpoint_step):
     """Finetunes a model from an existing checkpoint.
 
@@ -276,7 +280,7 @@ class MtfModel(T5Model):
       mixture_or_task_name: str, the name of the Mixture or Task to evaluate on.
         Must be pre-registered in the global `TaskRegistry` or
         `MixtureRegistry.`
-      steps: int, the total number of steps to train for.
+      finetune_steps: int, the number of additional steps to train for.
       pretrained_model_dir: str, directory with pretrained model checkpoints and
         operative config.
       checkpoint_step: int, checkpoint to initialize weights from. If -1, use
@@ -286,8 +290,8 @@ class MtfModel(T5Model):
       checkpoint_step = get_latest_checkpoint_from_dir(pretrained_model_dir)
 
     model_ckpt = "model.ckpt-" + str(checkpoint_step)
-    self._init_checkpoint = os.path.join(pretrained_model_dir, model_ckpt)
     with gin.unlock_config():
       gin.parse_config_file(
           os.path.join(pretrained_model_dir, "operative_config.gin"))
-    self.train(mixture_or_task_name, steps)
+    self.train(mixture_or_task_name, checkpoint_step + finetune_steps,
+               init_checkpoint=os.path.join(pretrained_model_dir, model_ckpt))

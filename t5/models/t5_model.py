@@ -41,6 +41,6 @@ class T5Model(object):
     raise NotImplementedError()
 
   @abc.abstractmethod
-  def finetune(self, mixture_or_task_name, steps, pretrained_model_dir,
+  def finetune(self, mixture_or_task_name, finetune_steps, pretrained_model_dir,
                checkpoint_step):
     raise NotImplementedError()
