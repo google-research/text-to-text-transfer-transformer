@@ -20,17 +20,10 @@ from __future__ import print_function
 
 from absl.testing import absltest
 from t5.evaluation import metrics
+from t5.evaluation import test_utils
 
 
-class MetricsTest(absltest.TestCase):
-
-  def assertDictClose(self, a, b, delta=None):
-    self.assertCountEqual(a.keys(), b.keys())
-    for k in a:
-      try:
-        self.assertAlmostEqual(a[k], b[k], delta=delta)
-      except AssertionError as e:
-        raise AssertionError(str(e) + " for key '%s'" % k)
+class MetricsTest(test_utils.BaseMetricsTest):
 
   def test_same_bleu(self):
     ref = "this is a string"
