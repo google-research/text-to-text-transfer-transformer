@@ -763,6 +763,54 @@ class TfdsTask(Task):
     return self.tfds_dataset.size(split)
 
 
+class TextLineTask(Task):
+  """A `Task` that reads text lines as input.
+
+  Requires a text_processor to be passed that takes a tf.data.Dataset of
+  strings and returns a tf.data.Dataset of feature dictionaries.
+  e.g. preprocessors.preprocess_tsv()
+  """
+
+  def __init__(
+      self,
+      name,
+      text_preprocessor,
+      sentencepiece_model_path,
+      metric_fns,
+      splits,
+      **task_kwargs):
+    """TfdsTask constructor.
+
+    Args:
+      name: string, a unique name for the Task. A ValueError will be raised if
+        another task with this name is already registered.
+      text_preprocessor: a function (or list of functions) that (each) takes in
+        a tf.data.Dataset of string features and returns a tf.data.Dataset of
+        string features. Can be set to None as a no-op. If a list is given,
+        they will be executed sequentially.
+      sentencepiece_model_path: string, path to a SentencePiece model file to
+        use for tokenization.
+      metric_fns: list(callable), list of metric functions with the signature
+        metric_fn(targets, predictions) to use during evaluation.
+      splits: dict of string (split name) to string (filename)
+      **task_kwargs: dict, additional keyword arguments for the parent `Task`
+        class.
+    """
+    self._split_to_filename = splits
+    def dataset_fn(split, shuffle_files):
+      del shuffle_files
+      filename = self._split_to_filename[split]
+      return tf.data.TextLineDataset(filename)
+    super(TextLineTask, self).__init__(
+        name,
+        dataset_fn=dataset_fn,
+        splits=self._split_to_filename.keys(),
+        text_preprocessor=text_preprocessor,
+        sentencepiece_model_path=sentencepiece_model_path,
+        metric_fns=metric_fns,
+        **task_kwargs)
+
+
 class TaskRegistry(DatasetProviderRegistry):
   _REGISTRY = {}
   _PROVIDER_TYPE = Task

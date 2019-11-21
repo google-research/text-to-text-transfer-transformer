@@ -293,6 +293,17 @@ TaskRegistry.add(
     metric_fns=[metrics.qa],
     sentencepiece_model_path=DEFAULT_SPM_PATH)
 
+# Maximized evaluation metrics over all answers.
+TaskRegistry.add(
+    "squad_v010_context_free",
+    TfdsTask,
+    tfds_name="squad/plain_text:0.1.0",
+    text_preprocessor=functools.partial(
+        preprocessors.squad, include_context=False),
+    postprocess_fn=postprocessors.qa,
+    metric_fns=[metrics.qa],
+    sentencepiece_model_path=DEFAULT_SPM_PATH)
+
 # Squad span prediction task instead of text.
 TaskRegistry.add(
     "squad_v010_allanswers_span",

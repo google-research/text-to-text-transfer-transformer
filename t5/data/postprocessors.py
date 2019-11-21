@@ -33,6 +33,11 @@ def string_to_float(string, default=-1., **unused_kwargs):
     return default
 
 
+def as_text(string, **unused_kwargs):
+  """Converts bytes or string to a string."""
+  return tf.compat.as_text(string)
+
+
 def string_label_to_class_id(
     string_label, label_classes, default=-1, **unused_kwargs):
   """Returns index of string_label in label_classes or default if not found."""

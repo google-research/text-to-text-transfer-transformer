@@ -240,7 +240,7 @@ def trivia_qa(dataset):
   return dataset.unbatch()
 
 
-def squad(dataset):
+def squad(dataset, include_context=True):
   """Convert SQuAD examples to a text2text pair.
 
   SQuAD produces examples with this form:
@@ -254,6 +254,7 @@ def squad(dataset):
 
   Args:
     dataset: a tf.data.Dataset to process.
+    include_context: a boolean
   Returns:
     A preprocessed tf.data.Dataset with the format listed above.
   """
@@ -263,7 +264,10 @@ def squad(dataset):
     a = clean_squad_text(x['answers']['text'])
     q = clean_squad_text(x['question'])
     c = clean_squad_text(x['context'])
-    inputs = _string_join(['question:', q, 'context:', c])
+    if include_context:
+      inputs = _string_join(['question:', q, 'context:', c])
+    else:
+      inputs = _string_join(['squad trivia question:', q])
     return {
         'inputs': inputs,
         'targets': a[0],
@@ -2291,3 +2295,66 @@ def take(dataset, num_examples=-1, **unused_kwargs):
     return dataset
   else:
     return dataset.take(num_examples).cache()
+
+
+def preprocess_tsv(dataset,
+                   field_delim='\t',
+                   num_fields=2,
+                   inputs_format='{0}',
+                   targets_format='{1}'):
+  r"""Parse tab-delimited strings into inputs and targets.
+
+  This function takes a tf.data.Dataset of strings, each of which contains
+  tab-delimited fields.  The function returns a tf.data.Dataset of feature
+  dictionaries of the form {"inputs": string, "targets": string}.
+
+  inputs_format contains a template string and field numbers used to produce
+  the "inputs" string.
+  targets_format contains a template string and field numbers used to produce
+  the "targets" string.
+
+  Example:
+    The input dataset contains the lines:
+    "6,7,42"
+    "2,9,18"
+    preprocess_tsv(dataset,
+                   field_delim=',',
+                   inputs_format='numerator: {2} denominator: {1}',
+                   targets_format='quotient: {0}'
+    would produce a dataset containing the dictionaries:
+    {"inputs": "numerator: 42 denomnator: 7", "targets": "quotient: 6"}
+    {"inputs": "numerator: 18 denomnator: 9", "targets": "quotient: 2"}
+
+  Args:
+    dataset: a tf.data.Dataset containing comma/tab-delimited strings
+    field_delim: a string, e.g. ',' for csv
+    num_fields: an integer
+    inputs_format: a string, the desired output format with placeholders for
+      field values.
+    targets_format: a string, the desired output format with placeholders for
+      field values.
+  Returns:
+    a tf.data.Dataset of feature dictionaries with 'inputs' and
+    'targets' features.
+  """
+  def _format_part(part, field_values):
+    found = re.findall(r'{(\d)}', part)
+    if found:
+      return field_values[int(found[0])]
+    else:
+      return part
+
+  def _format(format_string, field_values):
+    parts = [_format_part(p, field_values)
+             for p in re.split(r'({\d})', format_string)]
+    return tf.strings.join(parts)
+
+  def _parse_fn(line):
+    """Function to process a line."""
+    field_values = tf.io.decode_csv(
+        line, record_defaults=[''] * num_fields,
+        field_delim=field_delim, use_quote_delim=False)
+    return {'inputs': _format(inputs_format, field_values),
+            'targets': _format(targets_format, field_values)}
+  return dataset.map(
+      _parse_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
