@@ -18,7 +18,7 @@ import setuptools
 
 setuptools.setup(
     name='t5',
-    version='0.1.0',
+    version='0.1.4',
     description='Text-to-text transfer transformer',
     author='Google Inc.',
     author_email='no-reply@google.com',

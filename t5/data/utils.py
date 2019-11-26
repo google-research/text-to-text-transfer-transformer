@@ -114,6 +114,12 @@ class DatasetProviderRegistry(object):
     cls._REGISTRY[name] = provider
 
   @classmethod
+  def remove(cls, name):
+    """Remove provider from the registry, if it exists."""
+    if name in cls._REGISTRY:
+      del cls._REGISTRY[name]
+
+  @classmethod
   def get(cls, name):
     """Returns provider from the registry."""
     if name not in cls._REGISTRY:
