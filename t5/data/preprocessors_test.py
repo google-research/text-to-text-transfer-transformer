@@ -229,24 +229,22 @@ class PreprocessorsTest(tf.test.TestCase):
   def assertStringEqual(self, a, b):
     self.assertTrue(tf.equal(a, b), '%s != %s' % (a, b))
 
-  def test_clean_squad_text(self):
+  def test_pad_punctuation(self):
     self.assertStringEqual(
         ' " This is a string with " punctuation ( 1845 - 1986 ) " . ',
-        prep.clean_squad_text(
+        prep._pad_punctuation(
             '"This  is a string with "punctuation (1845-1986) ".'))
 
   def test_span_answer(self):
     self.assertStringEqual(
         'start: 2 end: 3',
-        prep.span_answer(tf.constant('Called the Denver Broncos.'),
-                         tf.constant('Denver Broncos'),
-                         prep.space_tok))
+        prep._span_answer(tf.constant('Called the Denver Broncos.'),
+                          tf.constant('Denver Broncos')))
     # Not found.
     self.assertStringEqual(
         '',
-        prep.span_answer(tf.constant('Called the Denver Broncos.'),
-                         tf.constant('Denver Bronscos'),
-                         prep.space_tok))
+        prep._span_answer(tf.constant('Called the Denver Broncos.'),
+                          tf.constant('Denver Bronscos')))
 
   def test_squad(self):
     og_dataset = tf.data.Dataset.from_tensors({
@@ -565,7 +563,7 @@ class PreprocessorsTest(tf.test.TestCase):
   def test_split_text_to_words(self):
     dataset = tf.data.Dataset.from_tensor_slices(
         {'text': ['That good.', 'That.']})
-    dataset = prep.split_text_to_words(dataset)
+    dataset = prep._split_text_to_words(dataset)
     assert_dataset(
         dataset,
         {

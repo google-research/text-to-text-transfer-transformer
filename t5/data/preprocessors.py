@@ -122,8 +122,8 @@ def summarize(dataset, article_key, summary_key):
   return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 
-def clean_squad_text(text):
-  """Normalize SQUAD text."""
+def _pad_punctuation(text):
+  """Adds spaces around punctuation."""
   # Add space around punctuation.
   text = tf.strings.regex_replace(text, r'(\W)', r' \1 ')
   # Collapse consecutive whitespace into one space.
@@ -135,81 +135,6 @@ def _string_join(lst):
   # Join on space, but collapse consecutive spaces.
   out = tf.strings.join(lst, separator=' ')
   return tf.strings.regex_replace(out, r'\s+', ' ')
-
-
-def _select_triviaqa_context_or_answer(contexts):
-  # Randomly select one of multiple answers.
-  context_idx = tf.random.uniform(
-      [], minval=0, maxval=tf.size(contexts), dtype=tf.int32)
-  return contexts[context_idx]
-
-
-def _triviaqa_question_answer_context(x):
-  """Extracts matched contexts and answers.
-
-  Returns all matched (question-context, answer) pairs.
-
-  Args:
-    x: A tfds sample.
-
-  Returns:
-    Flattened samples: (question-context, answer).
-  """
-  contexts = []
-  if 'entity_pages' in x:
-    contexts.append(x['entity_pages']['wiki_context'])
-  if 'search_results' in x:
-    contexts.append(x['search_results']['search_context'])
-  contexts = tf.concat(contexts, 0)
-
-  q = clean_squad_text(x['question'])
-  answers = x['answer']['normalized_aliases']
-
-  combination_size = tf.size(answers)*tf.size(contexts)
-  find_answers = tf.TensorArray(
-      tf.bool, size=combination_size, dynamic_size=True)
-  selected_answers = tf.TensorArray(
-      tf.string, size=combination_size, dynamic_size=True)
-  join_q_c = tf.TensorArray(
-      tf.string, size=combination_size, dynamic_size=True)
-
-  def cond_fn(i, find_answers, selected_answers, join_q_c):
-    del find_answers, selected_answers, join_q_c  # Unused
-    return tf.less(i, combination_size)
-
-  def body_fn(i, find_answers, selected_answers, join_q_c):
-    """Find answers from contexts and join."""
-    context_idx = tf.math.floordiv(i, tf.size(answers))
-    answer_idx = tf.math.mod(i, tf.size(answers))
-
-    a = clean_squad_text(answers[answer_idx])
-    a_ = tf.strings.join(['.*', a, '.*'])
-    c = clean_squad_text(contexts[context_idx])
-    find_a = tf.strings.regex_full_match(
-        tf.strings.lower(c),
-        tf.strings.lower(a_))
-    find_answers = find_answers.write(i, find_a)
-    selected_answers = selected_answers.write(i, a)
-
-    join_q_c_str = _string_join(['question:', q, 'context:', c])
-    join_q_c = join_q_c.write(i, join_q_c_str)
-    return (i + 1, find_answers, selected_answers, join_q_c)
-
-  _, find_answers, selected_answers, join_q_c = tf.while_loop(
-      cond_fn,
-      body_fn,
-      loop_vars=[
-          tf.constant(0), find_answers, selected_answers,
-          join_q_c
-      ])
-  find_answers = find_answers.stack()
-  selected_answers = selected_answers.stack()
-  join_q_c = join_q_c.stack()
-
-  selected_answers = tf.boolean_mask(selected_answers, find_answers)
-  selected_join_q_c = tf.boolean_mask(join_q_c, find_answers)
-
-  return selected_join_q_c, selected_answers
 
 
 def trivia_qa(dataset):
@@ -229,9 +154,76 @@ def trivia_qa(dataset):
   Returns:
     A preprocessed tf.data.Dataset with the format listed above.
   """
+  def triviaqa_question_answer_context(x):
+    """Extracts matched contexts and answers.
+
+    Returns all matched (question-context, answer) pairs.
+
+    Args:
+      x: A tfds sample.
+
+    Returns:
+      Flattened samples: (question-context, answer).
+    """
+    contexts = []
+    if 'entity_pages' in x:
+      contexts.append(x['entity_pages']['wiki_context'])
+    if 'search_results' in x:
+      contexts.append(x['search_results']['search_context'])
+    contexts = tf.concat(contexts, 0)
+
+    q = _pad_punctuation(x['question'])
+    answers = x['answer']['normalized_aliases']
+
+    combination_size = tf.size(answers)*tf.size(contexts)
+    find_answers = tf.TensorArray(
+        tf.bool, size=combination_size, dynamic_size=True)
+    selected_answers = tf.TensorArray(
+        tf.string, size=combination_size, dynamic_size=True)
+    join_q_c = tf.TensorArray(
+        tf.string, size=combination_size, dynamic_size=True)
+
+    def cond_fn(i, find_answers, selected_answers, join_q_c):
+      del find_answers, selected_answers, join_q_c  # Unused
+      return tf.less(i, combination_size)
+
+    def body_fn(i, find_answers, selected_answers, join_q_c):
+      """Find answers from contexts and join."""
+      context_idx = tf.math.floordiv(i, tf.size(answers))
+      answer_idx = tf.math.mod(i, tf.size(answers))
+
+      a = _pad_punctuation(answers[answer_idx])
+      a_ = tf.strings.join(['.*', a, '.*'])
+      c = _pad_punctuation(contexts[context_idx])
+      find_a = tf.strings.regex_full_match(
+          tf.strings.lower(c),
+          tf.strings.lower(a_))
+      find_answers = find_answers.write(i, find_a)
+      selected_answers = selected_answers.write(i, a)
+
+      join_q_c_str = _string_join(['question:', q, 'context:', c])
+      join_q_c = join_q_c.write(i, join_q_c_str)
+      return (i + 1, find_answers, selected_answers, join_q_c)
+
+    _, find_answers, selected_answers, join_q_c = tf.while_loop(
+        cond_fn,
+        body_fn,
+        loop_vars=[
+            tf.constant(0), find_answers, selected_answers,
+            join_q_c
+        ])
+    find_answers = find_answers.stack()
+    selected_answers = selected_answers.stack()
+    join_q_c = join_q_c.stack()
+
+    selected_answers = tf.boolean_mask(selected_answers, find_answers)
+    selected_join_q_c = tf.boolean_mask(join_q_c, find_answers)
+
+    return selected_join_q_c, selected_answers
+
   def my_fn(x):
-    """Create squad example."""
-    join_q_c, a = _triviaqa_question_answer_context(x)
+    """Create TriviaQA example."""
+    join_q_c, a = triviaqa_question_answer_context(x)
     return {
         'inputs': join_q_c,
         'targets': a
@@ -261,9 +253,9 @@ def squad(dataset, include_context=True):
   def my_fn(x):
     """Create squad example."""
 
-    a = clean_squad_text(x['answers']['text'])
-    q = clean_squad_text(x['question'])
-    c = clean_squad_text(x['context'])
+    a = _pad_punctuation(x['answers']['text'])
+    q = _pad_punctuation(x['question'])
+    c = _pad_punctuation(x['context'])
     if include_context:
       inputs = _string_join(['question:', q, 'context:', c])
     else:
@@ -280,57 +272,54 @@ def squad(dataset, include_context=True):
   return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 
-def find_subseq(n, h):
-  """Finds index of needle subsequence inside haystack.
-
-  Args:
-    n: 1-d tensor
-    h: 1-d tensor same type as n
-
-  Returns:
-    Index of start of n if found found; otherwise -1.
-  """
-  l_n = tf.size(n)
-  l_h = tf.size(h)
-  i = tf.constant(0)
-  end = l_h - l_n
-  # TODO(peterjliu): Replace with craffel@'s more efficient code
-  # if necessary: cr/254848350.
-  w = tf.while_loop(
-      lambda i: tf.logical_and(tf.less(i, end),
-                               tf.reduce_any(tf.not_equal(h[i:i+l_n], n))),
-      lambda i: i+1,
-      [i])
-  return tf.cond(tf.equal(end, w), lambda: -1, lambda: w)
-
-
-def span_answer(context, answer_text, tokenize_fn):
-  """Finds start/end indices of answer_text in context after tokenization.
+def _span_answer(context, answer_text):
+  """Finds start/end indices of answer_text in context after space tokenization.
 
   If answer_tokens is not a sublist of context_tokens, returns empty string.
 
   Args:
     context: 0-d string tensor
     answer_text: 0-d string
-    tokenize_fn: a function that tokenizes tf strings
 
   Returns:
     A string tensor.
   """
-  answer_tokens = tokenize_fn(answer_text)
-  context_tokens = tokenize_fn(context)
+  def space_tok(s):
+    """Replace non-word chars with space then split on space."""
+    s = tf.strings.regex_replace(s, r'\W', ' ')
+    return tf.strings.split(input=[s], sep=' ').values
+
+  def find_subseq(n, h):
+    """Finds index of needle subsequence inside haystack.
+
+    Args:
+      n: 1-d tensor
+      h: 1-d tensor same type as n
+
+    Returns:
+      Index of start of n if found found; otherwise -1.
+    """
+    l_n = tf.size(n)
+    l_h = tf.size(h)
+    i = tf.constant(0)
+    end = l_h - l_n
+    # TODO(peterjliu): Replace with craffel@'s more efficient code
+    # if necessary: cr/254848350.
+    w = tf.while_loop(
+        lambda i: tf.logical_and(tf.less(i, end),
+                                 tf.reduce_any(tf.not_equal(h[i:i+l_n], n))),
+        lambda i: i+1,
+        [i])
+    return tf.cond(tf.equal(end, w), lambda: -1, lambda: w)
+
+  answer_tokens = space_tok(answer_text)
+  context_tokens = space_tok(context)
   start = find_subseq(answer_tokens, context_tokens)
   end = start + tf.size(answer_tokens) - 1
   # Just take the first candidate that matches exactly.
   return tf.cond(tf.equal(start, -1),
                  lambda: tf.constant(''),
                  lambda: tf.strings.format('start: {} end: {}', [start, end]))
-
-
-def space_tok(s):
-  # Replace non-word chars with space then split on space.
-  s = tf.strings.regex_replace(s, r'\W', ' ')
-  return tf.strings.split(input=[s], sep=' ').values
 
 
 def squad_span_space_tokenized(dataset):
@@ -356,34 +345,12 @@ def squad_span_space_tokenized(dataset):
   def my_fn(x):
     """Create squad example as in squad_span_char, but tokenized on spaces."""
     res = dict(x)
-    res['targets'] = span_answer(x['context'], x['targets'], space_tok)
+    res['targets'] = _span_answer(x['context'], x['targets'],)
     return res
 
   dataset = squad(dataset)
   dataset = dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
   return dataset.filter(lambda x: tf.strings.length(x['targets']) > 0)
-
-
-# TODO(peterjliu): Add squad_span_sentencepiece_tokenized.
-
-
-def random_chunk(x, chunk_size):
-  """Pick a random chunk of a 1d Tensor.
-
-  The tensor is divided into chunks of length chunk_size, with the last
-  chunk being potentially smaller.  A random chunk is returned.
-
-  Args:
-    x: a 1d tf.Tensor
-    chunk_size: an integer
-  Returns:
-    a 1d tf.Tensor with length <= chunk_size
-  """
-  size = tf.size(x)
-  num_chunks = tf.maximum(1, (size - 1) // chunk_size + 1)
-  chunk_num = tf.random.uniform(
-      [], minval=0, maxval=num_chunks, dtype=tf.int32)
-  return x[chunk_size * chunk_num:chunk_size * (chunk_num + 1)]
 
 
 def random_split_text(dataset,
@@ -418,6 +385,24 @@ def random_split_text(dataset,
   Returns:
     a dataset
   """
+  def random_chunk(x, chunk_size):
+    """Pick a random chunk of a 1d Tensor.
+
+    The tensor is divided into chunks of length chunk_size, with the last
+    chunk being potentially smaller.  A random chunk is returned.
+
+    Args:
+      x: a 1d tf.Tensor
+      chunk_size: an integer
+    Returns:
+      a 1d tf.Tensor with length <= chunk_size
+    """
+    size = tf.size(x)
+    num_chunks = tf.maximum(1, (size - 1) // chunk_size + 1)
+    chunk_num = tf.random.uniform(
+        [], minval=0, maxval=num_chunks, dtype=tf.int32)
+    return x[chunk_size * chunk_num:chunk_size * (chunk_num + 1)]
+
   def my_fn(x):
     """Split one string into multiple strings.
 
@@ -452,7 +437,7 @@ def random_split_text(dataset,
   return dataset.unbatch()
 
 
-def split_text_to_words(dataset, text_key='text', min_num_words=2):
+def _split_text_to_words(dataset, text_key='text', min_num_words=2):
   """Split text to words and filter out examples with too few words."""
   def split(x):
     res = dict(x)
@@ -558,7 +543,7 @@ def fill_in_the_blank(dataset,
                        tf.strings.join([label, results[1]])])
     targets = tf.stack([results[1], results[0]])
     return {'inputs': inputs, 'targets': targets}
-  dataset = split_text_to_words(dataset, text_key, min_num_words=2)
+  dataset = _split_text_to_words(dataset, text_key, min_num_words=2)
   dataset = dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
   return dataset.unbatch()
 
@@ -618,27 +603,8 @@ def prefix_lm(dataset,
 
     return {'inputs': inputs, 'targets': targets}
 
-  dataset = split_text_to_words(dataset, text_key, min_num_words=2)
+  dataset = _split_text_to_words(dataset, text_key, min_num_words=2)
   return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
-
-def _split_by_lines(dataset):
-  """Given a dataset of text, returns a datasets of non-empty lines of the text.
-
-  Args:
-    dataset: a tf.data.Dataset of tf.strings
-
-  Returns:
-    A tf.data.Dataset.
-  """
-
-  def my_fn(text):
-    lines = tf.strings.split([text], sep='\n').values
-    return tf.strings.strip(lines)
-
-  dataset = dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-  dataset = dataset.unbatch()
-  return dataset.filter(lambda x: tf.strings.length(x) > 0)
 
 
 def neighboring_pairs(dataset, text_key='text', reuse_sentences=True):
@@ -668,6 +634,17 @@ def neighboring_pairs(dataset, text_key='text', reuse_sentences=True):
     a tf.data.Dataset
   """
 
+  def split_by_lines(dataset):
+    """Splits text in dataset by line, removing empty lines."""
+    def my_fn(text):
+      lines = tf.strings.split([text], sep='\n').values
+      return tf.strings.strip(lines)
+
+    dataset = dataset.map(
+        my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    dataset = dataset.unbatch()
+    return dataset.filter(lambda x: tf.strings.length(x) > 0)
+
   def split_into_pairs(line):
     """Split a given text example into pairs of neighboring sentences."""
     # TODO(mmatena): Use better sentence segmentation.
@@ -692,7 +669,7 @@ def neighboring_pairs(dataset, text_key='text', reuse_sentences=True):
   # Split by lines.
   dataset = dataset.map(
       lambda x: x[text_key], num_parallel_calls=tf.data.experimental.AUTOTUNE)
-  dataset = _split_by_lines(dataset)
+  dataset = split_by_lines(dataset)
 
   # Get pairs of neighboring sentences.
   dataset = dataset.map(
@@ -1079,12 +1056,6 @@ def definite_pronoun_resolution_simple(dataset,
   return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 
-def _some_are_empty(*tensors):
-  """See if at least one tensor has shape [0]."""
-  empty = [tf.equal(tf.size(t), 0) for t in tensors]
-  return tf.reduce_any(empty)
-
-
 def next_sentence_prediction(dataset,
                              text_key='text',
                              reuse_sentences=True,
@@ -1135,6 +1106,11 @@ def next_sentence_prediction(dataset,
       dataset, text_key=text_key, reuse_sentences=reuse_sentences)
   dataset = dataset.shuffle(buffer_size).batch(2, drop_remainder=True)
 
+  def some_are_empty(*tensors):
+    """See if at least one tensor has shape [0]."""
+    empty = [tf.equal(tf.size(t), 0) for t in tensors]
+    return tf.reduce_any(empty)
+
   def my_fn(x):
     """Function to be applied to each example in dataset."""
     use_neighbors = tf.random.uniform(shape=[]) < p_neighbors
@@ -1165,7 +1141,7 @@ def next_sentence_prediction(dataset,
         ])
 
       inpt = tf.cond(
-          _some_are_empty(first_inputs, second_inputs),
+          some_are_empty(first_inputs, second_inputs),
           lambda: empty,
           create_examples,
       )
