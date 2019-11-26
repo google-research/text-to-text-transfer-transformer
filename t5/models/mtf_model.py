@@ -40,7 +40,7 @@ from t5.models.t5_model import T5Model
 import tensorflow.compat.v1 as tf
 
 
-def get_latest_checkpoint_from_dir(model_dir):
+def _get_latest_checkpoint_from_dir(model_dir):
   """Helper function to return the latest checkpoint number from a directory.
 
   Args:
@@ -51,6 +51,10 @@ def get_latest_checkpoint_from_dir(model_dir):
   """
   ckpt = tf.train.latest_checkpoint(model_dir)
   return int(re.sub(".*ckpt-", "", ckpt))
+
+
+def _operative_config_path(model_dir):
+  return os.path.join(model_dir, "operative_config.gin")
 
 
 @gin.configurable
@@ -203,7 +207,7 @@ class MtfModel(T5Model):
                       self._sequence_length, self._batch_size, dataset_fn,
                       steps, self._ensemble_inputs)
 
-  def eval(self, mixture_or_task_name, checkpoint_step=None, summary_dir=None,
+  def eval(self, mixture_or_task_name, checkpoint_steps=None, summary_dir=None,
            split="validation"):
     """Evaluate the model on the given Mixture or Task.
 
@@ -211,7 +215,7 @@ class MtfModel(T5Model):
       mixture_or_task_name: str, the name of the Mixture or Task to evaluate on.
         Must be pre-registered in the global `TaskRegistry` or
         `MixtureRegistry.`
-      checkpoint_step: int, list of ints, or None. If an int or list of ints,
+      checkpoint_steps: int, list of ints, or None. If an int or list of ints,
         evaluation will be run on the checkpoint files in `model_dir` whose
         global steps are closest to the global steps provided. If None, run eval
         continuously waiting for new checkpoints. If -1, get the latest
@@ -220,31 +224,33 @@ class MtfModel(T5Model):
         eval. If None, use model_dir/eval_{split}.
       split: str, the split to evaluate on.
     """
-    if checkpoint_step == -1:
-      checkpoint_step = get_latest_checkpoint_from_dir(self._model_dir)
+    if checkpoint_steps == -1:
+      checkpoint_steps = _get_latest_checkpoint_from_dir(self._model_dir)
     vocabulary = t5.data.get_mixture_or_task(
         mixture_or_task_name).get_vocabulary()
     dataset_fn = functools.partial(
         mesh_eval_dataset_fn, mixture_or_task_name=mixture_or_task_name)
+    with gin.unlock_config():
+      gin.parse_config_file(_operative_config_path(self._model_dir))
     utils.eval_model(self.estimator(vocabulary), vocabulary,
                      self._sequence_length, self._batch_size, split,
-                     self._model_dir, dataset_fn, summary_dir, checkpoint_step)
+                     self._model_dir, dataset_fn, summary_dir, checkpoint_steps)
 
-  def predict(self, checkpoint_step, input_file, output_file,
+  def predict(self, input_file, output_file, checkpoint_steps=-1,
               beam_size=1, temperature=1.0,
               sentencepiece_model_path=t5.data.DEFAULT_SPM_PATH):
     """Predicts targets from the given inputs.
 
     Args:
-      checkpoint_step: int, list of ints, or None. If an int or list of ints,
-        inference will be run on the checkpoint files in `model_dir` whose
-        global steps are closest to the global steps provided. If None, run
-        inference continuously waiting for new checkpoints. If -1, get the
-        latest checkpoint from the model directory.
       input_file: str, path to a text file containing newline-separated input
         prompts to predict from.
       output_file: str, path prefix of output file to write predictions to. Note
         the checkpoint step will be appended to the given filename.
+      checkpoint_steps: int, list of ints, or None. If an int or list of ints,
+        inference will be run on the checkpoint files in `model_dir` whose
+        global steps are closest to the global steps provided. If None, run
+        inference continuously waiting for new checkpoints. If -1, get the
+        latest checkpoint from the model directory.
       beam_size: int, a number >= 1 specifying the number of beams to use for
         beam search.
       temperature: float, a value between 0 and 1 (must be 0 if beam_size > 1)
@@ -257,23 +263,22 @@ class MtfModel(T5Model):
     # multiple times without having to restore the checkpoint weights again.
     # This would be particularly useful in colab demo.
 
-    if checkpoint_step == -1:
-      checkpoint_step = get_latest_checkpoint_from_dir(self._model_dir)
+    if checkpoint_steps == -1:
+      checkpoint_steps = _get_latest_checkpoint_from_dir(self._model_dir)
 
     with gin.unlock_config():
-      gin.parse_config_file(
-          os.path.join(self._model_dir, "operative_config.gin"))
+      gin.parse_config_file(_operative_config_path(self._model_dir))
       gin.bind_parameter("Bitransformer.decode.beam_size", beam_size)
       gin.bind_parameter("Bitransformer.decode.temperature", temperature)
 
     vocabulary = t5.data.SentencePieceVocabulary(sentencepiece_model_path)
     utils.infer_model(self.estimator(vocabulary), vocabulary,
                       self._sequence_length, self._batch_size,
-                      self._model_type, self._model_dir, checkpoint_step,
+                      self._model_type, self._model_dir, checkpoint_steps,
                       input_file, output_file)
 
   def finetune(self, mixture_or_task_name, finetune_steps, pretrained_model_dir,
-               checkpoint_step):
+               pretrained_checkpoint_step=-1):
     """Finetunes a model from an existing checkpoint.
 
     Args:
@@ -283,15 +288,14 @@ class MtfModel(T5Model):
       finetune_steps: int, the number of additional steps to train for.
       pretrained_model_dir: str, directory with pretrained model checkpoints and
         operative config.
-      checkpoint_step: int, checkpoint to initialize weights from. If -1, use
-        the latest checkpoint from the pretrained model directory.
+      pretrained_checkpoint_step: int, checkpoint to initialize weights from. If
+        -1, use the latest checkpoint from the pretrained model directory.
     """
-    if checkpoint_step == -1:
-      checkpoint_step = get_latest_checkpoint_from_dir(pretrained_model_dir)
+    if pretrained_checkpoint_step == -1:
+      checkpoint_step = _get_latest_checkpoint_from_dir(pretrained_model_dir)
+    with gin.unlock_config():
+      gin.parse_config_file(_operative_config_path(pretrained_model_dir))
 
     model_ckpt = "model.ckpt-" + str(checkpoint_step)
-    with gin.unlock_config():
-      gin.parse_config_file(
-          os.path.join(pretrained_model_dir, "operative_config.gin"))
     self.train(mixture_or_task_name, checkpoint_step + finetune_steps,
                init_checkpoint=os.path.join(pretrained_model_dir, model_ckpt))

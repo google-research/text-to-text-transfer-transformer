@@ -20,7 +20,6 @@ from __future__ import print_function
 
 import importlib
 import os
-import re
 import sys
 
 from absl import app
