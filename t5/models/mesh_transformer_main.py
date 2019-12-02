@@ -145,18 +145,18 @@ def main(_):
         model_dir=FLAGS.model_dir)
 
     if FLAGS.checkpoint_mode == "latest":
-      checkpoint_step = -1
+      checkpoint_steps = -1
     elif FLAGS.checkpoint_mode == "all":
-      checkpoint_step = "all"
+      checkpoint_steps = "all"
     else:
-      checkpoint_step = [int(c) for c in FLAGS.checkpoint_steps]
+      checkpoint_steps = [int(c) for c in FLAGS.checkpoint_steps]
 
     if FLAGS.mode == "train":
       model.train(mixture_or_task_name=FLAGS.mixture_or_task,
                   steps=FLAGS.train_steps)
     elif FLAGS.mode == "eval":
       model.eval(mixture_or_task_name=FLAGS.mixture_or_task,
-                 checkpoint_step=checkpoint_step,
+                 checkpoint_steps=checkpoint_steps,
                  summary_dir=FLAGS.eval_summary_dir,
                  split=FLAGS.eval_split)
     elif FLAGS.mode == "finetune":
@@ -165,17 +165,17 @@ def main(_):
                len(FLAGS.checkpoint_steps) == 1)), \
           "Must specify a single checkpoint for finetuning a model."
 
-      if isinstance(checkpoint_step, list):
-        checkpoint_step = checkpoint_step[0]
+      if isinstance(checkpoint_steps, list):
+        checkpoint_steps = checkpoint_steps[0]
 
       model.finetune(
           mixture_or_task_name=FLAGS.mixture_or_task,
           steps=FLAGS.train_steps,
           pretrained_model_dir=FLAGS.pretrained_model_dir,
-          checkpoint_step=checkpoint_step)
+          checkpoint_steps=checkpoint_steps)
     else:
       model.predict(
-          checkpoint_step=checkpoint_step,
+          checkpoint_steps=checkpoint_steps,
           input_file=FLAGS.input_file,
           output_file=FLAGS.output_file)
 
