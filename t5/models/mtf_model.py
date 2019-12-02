@@ -129,11 +129,7 @@ class MtfModel(T5Model):
       sequence_length = {"inputs": sequence_length,
                          "targets": sequence_length}
 
-    if not isinstance(batch_size, int):
-      self._batch_size = utils.compute_batch_size(
-          sequence_length, mesh_shape, layout_rules, batch_size)
-    else:
-      self._batch_size = batch_size
+    self.batch_size = batch_size
 
     self._learning_rate_schedule = (
         learning_rate_schedule or
@@ -163,6 +159,19 @@ class MtfModel(T5Model):
     self._tpu_job_name = tpu_job_name
     self._estimator = None
 
+  @property
+  def batch_size(self):
+    return self._batch_size
+
+  @batch_size.setter
+  def batch_size(self, batch_size):
+    if not isinstance(batch_size, int):
+      self._batch_size = utils.compute_batch_size(
+          self._sequence_length, self._mesh_shape, self._layout_rules,
+          batch_size)
+    else:
+      self._batch_size = batch_size
+
   def estimator(self, vocabulary, init_checkpoint=None):
     return utils.get_estimator(
         model_type=self._model_type,
@@ -171,7 +180,7 @@ class MtfModel(T5Model):
         layout_rules=self._layout_rules,
         mesh_shape=self._mesh_shape,
         model_dir=self._model_dir,
-        batch_size=self._batch_size,
+        batch_size=self.batch_size,
         sequence_length=self._sequence_length,
         autostack=self._autostack,
         learning_rate_schedule=self._learning_rate_schedule,
@@ -204,7 +213,7 @@ class MtfModel(T5Model):
     dataset_fn = functools.partial(
         mesh_train_dataset_fn, mixture_or_task_name=mixture_or_task_name)
     utils.train_model(self.estimator(vocabulary, init_checkpoint), vocabulary,
-                      self._sequence_length, self._batch_size, dataset_fn,
+                      self._sequence_length, self.batch_size, dataset_fn,
                       steps, self._ensemble_inputs)
 
   def eval(self, mixture_or_task_name, checkpoint_steps=None, summary_dir=None,
@@ -233,7 +242,7 @@ class MtfModel(T5Model):
     with gin.unlock_config():
       gin.parse_config_file(_operative_config_path(self._model_dir))
     utils.eval_model(self.estimator(vocabulary), vocabulary,
-                     self._sequence_length, self._batch_size, split,
+                     self._sequence_length, self.batch_size, split,
                      self._model_dir, dataset_fn, summary_dir, checkpoint_steps)
 
   def predict(self, input_file, output_file, checkpoint_steps=-1,
@@ -273,7 +282,7 @@ class MtfModel(T5Model):
 
     vocabulary = t5.data.SentencePieceVocabulary(sentencepiece_model_path)
     utils.infer_model(self.estimator(vocabulary), vocabulary,
-                      self._sequence_length, self._batch_size,
+                      self._sequence_length, self.batch_size,
                       self._model_type, self._model_dir, checkpoint_steps,
                       input_file, output_file)
 
