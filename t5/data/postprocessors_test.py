@@ -31,6 +31,9 @@ class PostprocessorsTest(absltest.TestCase):
     self.assertEqual(postprocessors.string_to_float("asdf"), -1.)
     self.assertEqual(postprocessors.string_to_float("asdf", -2.), -2.)
 
+  def test_lower_text(self):
+    self.assertEqual(postprocessors.lower_text(b"TEST"), "test")
+
   def test_string_label_to_class_id(self):
     cls = ["one", "two"]
     self.assertEqual(postprocessors.string_label_to_class_id("one", cls), 0)

@@ -33,9 +33,9 @@ def string_to_float(string, default=-1., **unused_kwargs):
     return default
 
 
-def as_text(string, **unused_kwargs):
+def lower_text(string, **unused_kwargs):
   """Converts bytes or string to a string."""
-  return tf.compat.as_text(string)
+  return tf.compat.as_text(string).lower()
 
 
 def string_label_to_class_id(
