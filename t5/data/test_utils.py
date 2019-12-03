@@ -206,7 +206,7 @@ def _get_comparable_examples_from_ds(ds):
   return examples
 
 
-def dump_examples_to_tfrecord(path, examples):
+def _dump_examples_to_tfrecord(path, examples):
   """Writes list of example dicts to a TFRecord file of tf.Example protos."""
   logging.info("Writing examples to TFRecord: %s", path)
   with tf.io.TFRecordWriter(path) as writer:
@@ -214,14 +214,22 @@ def dump_examples_to_tfrecord(path, examples):
       writer.write(dataset_utils.dict_to_tfexample(ex).SerializeToString())
 
 
-def _dump_fake_dataset(path, split, shard_sizes):
+def _dump_examples_to_tsv(path, examples, field_names=("prefix", "suffix")):
+  """Writes list of example dicts to a TSV."""
+  logging.info("Writing examples to TSV: %s", path)
+  with tf.io.gfile.GFile(path, "w") as writer:
+    writer.write("\t".join(field_names) + "\n")
+    for ex in examples:
+      writer.write("\t".join([ex[field] for field in field_names]) + "\n")
+
+
+def _dump_fake_dataset(path, fake_examples, shard_sizes, dump_fn):
   """Dumps the fake dataset split to sharded TFRecord file."""
   offsets = np.cumsum([0] + shard_sizes)
-  fake_examples = _FAKE_CACHED_DATASET[split]
   for i in range(len(offsets) - 1):
     start, end = offsets[i:i+2]
     shard_path = "%s-%05d-of-%05d" % (path, i, len(shard_sizes))
-    dump_examples_to_tfrecord(shard_path, fake_examples[start:end])
+    dump_fn(shard_path, fake_examples[start:end])
 
 
 def _assert_compare_to_fake_dataset(ds, split, token_preprocessed=False):
@@ -246,19 +254,15 @@ def _assert_compare_to_fake_dataset(ds, split, token_preprocessed=False):
 
 
 def verify_task_matches_fake_datasets(
-    task, use_cached, token_preprocessed=False):
+    task, use_cached, token_preprocessed=False, splits=("train", "validation")):
   """Assert all splits for both tokenized datasets are correct."""
   sequence_length = {"inputs": 13, "targets": 13}
-  _assert_compare_to_fake_dataset(
-      task.get_dataset(
-          sequence_length, "train", use_cached=use_cached, shuffle=False),
-      "train",
-      token_preprocessed=token_preprocessed)
-  _assert_compare_to_fake_dataset(
-      task.get_dataset(
-          sequence_length, "validation", use_cached=use_cached, shuffle=False),
-      "validation",
-      token_preprocessed=token_preprocessed)
+  for split in splits:
+    _assert_compare_to_fake_dataset(
+        task.get_dataset(
+            sequence_length, split, use_cached=use_cached, shuffle=False),
+        split,
+        token_preprocessed=token_preprocessed)
 
 
 def _maybe_as_bytes(v):
@@ -311,7 +315,7 @@ def get_fake_dataset(split, shuffle_files=False):
 
 
 def test_text_preprocessor(dataset):
-  """Performs fake preprocessing on the text dataset."""
+  """Performs preprocessing on the text dataset."""
 
   def my_fn(ex):
     res = dict(ex)
@@ -324,6 +328,20 @@ def test_text_preprocessor(dataset):
     return res
 
   return dataset.map(my_fn)
+
+
+def _split_tsv_preprocessor(dataset, field_names=("prefix", "suffix")):
+  """Splits TSV into dictionary."""
+
+  def parse_line(line):
+    return dict(zip(
+        field_names,
+        tf.io.decode_csv(
+            line, record_defaults=[""] * len(field_names),
+            field_delim="\t", use_quote_delim=False)
+    ))
+
+  return dataset.map(parse_line)
 
 
 def test_token_preprocessor(dataset, vocabulary, **unused_kwargs):
@@ -466,18 +484,36 @@ class FakeTaskTest(absltest.TestCase):
     clear_tasks()
     add_tfds_task("cached_task")
 
+    # Prepare cached task.
     self.cached_task = TaskRegistry.get("cached_task")
     cached_task_dir = os.path.join(self.test_data_dir, "cached_task")
     _dump_fake_dataset(
         os.path.join(cached_task_dir, "train.tfrecord"),
-        "train", [2, 1])
+        _FAKE_CACHED_DATASET["train"], [2, 1], _dump_examples_to_tfrecord)
     _dump_fake_dataset(
         os.path.join(cached_task_dir, "validation.tfrecord"),
-        "validation", [2])
+        _FAKE_CACHED_DATASET["validation"], [2], _dump_examples_to_tfrecord)
 
-    # Register an uncached test Task.
+    # Prepare uncached TfdsTask.
     add_tfds_task("uncached_task")
     self.uncached_task = TaskRegistry.get("uncached_task")
+
+    # Prepare uncached TextLineTask.
+    _dump_fake_dataset(
+        os.path.join(self.test_data_dir, "train.tsv"),
+        _FAKE_DATASET["train"], [2, 1], _dump_examples_to_tsv)
+    TaskRegistry.add(
+        "text_line_task",
+        dataset_utils.TextLineTask,
+        split_to_filepattern={
+            "train": os.path.join(self.test_data_dir, "train.tsv*"),
+        },
+        skip_header_lines=1,
+        text_preprocessor=[_split_tsv_preprocessor, test_text_preprocessor],
+        sentencepiece_model_path=os.path.join(
+            TEST_DATA_DIR, "sentencepiece", "sentencepiece.model"),
+        metric_fns=[])
+    self.text_line_task = TaskRegistry.get("text_line_task")
 
     # Auto-verify any split by just retuning the split name
     dataset_utils.verify_tfds_split = absltest.mock.Mock(

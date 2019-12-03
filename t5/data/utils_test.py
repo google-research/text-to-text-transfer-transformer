@@ -92,13 +92,14 @@ class TasksTest(test_utils.FakeTaskTest):
     fn_task = TaskRegistry.get("fn_task")
     test_utils.verify_task_matches_fake_datasets(fn_task, use_cached=False)
 
+  def test_text_line_task(self):
+    test_utils.verify_task_matches_fake_datasets(
+        self.text_line_task, use_cached=False, splits=["train"])
+
   def test_no_tfds_version(self):
     with self.assertRaisesRegex(
         ValueError, "TFDS name must contain a version number, got: fake"):
       test_utils.add_tfds_task("fake_task", tfds_name="fake")
-
-  def test_splits(self):
-    self.assertCountEqual(("train", "validation"), self.cached_task.splits)
 
   def test_num_input_examples(self):
     self.assertEqual(30, self.cached_task.num_input_examples("train"))

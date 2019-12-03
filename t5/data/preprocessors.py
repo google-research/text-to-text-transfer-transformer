@@ -2273,6 +2273,31 @@ def take(dataset, num_examples=-1, **unused_kwargs):
     return dataset.take(num_examples).cache()
 
 
+def parse_tsv(dataset,
+              field_names,
+              field_delim='\t'):
+  """Splits TSV lines into dict examples mapping field name to string value.
+
+  Args:
+    dataset: a `tf.data.Dataset` containing comma/tab-delimited strings.
+    field_names: a list of strings, the ordered names of the TSV fields.
+    field_delim: a string, the delimiter to split on e.g. ',' for csv.
+  Returns:
+    A `tf.data.Dataset` containing dict examples mapping field name to string
+    value.
+  """
+  def parse_line(line):
+    return dict(zip(
+        field_names,
+        tf.io.decode_csv(
+            line, record_defaults=[''] * len(field_names),
+            field_delim=field_delim, use_quote_delim=False)
+    ))
+
+  return dataset.map(
+      parse_line, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+
 def preprocess_tsv(dataset,
                    field_delim='\t',
                    num_fields=2,
@@ -2302,8 +2327,8 @@ def preprocess_tsv(dataset,
     {"inputs": "numerator: 18 denomnator: 9", "targets": "quotient: 2"}
 
   Args:
-    dataset: a tf.data.Dataset containing comma/tab-delimited strings
-    field_delim: a string, e.g. ',' for csv
+    dataset: a tf.data.Dataset containing comma/tab-delimited strings.
+    field_delim: a string, the delimiter to split on e.g. ',' for csv.
     num_fields: an integer
     inputs_format: a string, the desired output format with placeholders for
       field values.

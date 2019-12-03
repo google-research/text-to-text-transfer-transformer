@@ -34,7 +34,7 @@ Additionally, you may optionally provide:
   * token preprocessor(s)
   * a postprocess function
 
-The **data source** can be an arbitrary function that provides a `tf.data.Dataset`, but we also provide simpler wrappers for datasets available in [TensorFlow Datasets (TFDS)][tfds] (a `TfdsTask`) or stored as a text file with one example per line (a `TextLineTask`).
+The **data source** can be an arbitrary function that provides a `tf.data.Dataset`, but we also provide simpler wrappers for datasets available in [TensorFlow Datasets (TFDS)][tfds] (a `TfdsTask`) or stored as text files with one example per line (a `TextLineTask`).
 
 The **text preprocessor** converts the examples in the source dataset into the appropriate format for a text-to-text model with fields for `inputs` and `targets`.  For example, the predefined `t5.data.preprocessors.translate` preprocessor converts inputs in the form
 
@@ -78,23 +78,23 @@ You may either use a new or pre-existing `Task`, or you may load examples from a
 
 Depending on your data source (see [above](#t5data)), you will need to prepare your data appropriately.
 
+##### `Task`
+
+If using a vanilla task, just make sure any file(s) loaded by your `dataset_fn` are accessible to the TPU (i.e., are in a GCS bucket), and you should be good to go!
+
 ##### `TfdsTask`
 
 Most of our predefined `Task`s use [TensorFlow Datasets (TFDS)][tfds] as their data source. When you run our training binary (see instructions [below](#training)) with a `TfdsTask`, the dataset will automatically be downloaded and prepared on its first use. After preparation is complete, the dataset is cached to your local storage to avoid this overhead in future runs.  If working in the cloud, we recommend you set the `--t5_tfds_data_dir` flag to point to a persistent storage location, such as a [GCS bucket][gcs]. This is a requirement when training on TPU.
 
 **Note:**_The [C4][c4] dataset we created for unsupervised pre-training is available in TensorFlow Datasets, but it requires a significant amount of bandwith for downloading the raw [Common Crawl][cc] scrapes and compute for its preparation. We suggest you take advantage of the [Apache Beam][beam] support in TFDS, which enables distributed preprocessing of the dataset and can be run on [Google Cloud Dataflow][gcd]. Otherwise, it is unlikely that you will be able to complete preprocessing in a human lifetime. Read more in the [TFDS Beam instructions][tfds_beam]._
 
-##### `Task`
-
-If using a vanilla task, just make sure any file(s) loaded by your `dataset_fn` are accessible to the TPU (i.e., are in a GCS bucket), and you should be good to go!
-
 ##### `TextLineTask`
 
-A `TextLineTask` is useful when your data source is a text file or files with one example per line. You can then use a text preprocessor to convert each line into inputs and targets (e.g., `tf.data.preprocessors.preprocess_tsv`).
+A `TextLineTask` is useful when your data source is a text file (or files) with one example per line. You can then use a text preprocessor to convert each line into a dictionary of inputs and targets.
 
-Make sure your text file(s) are accessible to the TPU (i.e., are in a GCS bucket), and you should be good to go!
+Make sure your files are accessible to the TPU (i.e., are in a GCS bucket), and you should be good to go!
 
-#### Using a TSV File
+#### Using a TSV File Directly
 
 Instead of defining a new `Task`, you may use a TSV file (or files) directly as your dataset where each line is formatted as `<input>\t<target>`.
 

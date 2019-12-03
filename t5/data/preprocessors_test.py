@@ -992,6 +992,11 @@ class PreprocessorsTest(tf.test.TestCase):
     dataset = prep.take(og_dataset, -1)
     assert_dataset(dataset, [{'inputs': 1} for _ in range(100)])
 
+  def parse_tsv(self):
+    og_dataset = tf.data.Dataset.from_tensor_slices(['a\tb', 'c\td'])
+    dataset = prep.parse_tsv(og_dataset, field_names=['f1', 'f2'])
+    assert_dataset(dataset, [{'f1': 'a', 'f2': 'b'}, {'f1': 'c', 'f2': 'd'}])
+
 
 if __name__ == '__main__':
   tf.disable_v2_behavior()

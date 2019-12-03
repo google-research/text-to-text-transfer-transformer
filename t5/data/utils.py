@@ -780,16 +780,19 @@ class TextLineTask(Task):
   def __init__(
       self,
       name,
+      split_to_filepattern,
       text_preprocessor,
       sentencepiece_model_path,
       metric_fns,
-      splits,
+      skip_header_lines=0,
       **task_kwargs):
-    """TfdsTask constructor.
+    """TextLineTask constructor.
 
     Args:
       name: string, a unique name for the Task. A ValueError will be raised if
         another task with this name is already registered.
+      split_to_filepattern: dict of string (split name) to string (filename or
+        filepattern).
       text_preprocessor: a function (or list of functions) that (each) takes in
         a tf.data.Dataset of string features and returns a tf.data.Dataset of
         string features. Can be set to None as a no-op. If a list is given,
@@ -798,19 +801,27 @@ class TextLineTask(Task):
         use for tokenization.
       metric_fns: list(callable), list of metric functions with the signature
         metric_fn(targets, predictions) to use during evaluation.
-      splits: dict of string (split name) to string (filename)
+      skip_header_lines: int, number of header lines to skip in each source
+        file.
       **task_kwargs: dict, additional keyword arguments for the parent `Task`
         class.
     """
-    self._split_to_filename = splits
     def dataset_fn(split, shuffle_files):
-      del shuffle_files
-      filename = self._split_to_filename[split]
-      return tf.data.TextLineDataset(filename)
+      filepattern = split_to_filepattern[split]
+
+      def _read_file(fname):
+        return tf.data.TextLineDataset(fname).skip(skip_header_lines)
+
+      files = tf.data.Dataset.list_files(filepattern, shuffle=shuffle_files)
+      return files.interleave(
+          _read_file,
+          cycle_length=16, block_length=16,
+          num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
     super(TextLineTask, self).__init__(
         name,
         dataset_fn=dataset_fn,
-        splits=self._split_to_filename.keys(),
+        splits=split_to_filepattern.keys(),
         text_preprocessor=text_preprocessor,
         sentencepiece_model_path=sentencepiece_model_path,
         metric_fns=metric_fns,
