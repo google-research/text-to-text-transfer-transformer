@@ -1,18 +1,42 @@
 # T5: Text-To-Text Transfer Transformer
 
-T5 serves primarily as code for reproducing the experiments in [_Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer_][paper].
+T5 serves primarily as code for reproducing the experiments in [_Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer_][paper]. In the paper, we demonstrate how to achieve state-of-the-art results on multiple NLP tasks using a text-to-text transformer pre-trained on a large text corpus.
+
 The bulk of the code in this repository is used for loading, preprocessing, mixing, and evaluating datasets.
 It also provides a way to fine-tune the [pre-trained models](#released-model-checkpoints) released alongside the publication.
 
 T5 can be used as a library for future model development by providing useful modules for training and fine-tuning (potentially *huge*) models on mixtures of text-to-text tasks.
 
-## Organization
+## Table of Contents
+
+* [Library](#library)
+* [Usage](#usage)
+* [Released Model Checkpoints](#released-model-checkpoints)
+* [How to Cite](#how-to-cite)
+
+## Library
 
 T5 is organized into 3 core packages plus configurations for reproducing experiments from the [paper][paper]:
 
 #### t5.data
 
-`t5.data` is a library for defining `Task` objects that provide `tf.data.Dataset`s. Each `Task` references a dataset from [TensorFlow Datasets][tfds] along with a preprocesssing function for converting the dataset into the appropriate format for a text-to-text model with fields for `inputs` and `targets`.  For example, the `translate` preprocessor converts inputs in the form
+`t5.data` is a package for defining `Task` objects that provide `tf.data.Dataset`s.
+
+Each `Task` is made up of:
+
+  * a data source
+  * text preprocessor function(s)
+  * a SentencePiece model
+  * metric function(s)
+
+Additionally, you may optionally provide:
+
+  * token preprocessor(s)
+  * a postprocess function
+
+The **data source** can be an arbitrary function that provides a `tf.data.Dataset`, but we also provide simpler wrappers for datasets available in [TensorFlow Datasets (TFDS)][tfds] (a `TfdsTask`) or stored as a text file with one example per line (a `TextLineTask`).
+
+The **text preprocessor** converts the examples in the source dataset into the appropriate format for a text-to-text model with fields for `inputs` and `targets`.  For example, the predefined `t5.data.preprocessors.translate` preprocessor converts inputs in the form
 
 ```py
 {'de': 'Das ist gut.', 'en': 'That is good.'}
@@ -24,7 +48,13 @@ to the form
 {'inputs': 'translate German to English: Das ist gut.', 'targets': 'That is good.'}
 ```
 
-`Task` objects also handle tokenization of strings, optional preprocessing of the token representation (e.g., corruptions for unsupservised training), and specification of associated metrics for evaluation.
+In additonal to text preprocessing, you can also use one or more **token preprocessors** to modify the inputs post-tokenization. We implemented our unsupervised pre-training objectives using these token preprocessors.
+
+We provide many predefined preprocessors in `t5.data.preprocessors`, but you may also define your own.
+
+The **SentencePiece model** is used to tokenize the input strings and decode the output tokens. You can create your own model with the [google/sentencepiece](https://github.com/google/sentencepiece) library, or use our default one at `t5.data.DEFAULT_SPM_PATH`.
+
+The **metric function** returns a score given the target and prediction from the model. You may also define a **postprocess function** to convert the target and prediction text to another format before calling the metric. We provide some predefined metrics in `t5.evaluation.metrics`.
 
 Finally, `t5.data` contains a `Mixture` class that can be instantiated to combine multiple `Task` datasets for multi-task training using various functions for specifying the mixture rates.
 
@@ -40,11 +70,42 @@ Finally, `t5.data` contains a `Mixture` class that can be instantiated to combin
 
 Here we provide example usage for how to pre-train, fine-tune, evaluate, and decode from a model with our codebase. You can use these instructions to reproduce our results, fine-tune one of our released checkpoints with your own data and/or hyperparameters, or pre-train a model from scratch.
 
-### Datasets
+### Dataset Preparation
 
-We use [TensorFlow Datasets (TFDS)][tfds] as our dataset repository. When you select a dataset and run our training binary (see instructions below), the dataset will automatically be downloaded and prepared on its first use. After preparation is complete, the dataset is cached to your local storage to avoid this overhead in future runs.  If working in the cloud, we recommend you set the `--t5_tfds_data_dir` flag to point to a persistent storage location, such as a [GCS bucket][gcs]. This is a requirement when training on TPU.
+You may either use a new or pre-existing `Task`, or you may load examples from a preprocessed TSV file.
 
-Note that the [C4][c4] dataset we created for unsupervised pre-training requires a significant amount of bandwith for downloading the raw [Common Crawl][cc] scrapes and compute for its preparation. We suggest you take advantage of the [Apache Beam][beam] support in TFDS, which enables distributed preprocessing of the dataset and can be run on [Google Cloud Dataflow][gcd]. Otherwise, it is unlikely that you will be able to complete preprocessing in a human lifetime. Read more in the [TFDS Beam instructions][tfds_beam].
+#### Using a `Task`
+
+Depending on your data source (see [above](#t5data)), you will need to prepare your data appropriately.
+
+##### `TfdsTask`
+
+Most of our predefined `Task`s use [TensorFlow Datasets (TFDS)][tfds] as their data source. When you run our training binary (see instructions [below](#training)) with a `TfdsTask`, the dataset will automatically be downloaded and prepared on its first use. After preparation is complete, the dataset is cached to your local storage to avoid this overhead in future runs.  If working in the cloud, we recommend you set the `--t5_tfds_data_dir` flag to point to a persistent storage location, such as a [GCS bucket][gcs]. This is a requirement when training on TPU.
+
+**Note:**_The [C4][c4] dataset we created for unsupervised pre-training is available in TensorFlow Datasets, but it requires a significant amount of bandwith for downloading the raw [Common Crawl][cc] scrapes and compute for its preparation. We suggest you take advantage of the [Apache Beam][beam] support in TFDS, which enables distributed preprocessing of the dataset and can be run on [Google Cloud Dataflow][gcd]. Otherwise, it is unlikely that you will be able to complete preprocessing in a human lifetime. Read more in the [TFDS Beam instructions][tfds_beam]._
+
+##### `Task`
+
+If using a vanilla task, just make sure any file(s) loaded by your `dataset_fn` are accessible to the TPU (i.e., are in a GCS bucket), and you should be good to go!
+
+##### `TextLineTask`
+
+A `TextLineTask` is useful when your data source is a text file or files with one example per line. You can then use a text preprocessor to convert each line into inputs and targets (e.g., `tf.data.preprocessors.preprocess_tsv`).
+
+Make sure your text file(s) are accessible to the TPU (i.e., are in a GCS bucket), and you should be good to go!
+
+#### Using a TSV File
+
+Instead of defining a new `Task`, you may use a TSV file (or files) directly as your dataset where each line is formatted as `<input>\t<target>`.
+
+However, there are a couple of caveats:
+
+  * There is no way to define a text processor, so the TSV will need to contain your data in a preprocessed format.
+  * There is also currently no way to set a token preprocessor, postprocess function, or metric function for evaluation when using a TSV file directly.
+
+If you need any of these features, you must define a new `Task`, `TfdsTask`, or `TextLineTask`.
+
+Similar to the above cases, your TSV file(s) must be accessible to the TPU (i.e., are in a GCS bucket).
 
 ### Installation
 
@@ -101,6 +162,10 @@ The full list of tasks and mixtures can be obtained by running:
 python -c "import t5; print(t5.data.MixtureRegistry.names())"
 ```
 
+You may also define additional tasks and mixtures in a new file and import it using the `--module_import` flag.
+
+Alternatively, you could train with a TSV file where each line is formatted as `<input>\t<target>` (see [above](#using-a-tsv-file)).
+
 ### Fine-tuning
 
 In order to fine-tune one of our [pre-trained models](#released-model-checkpoints), you need to pass the operative config of the pre-trained model to the training script. The operative config should be passed in as a `gin_file` flag. It specifies the model architecture and other hyperparameters. In addition, you need to specify the mixture to fine-tune on. For example, to fine-tune the T5-small model on the `glue_mrpc_v002` mixture, please run:
@@ -121,7 +186,9 @@ t5_mesh_transformer  \
 
 The correct pre-trained checkpoint path is included in the operative config.
 
-Alternatively, you could fine-tune with a TSV file where each line is formatted as `<input>\t<target>`. For example, you could try one of the paired translation datasets from WMT '19 [News Commentary 14](http://data.statmt.org/news-commentary/v14/training/) training set
+You may also define additional tasks and mixtures in a new file and import it using the `--module_import` flag.
+
+Alternatively, you could fine-tune with a TSV file where each line is formatted as `<input>\t<target>` (see [above](#using-a-tsv-file)). For example, you could try one of the paired translation datasets from WMT '19 [News Commentary 14](http://data.statmt.org/news-commentary/v14/training/) training set
 (e.g., [English-French](http://data.statmt.org/news-commentary/v14/training/)). When using a TSV file, you would replace the `MIXTURE_NAME` flag with:
 
 ```sh
@@ -253,7 +320,7 @@ We have released the following checkpoints for pre-trained models described in o
 * **T5-11B** (11 billion parameters): [gs://t5-data/pretrained_models/11B](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/11B/)
 
 
-# How to cite
+# How to Cite
 If you extend or use this work, please cite the [paper][paper] where it was introduced:
 
 ```
