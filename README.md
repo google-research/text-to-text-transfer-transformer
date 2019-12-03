@@ -288,10 +288,10 @@ This script launches both the training and evaluation jobs. Additional parameter
 
 #### Fine-tuning
 
-To finetune one of our [pretrained models](#released-model-checkpoints), please use the [run_finetune](https://github.com/google-research/text-to-text-transfer-transformer/tree/master/t5/google/scripts/run_training.sh) script. To finetune the `T5-3B` model on GLUE MRPC, you can use the following command. As with the training command, you need to specify the gfs_user and xm resource allocation group appropriately.
+To finetune one of our [pretrained models](#released-model-checkpoints), please use the [run_finetune](https://github.com/google-research/text-to-text-transfer-transformer/tree/master/t5/google/scripts/run_finetune.sh) script. To finetune the `T5-3B` model on GLUE MRPC, you can use the following command. As with the training command, you need to specify the gfs_user and xm resource allocation group appropriately.
 
 ```sh
-./third_party/py/t5/google/scripts/run_training.sh \
+./third_party/py/t5/google/scripts/run_finetune.sh \
   --mixture="glue_mrpc_v002" \
   --pretrained_model_loc="/bigstore/t5-data/pretrained_models/3B/"
 ```
@@ -300,7 +300,7 @@ Similar to the training script, this script also launches the train and evaluati
 
 #### Evaluation
 
-To evaluate a previously trained model, please use the [run_eval](https://github.com/google-research/text-to-text-transfer-transformer/tree/master/t5/google/scripts/run_training.sh) script. The script uses accelarators from (UPTC)[go/uptc] or you can run your own headless tpu server and provide the BNS address to the script. To evaluate the `T5-3B` model on the GLUE MRPC task, please use the following command:
+To evaluate a previously trained model, please use the [run_eval](https://github.com/google-research/text-to-text-transfer-transformer/tree/master/t5/google/scripts/run_eval.sh) script. The script uses accelarators from (UPTC)[go/uptc] or you can run your own headless tpu server and provide the BNS address to the script. To evaluate the `T5-3B` model on the GLUE MRPC task, please use the following command:
 
 ```sh
 ./third_party/py/t5/google/scripts/run_eval.sh \
