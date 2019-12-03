@@ -269,6 +269,51 @@ To predict with a specific checkpoint, simply set the `infer_checkpoint_step` pa
 
 You can also use `beam_search.gin` or `greedy_decode.gin` instead of `sample_decode.gin` in the command above.
 
+<!-- BEGIN GOOGLE-INTERNAL -->
+### Google Usage
+
+We provide several [convinient scripts](https://github.com/google-research/text-to-text-transfer-transformer/tree/master/t5/google/scripts) to use our library internally at Google. We describe the usage of these scripts in the sections below.
+
+#### Training
+In order to train using XManager, you can use the [run_training](https://github.com/google-research/text-to-text-transfer-transformer/tree/master/t5/google/scripts/run_training.sh) script. To pre-train on the C4 dataset, you need to specify the mixture name, gfs_user, and xm resource alloc group.
+
+```sh
+./third_party/py/t5/google/scripts/run_training.sh \
+  --mixture="c4_v020_unsupervised" \
+  --gfs_user="brain-ogm" \
+  --xm_resource_group="group:brain-ogm-xm"
+```
+
+This script launches both the training and evaluation jobs. Additional parameters such as tpu_topology, cell, model type, pretraining objective, and others can be specified via flags in the training script.
+
+#### Fine-tuning
+
+To finetune one of our [pretrained models](#released-model-checkpoints), please use the [run_finetune](https://github.com/google-research/text-to-text-transfer-transformer/tree/master/t5/google/scripts/run_training.sh) script. To finetune the `T5-3B` model on GLUE MRPC, you can use the following command. As with the training command, you need to specify the gfs_user and xm resource allocation group appropriately.
+
+```sh
+./third_party/py/t5/google/scripts/run_training.sh \
+  --mixture="glue_mrpc_v002" \
+  --pretrained_model_loc="/bigstore/t5-data/pretrained_models/3B/"
+```
+
+Similar to the training script, this script also launches the train and evaluation jobs for the model.
+
+#### Evaluation
+
+To evaluate a previously trained model, please use the [run_eval](https://github.com/google-research/text-to-text-transfer-transformer/tree/master/t5/google/scripts/run_training.sh) script. The script uses accelarators from (UPTC)[go/uptc] or you can run your own headless tpu server and provide the BNS address to the script. To evaluate the `T5-3B` model on the GLUE MRPC task, please use the following command:
+
+```sh
+./third_party/py/t5/google/scripts/run_eval.sh \
+  --mixture="glue_mrpc_v002" \
+  --use_uptc \
+  --model_dir="/bigstore/t5-data/pretrained_models/3B" \
+  --checkpoint_step="'all'"
+```
+
+You can specify a particular checkpoint step instead of "all" as well. Setting this flag to `None` will continuously evaluate the checkpoints of a model as they become available. Details of all the flags can by found by running the script with the help option.
+
+<!-- BEGIN GOOGLE-INTERNAL -->
+
 ### Reproducing our experiments
 
 We provide operative configs for all of the experiments in the [paper][paper] in [gs://t5-data/experiments](https://console.cloud.google.com/storage/browser/t5-data/experiments).
@@ -318,7 +363,6 @@ We have released the following checkpoints for pre-trained models described in o
 * **T5-Large** (770 million parameters): [gs://t5-data/pretrained_models/large](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/large/)
 * **T5-3B** (3 billion parameters): [gs://t5-data/pretrained_models/3B](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/3B/)
 * **T5-11B** (11 billion parameters): [gs://t5-data/pretrained_models/11B](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/11B/)
-
 
 # How to Cite
 If you extend or use this work, please cite the [paper][paper] where it was introduced:
