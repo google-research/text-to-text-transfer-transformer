@@ -38,7 +38,8 @@ def bleu(targets, predictions):
   """Computes BLEU score.
 
   Args:
-    targets: list of strings
+    targets: list of strings or list of list of strings if multiple references
+      are present.
     predictions: list of strings
 
   Returns:
@@ -46,10 +47,14 @@ def bleu(targets, predictions):
   """
   # sacrebleu expects unicode
   predictions = [tf.compat.as_text(x) for x in predictions]
-  targets = [tf.compat.as_text(x) for x in targets]
 
-  # Need to wrap targets in another list for corpus_bleu.
-  targets = [targets]
+  if isinstance(targets[0], list):
+    targets = [[tf.compat.as_text(x) for x in target] for target in targets]
+  else:
+    targets = [tf.compat.as_text(x) for x in targets]
+    # Need to wrap targets in another list for corpus_bleu.
+    targets = [targets]
+
   bleu_score = sacrebleu.corpus_bleu(predictions, targets,
                                      smooth_method="exp",
                                      smooth_value=0.0,

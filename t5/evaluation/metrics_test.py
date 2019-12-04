@@ -37,6 +37,12 @@ class MetricsTest(test_utils.BaseMetricsTest):
         metrics.bleu([ref, ref], ["", ""]),
         {"bleu": 0})
 
+  def test_multiple_references_bleu(self):
+    ref = "this is a string"
+    self.assertDictClose(
+        metrics.bleu([["", ref], [ref, ""]], [ref, ref]),
+        {"bleu": 100})
+
   def test_same_rouge(self):
     ref = "this is a string"
     self.assertDictClose(
