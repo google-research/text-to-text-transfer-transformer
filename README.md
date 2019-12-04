@@ -31,7 +31,7 @@ Each `Task` is made up of:
 
 Additionally, you may optionally provide:
 
-  * token preprocessor(s)
+  * token preprocessor function(s)
   * a postprocess function
 
 The **data source** can be an arbitrary function that provides a `tf.data.Dataset`, but we also provide simpler wrappers for datasets available in [TensorFlow Datasets (TFDS)][tfds] (a `TfdsTask`) or stored as text files with one example per line (a `TextLineTask`).
@@ -48,7 +48,7 @@ to the form
 {'inputs': 'translate German to English: Das ist gut.', 'targets': 'That is good.'}
 ```
 
-In additonal to text preprocessing, you can also use one or more **token preprocessors** to modify the inputs post-tokenization. We implemented our unsupervised pre-training objectives using these token preprocessors.
+In additon to text preprocessing, you can also use one or more **token preprocessors** to modify the inputs post-tokenization. We implemented our unsupervised pre-training objectives using these token preprocessors.
 
 We provide many predefined preprocessors in `t5.data.preprocessors`, but you may also define your own.
 
