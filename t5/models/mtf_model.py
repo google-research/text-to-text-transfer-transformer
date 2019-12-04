@@ -302,6 +302,8 @@ class MtfModel(T5Model):
     """
     if pretrained_checkpoint_step == -1:
       checkpoint_step = _get_latest_checkpoint_from_dir(pretrained_model_dir)
+    else:
+      checkpoint_step = pretrained_checkpoint_step
     with gin.unlock_config():
       gin.parse_config_file(_operative_config_path(pretrained_model_dir))
 
