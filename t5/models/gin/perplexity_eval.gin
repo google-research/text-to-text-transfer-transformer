@@ -1,0 +1,14 @@
+# -*-Python-*-
+# Mixed dataset using a Task object
+
+import t5.models.mesh_transformer
+
+eval_checkpoint_step = "all"
+
+# Plumbing
+mesh_eval_dataset_fn.mixture_or_task_name = %MIXTURE_NAME
+utils.run.eval_dataset_fn = @t5.models.mesh_transformer.mesh_eval_dataset_fn
+utils.run.mode = "perplexity_eval"
+
+utils.run.eval_checkpoint_step = %eval_checkpoint_step
+preprocessors.num_parallel_calls.deterministic = True

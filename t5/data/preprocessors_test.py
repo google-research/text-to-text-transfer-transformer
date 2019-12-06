@@ -63,14 +63,9 @@ class PreprocessorsTest(tf.test.TestCase):
     noise_mask = prep.random_spans_noise_mask(
         length, noise_density, mean_noise_span_length)
     output = self.evaluate(tf.cast(noise_mask, tf.int32))
-    if six.PY2:
-      expected_output = [
-          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-          1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 1]
-    else:
-      expected_output = [
-          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1,
-          1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1]
+    expected_output = [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1]
     self.assertAllEqual(output, expected_output)
 
   def test_noise_token_to_sentinel(self):
