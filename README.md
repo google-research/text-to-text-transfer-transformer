@@ -16,8 +16,6 @@ T5 can be used as a library for future model development by providing useful mod
 
 ## Library
 
-T5 is organized into 3 core packages plus configurations for reproducing experiments from the [paper][paper]:
-
 #### t5.data
 
 `t5.data` is a package for defining `Task` objects that provide `tf.data.Dataset`s.
@@ -60,15 +58,20 @@ Finally, `t5.data` contains a `Mixture` class that can be instantiated to combin
 
 #### t5.evaluation
 
-`t5.evaluation` contains two core components: a module for specifying metrics to be used during evaluation and utilities for applying these metrics at evaluation time.
+`t5.evaluation` contains two core components:
+
+1. metrics to be used during evaluation
+2. utilities for applying these metrics at evaluation time
 
 #### t5.models
 
-`t5.models` contains shims for connecting T5 `Tasks` and `Mixtures` to a model implementation for training, evaluation, and inference. Currently the only available shim is to the [Mesh TensorFlow Transformer][mtft], which enables both data and model parallelism for training massive Transformer models. It also includes a binary for launching the model along with [gin config][gin] files for setting various hyperparameters.
+`t5.models` contains shims for connecting T5 `Tasks` and `Mixtures` to a model implementation for training, evaluation, and inference. 
+
+Currently the only available shim is to [Mesh TensorFlow Transformer][mtft] (MeshTF), which enables both data and model parallelism for training massive Transformer models. This also includes a binary for launching the model in MeshTF along with [gin configs][gin] for setting various hyperparameters.
 
 ## Usage
 
-Here we provide example usage for how to pre-train, fine-tune, evaluate, and decode from a model with our codebase. You can use these instructions to reproduce our results, fine-tune one of our released checkpoints with your own data and/or hyperparameters, or pre-train a model from scratch.
+Here we provide examples for how to pre-train, fine-tune, evaluate, and decode from a model with our codebase. You can use these instructions to reproduce our results, fine-tune one of our released checkpoints with your own data and/or hyperparameters, or pre-train a model from scratch.
 
 ### Dataset Preparation
 
