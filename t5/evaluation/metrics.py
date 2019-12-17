@@ -259,6 +259,11 @@ def mean_group_metric(metric_fn, group_key="group", value_key="value"):
   The sub-groups are defined by aggregating results (targets and predictions)
   by accessing the feature specified by `group_key` in the target dicts.
 
+  **WARNING**: Using this function can produce unreliable results if you do not
+  pass in full groups. For example, if you evaluate over a random subsample of a
+  validation set and do not retain all of the examples in each group, you may
+  get results which aren't directly comparable to using the full validation set.
+
   Args:
     metric_fn: function, the metric to compute on the subgroups.
     group_key: string, the key for the grouping value in the target dictionary.
