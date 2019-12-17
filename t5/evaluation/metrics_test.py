@@ -211,6 +211,18 @@ class MetricsTest(test_utils.BaseMetricsTest):
              {"value": 1}]),
         {"accuracy": 25.})
 
+  def test_multirc_f1_over_all_answers(self):
+    metric_fn = metrics.multirc_f1_over_all_answers
+    self.assertDictClose(
+        metric_fn(
+            [{"group": "a", "value": 1},
+             {"group": "a", "value": 1},
+             {"group": "b", "value": 0}],
+            [{"value": 1},
+             {"value": 0},
+             {"value": 1}]),
+        {"f1": 50.})
+
 
 if __name__ == "__main__":
   absltest.main()

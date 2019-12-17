@@ -203,7 +203,7 @@ SUPERGLUE_METRICS = collections.OrderedDict([
     ]),
     ("copa", [metrics.accuracy]),
     ("multirc", [
-        metrics.mean_group_metric(metrics.f1_score_with_invalid),
+        metrics.multirc_f1_over_all_answers,
         metrics.mean_group_metric(metrics.exact_match)
     ]),
     ("record", [metrics.qa]),

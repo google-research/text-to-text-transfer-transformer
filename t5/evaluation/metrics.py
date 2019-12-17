@@ -282,3 +282,22 @@ def mean_group_metric(metric_fn, group_key="group", value_key="value"):
         group_scores[metric].append(score)
     return {metric: np.mean(scores) for metric, scores in group_scores.items()}
   return my_metric
+
+
+def multirc_f1_over_all_answers(targets, predictions):
+  """Special metric for MultiRC which computes F1 score over all examples.
+
+  This is necessary because the targets/predictions for MultiRC are dicts and
+  the f1_score_with_invalid expects a list of True/False labels, not dicts. As
+  a result we just need to key in the "value" for each of the example dicts
+  before feeding into f1_score_with_invalid.
+
+  Args:
+    targets: list of dicts, where each dict has a "value" key.
+    predictions: list of dicts, where each dict has a "value" key.
+  Returns:
+    F1 score over values, where any prediction != 0 or 1 is counted as wrong.
+  """
+  return f1_score_with_invalid(
+      [t["value"] for t in targets], [p["value"] for p in predictions]
+  )
