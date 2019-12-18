@@ -25,7 +25,7 @@ import gin
 import mesh_tensorflow.transformer.dataset as transformer_dataset
 
 import t5.data
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
 
 
