@@ -65,13 +65,15 @@ Finally, `t5.data` contains a `Mixture` class that can be instantiated to combin
 
 #### t5.models
 
-`t5.models` contains shims for connecting T5 `Tasks` and `Mixtures` to a model implementation for training, evaluation, and inference. 
+`t5.models` contains shims for connecting T5 `Tasks` and `Mixtures` to a model implementation for training, evaluation, and inference.
 
 Currently the only available shim is to [Mesh TensorFlow Transformer][mtft] (MeshTF), which enables both data and model parallelism for training massive Transformer models. This also includes a binary for launching the model in MeshTF along with [gin configs][gin] for setting various hyperparameters.
 
 ## Usage
 
-Here we provide examples for how to pre-train, fine-tune, evaluate, and decode from a model with our codebase. You can use these instructions to reproduce our results, fine-tune one of our released checkpoints with your own data and/or hyperparameters, or pre-train a model from scratch.
+The easiest way to try out T5 is with a free TPU in our [Colab Tutorial](https://tiny.cc/t5-colab).
+
+Below we provide examples for how to pre-train, fine-tune, evaluate, and decode from a model from the command-line with our codebase. You can use these instructions to reproduce our results, fine-tune one of our released checkpoints with your own data and/or hyperparameters, or pre-train a model from scratch.
 
 ### Dataset Preparation
 
