@@ -129,8 +129,6 @@ class MtfModel(T5Model):
       sequence_length = {"inputs": sequence_length,
                          "targets": sequence_length}
 
-    self.batch_size = batch_size
-
     self._learning_rate_schedule = (
         learning_rate_schedule or
         learning_rate_schedules.learning_rate_schedule_noam)
@@ -158,6 +156,8 @@ class MtfModel(T5Model):
     self._tpu = tpu
     self._tpu_job_name = tpu_job_name
     self._estimator = None
+
+    self.batch_size = batch_size
 
   @property
   def batch_size(self):
