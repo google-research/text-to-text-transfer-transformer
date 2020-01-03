@@ -24,6 +24,7 @@ import sys
 
 from absl import app
 from absl import flags
+from absl import logging
 import gin
 from mesh_tensorflow.transformer import utils
 import pkg_resources
@@ -75,7 +76,8 @@ flags.DEFINE_boolean("use_model_api", False,
                      "Use model API instead of utils.run.")
 
 # Note: All the args from here on are only used when use_model_api is set
-flags.DEFINE_enum("mode", "train", ["train", "eval", "predict", "finetune"],
+flags.DEFINE_enum("mode", "train",
+                  ["train", "finetune", "eval", "predict", "export"],
                   "Mode with which to run the model.")
 
 # Train mode args
@@ -88,11 +90,11 @@ flags.DEFINE_string("pretrained_model_dir", "",
 
 # Eval mode args
 flags.DEFINE_enum(
-    "checkpoint_mode", "all", ["all", "latest", "specific"],
-    "Checkpoint steps to use when running 'eval', 'predict', and 'finetune' "
-    "modes. Can specify a list of checkpoints or all or the latest checkpoint. "
-    "'finetune' mode works with 'latest' or 'specific' with a single "
-    "checkpoint.")
+    "checkpoint_mode", "latest", ["all", "latest", "specific"],
+    "Checkpoint steps to use when running 'eval', 'predict', 'finetune', and "
+    "'export' modes. Can specify a list of checkpoints or all or the latest "
+    "checkpoint. 'finetune' and 'export' modes work with 'latest' or "
+    "'specific' with a single checkpoint.")
 
 flags.DEFINE_list(
     "checkpoint_steps", [],
@@ -107,6 +109,11 @@ flags.DEFINE_string("eval_split", "validation",
 # Predict mode args
 flags.DEFINE_string("input_file", "", "Path to input file for decoding.")
 flags.DEFINE_string("output_file", "", "Path to output file to save decodes.")
+
+# Export mode args
+flags.DEFINE_string(
+    "export_dir", "",
+    "Directory to export SavedModels to. Will use `model_dir` if unspecified.")
 
 FLAGS = flags.FLAGS
 
@@ -123,16 +130,19 @@ def main(_):
   # Add search path for gin files stored in package.
   gin.add_config_file_search_path(
       pkg_resources.resource_filename(__name__, "gin"))
-
-  tf.io.gfile.makedirs(FLAGS.model_dir)
-  suffix = 0
-  command_filename = os.path.join(FLAGS.model_dir, "command")
-  while tf.io.gfile.exists(command_filename):
-    suffix += 1
-    command_filename = os.path.join(
-        FLAGS.model_dir, "command.{}".format(suffix))
-  with tf.io.gfile.GFile(command_filename, "w") as f:
-    f.write(" ".join(sys.argv))
+  try:
+    tf.io.gfile.makedirs(FLAGS.model_dir)
+    suffix = 0
+    command_filename = os.path.join(FLAGS.model_dir, "command")
+    while tf.io.gfile.exists(command_filename):
+      suffix += 1
+      command_filename = os.path.join(
+          FLAGS.model_dir, "command.{}".format(suffix))
+    with tf.io.gfile.GFile(command_filename, "w") as f:
+      f.write(" ".join(sys.argv))
+  except tf.errors.PermissionDeniedError:
+    logging.info(
+        "No write access to model directory. Skipping command logging.")
 
   utils.parse_gin_defaults_and_flags()
 
@@ -160,10 +170,12 @@ def main(_):
                  summary_dir=FLAGS.eval_summary_dir,
                  split=FLAGS.eval_split)
     elif FLAGS.mode == "finetune":
-      assert (FLAGS.checkpoint_mode == "latest" or
+
+      if not (FLAGS.checkpoint_mode == "latest" or
               (FLAGS.checkpoint_mode == "specific" and
-               len(FLAGS.checkpoint_steps) == 1)), \
-          "Must specify a single checkpoint for finetuning a model."
+               len(FLAGS.checkpoint_steps) == 1)):
+        raise ValueError(
+            "Must specify a single checkpoint for finetuning a model.")
 
       if isinstance(checkpoint_steps, list):
         checkpoint_steps = checkpoint_steps[0]
@@ -173,12 +185,24 @@ def main(_):
           steps=FLAGS.train_steps,
           pretrained_model_dir=FLAGS.pretrained_model_dir,
           checkpoint_steps=checkpoint_steps)
-    else:
+    elif FLAGS.mode == "predict":
       model.predict(
           checkpoint_steps=checkpoint_steps,
           input_file=FLAGS.input_file,
           output_file=FLAGS.output_file)
+    elif FLAGS.mode == "export":
+      if not (FLAGS.checkpoint_mode == "latest" or
+              (FLAGS.checkpoint_mode == "specific" and
+               len(FLAGS.checkpoint_steps) == 1)):
+        raise ValueError(
+            "Must specify a single checkpoint for exporting a model.")
 
+      if isinstance(checkpoint_steps, list):
+        checkpoint_steps = checkpoint_steps[0]
+
+      model.export(
+          export_dir=FLAGS.export_dir,
+          checkpoint_step=checkpoint_steps)
   else:
     utils.run(
         tpu_job_name=FLAGS.tpu_job_name,

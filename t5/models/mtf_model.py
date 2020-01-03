@@ -48,8 +48,13 @@ def _get_latest_checkpoint_from_dir(model_dir):
 
   Returns:
     an int, latest checkpoint number.
+
+  Raises:
+    ValueError: if no checkpoints are found.
   """
   ckpt = tf.train.latest_checkpoint(model_dir)
+  if ckpt is None:
+    raise ValueError("No checkpoints found in model directory: %s" % model_dir)
   return int(re.sub(".*ckpt-", "", ckpt))
 
 
@@ -128,9 +133,6 @@ class MtfModel(T5Model):
     if isinstance(sequence_length, int):
       sequence_length = {"inputs": sequence_length,
                          "targets": sequence_length}
-
-    self.batch_size = batch_size
-
     self._learning_rate_schedule = (
         learning_rate_schedule or
         learning_rate_schedules.learning_rate_schedule_noam)
@@ -158,6 +160,10 @@ class MtfModel(T5Model):
     self._tpu = tpu
     self._tpu_job_name = tpu_job_name
     self._estimator = None
+
+    # Must be called after _sequence_length, _mesh_shape, and _layout_rules are
+    # set.
+    self.batch_size = batch_size
 
   @property
   def batch_size(self):
@@ -245,6 +251,32 @@ class MtfModel(T5Model):
                      self._sequence_length, self.batch_size, split,
                      self._model_dir, dataset_fn, summary_dir, checkpoint_steps)
 
+  def finetune(self, mixture_or_task_name, finetune_steps, pretrained_model_dir,
+               pretrained_checkpoint_step=-1):
+    """Finetunes a model from an existing checkpoint.
+
+    Args:
+      mixture_or_task_name: str, the name of the Mixture or Task to evaluate on.
+        Must be pre-registered in the global `TaskRegistry` or
+        `MixtureRegistry.`
+      finetune_steps: int, the number of additional steps to train for.
+      pretrained_model_dir: str, directory with pretrained model checkpoints and
+        operative config.
+      pretrained_checkpoint_step: int, checkpoint to initialize weights from. If
+        -1 (default), use the latest checkpoint from the pretrained model
+        directory.
+    """
+    if pretrained_checkpoint_step == -1:
+      checkpoint_step = _get_latest_checkpoint_from_dir(pretrained_model_dir)
+    else:
+      checkpoint_step = pretrained_checkpoint_step
+    with gin.unlock_config():
+      gin.parse_config_file(_operative_config_path(pretrained_model_dir))
+
+    model_ckpt = "model.ckpt-" + str(checkpoint_step)
+    self.train(mixture_or_task_name, checkpoint_step + finetune_steps,
+               init_checkpoint=os.path.join(pretrained_model_dir, model_ckpt))
+
   def predict(self, input_file, output_file, checkpoint_steps=-1,
               beam_size=1, temperature=1.0,
               sentencepiece_model_path=t5.data.DEFAULT_SPM_PATH):
@@ -286,27 +318,36 @@ class MtfModel(T5Model):
                       self._model_type, self._model_dir, checkpoint_steps,
                       input_file, output_file)
 
-  def finetune(self, mixture_or_task_name, finetune_steps, pretrained_model_dir,
-               pretrained_checkpoint_step=-1):
-    """Finetunes a model from an existing checkpoint.
+  def export(self, export_dir=None, checkpoint_step=-1, beam_size=1,
+             temperature=1.0,
+             sentencepiece_model_path=t5.data.DEFAULT_SPM_PATH):
+    """Exports a TensorFlow SavedModel.
 
     Args:
-      mixture_or_task_name: str, the name of the Mixture or Task to evaluate on.
-        Must be pre-registered in the global `TaskRegistry` or
-        `MixtureRegistry.`
-      finetune_steps: int, the number of additional steps to train for.
-      pretrained_model_dir: str, directory with pretrained model checkpoints and
-        operative config.
-      pretrained_checkpoint_step: int, checkpoint to initialize weights from. If
-        -1, use the latest checkpoint from the pretrained model directory.
+      export_dir: str, a directory in which to export SavedModels. Will use
+        `model_dir` if unspecified.
+      checkpoint_step: int, checkpoint to export. If -1 (default), use the
+        latest checkpoint from the pretrained model directory.
+      beam_size: int, a number >= 1 specifying the number of beams to use for
+        beam search.
+      temperature: float, a value between 0 and 1 (must be 0 if beam_size > 1)
+        0.0 means argmax, 1.0 means sample according to predicted distribution.
+      sentencepiece_model_path: str, path to the SentencePiece model file to use
+        for decoding. Must match the one used during training.
     """
-    if pretrained_checkpoint_step == -1:
-      checkpoint_step = _get_latest_checkpoint_from_dir(pretrained_model_dir)
-    else:
-      checkpoint_step = pretrained_checkpoint_step
+    if checkpoint_step == -1:
+      checkpoint_step = _get_latest_checkpoint_from_dir(self._model_dir)
     with gin.unlock_config():
-      gin.parse_config_file(_operative_config_path(pretrained_model_dir))
+      gin.parse_config_file(_operative_config_path(self._model_dir))
+      gin.bind_parameter("Bitransformer.decode.beam_size", beam_size)
+      gin.bind_parameter("Bitransformer.decode.temperature", temperature)
+      gin.bind_parameter("utils.get_variable_dtype.slice_dtype", "float32")
+      gin.bind_parameter("utils.get_variable_dtype.activation_dtype", "float32")
 
+    vocabulary = t5.data.SentencePieceVocabulary(sentencepiece_model_path)
     model_ckpt = "model.ckpt-" + str(checkpoint_step)
-    self.train(mixture_or_task_name, checkpoint_step + finetune_steps,
-               init_checkpoint=os.path.join(pretrained_model_dir, model_ckpt))
+    export_dir = export_dir or self._model_dir
+    utils.export_model(self.estimator(vocabulary), export_dir, vocabulary,
+                       self._sequence_length,
+                       os.path.join(self._model_dir, model_ckpt))
+

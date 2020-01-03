@@ -274,6 +274,20 @@ To predict with a specific checkpoint, simply set the `infer_checkpoint_step` pa
 
 You can also use `beam_search.gin` or `greedy_decode.gin` instead of `sample_decode.gin` in the command above.
 
+#### Export
+
+You may also want to export a [SavedModel](https://www.tensorflow.org/guide/saved_model), which is useful for serving your trained model, (e.g., when deploying with [ML Engine](https://cloud.google.com/ml-engine/docs/deploying-models)).
+
+```sh
+t5_mesh_transformer \
+  --gcp_project="${PROJECT}" \
+  --tpu_zone="${ZONE}" \
+  --model_dir="${MODEL_DIR}" \
+  --use_model_api \
+  --mode="export" \
+  --export_dir="/path/to/export/dir"
+```
+
 
 ### Reproducing our experiments
 
