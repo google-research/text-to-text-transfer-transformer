@@ -185,7 +185,7 @@ t5_mesh_transformer  \
   --gin_file="dataset.gin" \
   --gin_param="utils.tpu_mesh_shape.model_parallelism = 1" \
   --gin_param="utils.tpu_mesh_shape.tpu_topology = '2x2'" \
-  --gin_param="MIXTURE_NAME = 'glue_mrpc_v002'"
+  --gin_param="MIXTURE_NAME = 'glue_mrpc_v002'" \
   --gin_file="gs://t5-data/pretrained_models/small/operative_config.gin"
 ```
 
