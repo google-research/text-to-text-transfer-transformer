@@ -11,6 +11,7 @@ T5 can be used as a library for future model development by providing useful mod
 
 * [Library](#library)
 * [Usage](#usage)
+* [GPU Usage] (#gpu-usage)
 * [Released Model Checkpoints](#released-model-checkpoints)
 * [How to Cite](#how-to-cite)
 
@@ -120,7 +121,7 @@ To install the T5 package, simply run:
 pip install t5[gcp]
 ```
 
-### Setting up TPUs on GCP for training and evaluation
+### Setting up TPUs on GCP
 
 You will first need to launch a Virtual Machine (VM) on Google Cloud. Details about launching the VM can be found at the [Google Cloud Documentation](http://cloud/compute/docs/instances/create-start-instance).
 
@@ -185,7 +186,7 @@ t5_mesh_transformer  \
   --gin_file="dataset.gin" \
   --gin_param="utils.tpu_mesh_shape.model_parallelism = 1" \
   --gin_param="utils.tpu_mesh_shape.tpu_topology = '2x2'" \
-  --gin_param="MIXTURE_NAME = 'glue_mrpc_v002'"
+  --gin_param="MIXTURE_NAME = 'glue_mrpc_v002'" \
   --gin_file="gs://t5-data/pretrained_models/small/operative_config.gin"
 ```
 
@@ -286,6 +287,36 @@ t5_mesh_transformer \
   --use_model_api \
   --mode="export" \
   --export_dir="/path/to/export/dir"
+```
+
+### GPU Usage
+
+If you would like to use GPU instead of TPUs, you can modify the above commands by removing TPU-specific flags (`--tpu`, `--tpu_zone`, `--gcp_project`) and setting the gin params for `mesh_shape` and `mesh_devices` based on your desired setup.
+
+For example, if your machine has access to 6 GPUs and you'd like to do 3-way model parallelism and 2-way data parallelism, the fine-tuning command above would become:
+
+```sh
+t5_mesh_transformer  \
+  --model_dir="${MODEL_DIR}" \
+  --t5_tfds_data_dir="${DATA_DIR}" \
+  --gin_file="dataset.gin" \
+  --gin_param="utils.run.mesh_shape = 'model:3,batch:2'" \
+  --gin_param="utils.run.mesh_devices = ['gpu:0','gpu:1','gpu:2','gpu:3','gpu:4','gpu:5']" \
+  --gin_param="MIXTURE_NAME = 'glue_mrpc_v002'" \
+  --gin_file="gs://t5-data/pretrained_models/small/operative_config.gin"
+```
+
+With a single GPU, the command is:
+
+```sh
+t5_mesh_transformer  \
+  --model_dir="${MODEL_DIR}" \
+  --t5_tfds_data_dir="${DATA_DIR}" \
+  --gin_file="dataset.gin" \
+  --gin_param="utils.run.mesh_shape = 'model:1,batch:1'" \
+  --gin_param="utils.run.mesh_devices = ['gpu:0']" \
+  --gin_param="MIXTURE_NAME = 'glue_mrpc_v002'" \
+  --gin_file="gs://t5-data/pretrained_models/small/operative_config.gin"
 ```
 
 
