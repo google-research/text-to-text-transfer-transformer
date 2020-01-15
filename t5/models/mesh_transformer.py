@@ -68,7 +68,7 @@ def mesh_train_dataset_fn(
 
   ds = mixture_or_task.get_dataset(
       sequence_length, split=dataset_split, use_cached=use_cached, shuffle=True)
-  if any(not f.add_eos for f in mixture_or_task.output_features):
+  if any(not f.add_eos for f in mixture_or_task.output_features.values()):
     warnings.warn(
         "pack_or_pad is being called with ensure_eos=True, but EOS is not "
         "being added to all features."
@@ -117,7 +117,7 @@ def mesh_eval_dataset_fn(
         sequence_length, split=dataset_split,
         use_cached=use_cached, shuffle=False
     )
-    if any(not f.add_eos for f in task.output_features):
+    if any(not f.add_eos for f in task.output_features.values()):
       warnings.warn(
           "pack_or_pad is being called with ensure_eos=True, but EOS is not "
           "being added to all features."
