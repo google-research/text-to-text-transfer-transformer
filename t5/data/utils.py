@@ -22,6 +22,7 @@ from __future__ import division
 from __future__ import print_function
 
 import abc
+import collections
 import inspect
 import json
 import os
@@ -361,6 +362,18 @@ def get_stats_path(data_dir, split):
   return os.path.join(data_dir, _STATS_FILENAME.format(split=split))
 
 
+class Feature(object):
+  """A container for attributes of output features of data providers."""
+
+  def __init__(self, add_eos=True):
+    """Create a Feature instance.
+
+    Args:
+      add_eos: bool, whether an EOS token should be added to this feature.
+    """
+    self.add_eos = add_eos
+
+
 class Task(DatasetProviderBase):
   """A wrapper for a `tf.data.Dataset` along with preprocessing information.
 
@@ -407,9 +420,13 @@ class Task(DatasetProviderBase):
         executed sequentially.
         The functions are also passed `sequence_length` and `vocabulary`
         keyword arguments.
-      output_features: list(string), a list of the primary output features of
-        the dataset that will be prepared for the model. Defaults to 'inputs'
-        and 'targets'.
+      output_features: list(str) or dict. Output features of the Task. If
+        list(str) is provided, a `Feature` class instance will be created for
+        each provided feature name using the default values. If a dict is
+        provided, it should map feature names to `Feature` class instances. When
+        `output_features` is None (default), two output features for "inputs"
+        and "targets" will be constructed using the default values for the
+        `Feature` class.
       num_input_examples: dict(string: int) or None, a dictionary mapping split
         to its size in number of input examples (before preprocessing). The
         `num_input_examples` method will return None if not provided.
@@ -434,8 +451,19 @@ class Task(DatasetProviderBase):
     self._postprocess_fn = postprocess_fn or (lambda x, **unused_kwargs: x)
     self._cache_dir = None
     self._stats = {}
-    self._output_features = sorted(
-        set(output_features or _DEFAULT_FEATURE_KEYS))
+
+    if isinstance(output_features, dict):
+      self._output_features = output_features
+    elif output_features is None or isinstance(output_features, list):
+      self._output_features = {
+          f: Feature() for f in output_features or _DEFAULT_FEATURE_KEYS
+      }
+    else:
+      raise ValueError("output_features must be a dict, list of str, or None")
+    self._output_features = collections.OrderedDict(
+        sorted(list(self._output_features.items()))
+    )
+
     self._splits = splits
     self._num_input_examples = num_input_examples
 
@@ -567,7 +595,10 @@ class Task(DatasetProviderBase):
     def _trim_and_append_eos(feat, v):
       if feat not in self.output_features:
         return v
-      return tf.concat([v[:sequence_length[feat]-1], [1]], axis=0)
+      if self.output_features[feat].add_eos:
+        return tf.concat([v[:sequence_length[feat]-1], [1]], axis=0)
+      else:
+        return v[:sequence_length[feat]]
 
     return dataset.map(
         lambda ex: {k: _trim_and_append_eos(k, v) for k, v in ex.items()},

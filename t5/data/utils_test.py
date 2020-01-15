@@ -283,6 +283,17 @@ class TasksTest(test_utils.FakeTaskTest):
     self.assertIn("validation", task.splits)
     self.assertNotIn("train", task.splits)
 
+  def test_no_eos(self):
+    features = {
+        "inputs": utils.Feature(add_eos=True),
+        "targets": utils.Feature(add_eos=False),
+    }
+    test_utils.add_task(
+        "task_no_eos", test_utils.get_fake_dataset, output_features=features
+    )
+    fn_task = TaskRegistry.get("task_no_eos")
+    test_utils.verify_task_matches_fake_datasets(fn_task, use_cached=False)
+
 if __name__ == "__main__":
   tf.disable_v2_behavior()
   tf.enable_eager_execution()

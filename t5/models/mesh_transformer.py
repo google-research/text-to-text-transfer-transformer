@@ -19,6 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 import functools
+import warnings
 
 from absl import logging
 import gin
@@ -67,6 +68,11 @@ def mesh_train_dataset_fn(
 
   ds = mixture_or_task.get_dataset(
       sequence_length, split=dataset_split, use_cached=use_cached, shuffle=True)
+  if any(not f.add_eos for f in mixture_or_task.output_features):
+    warnings.warn(
+        "pack_or_pad is being called with ensure_eos=True, but EOS is not "
+        "being added to all features."
+    )
   ds = transformer_dataset.pack_or_pad(
       ds, sequence_length, pack=True,
       feature_keys=tuple(mixture_or_task.output_features), ensure_eos=True)
@@ -111,8 +117,16 @@ def mesh_eval_dataset_fn(
         sequence_length, split=dataset_split,
         use_cached=use_cached, shuffle=False
     )
+    if any(not f.add_eos for f in task.output_features):
+      warnings.warn(
+          "pack_or_pad is being called with ensure_eos=True, but EOS is not "
+          "being added to all features."
+      )
     ds = transformer_dataset.pack_or_pad(
-        ds, sequence_length, pack=False, feature_keys=task.output_features,
+        ds,
+        sequence_length,
+        pack=False,
+        feature_keys=tuple(task.output_features),
         ensure_eos=True)
     if num_eval_examples is not None:
       ds = ds.take(num_eval_examples)

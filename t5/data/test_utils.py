@@ -19,6 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import copy
 import os
 import shutil
 
@@ -52,6 +53,8 @@ class _ProxyTest(absltest.TestCase):
 
 _pyunit_proxy = _ProxyTest()
 
+_SEQUENCE_LENGTH = {"inputs": 13, "targets": 13}
+
 _FAKE_DATASET = {
     "train": [
         {"prefix": "this", "suffix": "is a test"},
@@ -69,8 +72,8 @@ _FAKE_DATASET = {
     ]
 }
 
-# Text preprocessed and tokenized, with no EOS.
-_FAKE_CACHED_DATASET = {
+# Text preprocessed and tokenized.
+_FAKE_TOKENIZED_DATASET = {
     "train": [
         {
             "inputs": (3, 13, 7, 14, 15, 9, 4, 16, 12, 11, 8, 6),
@@ -108,74 +111,38 @@ _FAKE_CACHED_DATASET = {
 }
 
 # Text preprocessed and tokenized.
-_FAKE_TOKENIZED_DATASET = {
-    "train": [
-        {
-            "inputs": (3, 13, 7, 14, 15, 9, 4, 16, 12, 11, 8, 6, 1),
-            "inputs_plaintext": "complete: this",
-            "targets": (3, 8, 6, 3, 5, 10, 1),
-            "targets_plaintext": "is a test"
-        }, {
-            "inputs": (3, 13, 7, 14, 15, 9, 4, 16, 12, 11, 18, 1),
-            "inputs_plaintext": "complete: that",
-            "targets": (17, 5, 6, 3, 5, 10, 1),
-            "targets_plaintext": "was a test"
-        }, {
-            "inputs": (3, 13, 7, 14, 15, 9, 4, 16, 12, 11, 7, 6, 1),
-            "inputs_plaintext": "complete: those",
-            "targets": (17, 4, 23, 4, 10, 6, 1),
-            "targets_plaintext": "were tests"
-        },
-    ],
-    "validation": [
-        {
-            "idx": 0, "idxs": (100,), "id": "a", "ids": ("a1", "a2"),
-            "inputs": (3, 13, 7, 14, 15, 9, 4, 16, 12, 11, 8, 6, 1),
-            "inputs_plaintext": "complete: this",
-            "targets": (3, 8, 6, 3, 5, 3, 25, 5, 9, 8, 21, 18, 1),
-            "targets_plaintext": "is a validation",
-        }, {
-            "idx": 1, "idxs": (200, 201), "id": "b", "ids": ("b1",),
-            "inputs": (3, 13, 7, 14, 15, 9, 4, 16, 12, 11, 18, 1),
-            "inputs_plaintext": "complete: that",
-            "targets": (17, 5, 6, 3, 5, 22, 7, 24, 20, 4, 23, 3, 1),
-            "targets_plaintext": "was another validation",
-        }
-    ]
-}
-
-# Text preprocessed, tokenized, and token preprocessed.
 _FAKE_TOKEN_PREPROCESSED_DATASET = {
     "train": [
         {
-            "inputs": (3, 13, 7, 14, 15, 9, 4, 50, 12, 11, 8, 6, 1),
+            "inputs": (3, 13, 7, 14, 15, 9, 4, 50, 12, 11, 8, 6),
             "inputs_plaintext": "complete: this",
-            "targets": (3, 8, 6, 3, 5, 10, 1),
+            "targets": (3, 8, 6, 3, 5, 10),
             "targets_plaintext": "is a test"
         }, {
-            "inputs": (3, 13, 7, 14, 15, 9, 4, 50, 12, 11, 50, 1),
+            "inputs": (3, 13, 7, 14, 15, 9, 4, 50, 12, 11, 50),
             "inputs_plaintext": "complete: that",
-            "targets": (17, 5, 6, 3, 5, 10, 1),
+            "targets": (17, 5, 6, 3, 5, 10),
             "targets_plaintext": "was a test"
         }, {
-            "inputs": (3, 13, 7, 14, 15, 9, 4, 50, 12, 11, 7, 6, 1),
+            "inputs": (3, 13, 7, 14, 15, 9, 4, 50, 12, 11, 7, 6, 4),
             "inputs_plaintext": "complete: those",
-            "targets": (17, 4, 23, 4, 10, 6, 1),
+            "targets": (17, 4, 23, 4, 10, 6),
             "targets_plaintext": "were tests"
         },
     ],
     "validation": [
         {
             "idx": 0, "idxs": (100,), "id": "a", "ids": ("a1", "a2"),
-            "inputs": (3, 13, 7, 14, 15, 9, 4, 50, 12, 11, 8, 6, 1),
+            "inputs": (3, 13, 7, 14, 15, 9, 4, 50, 12, 11, 8, 6),
             "inputs_plaintext": "complete: this",
-            "targets": (3, 8, 6, 3, 5, 3, 25, 5, 9, 8, 21, 18, 1),
+            "targets": (3, 8, 6, 3, 5, 3, 25, 5, 9, 8, 21, 18, 8, 7, 22),
             "targets_plaintext": "is a validation",
         }, {
             "idx": 1, "idxs": (200, 201), "id": "b", "ids": ("b1",),
-            "inputs": (3, 13, 7, 14, 15, 9, 4, 50, 12, 11, 50, 1),
+            "inputs": (3, 13, 7, 14, 15, 9, 4, 50, 12, 11, 50),
             "inputs_plaintext": "complete: that",
-            "targets": (17, 5, 6, 3, 5, 22, 7, 24, 20, 4, 23, 3, 1),
+            "targets": (17, 5, 6, 3, 5, 22, 7, 24, 20, 4, 23, 3, 25, 5, 9, 8,
+                        21, 18, 8, 7, 22),
             "targets_plaintext": "was another validation",
         }
     ]
@@ -232,10 +199,19 @@ def _dump_fake_dataset(path, fake_examples, shard_sizes, dump_fn):
     dump_fn(shard_path, fake_examples[start:end])
 
 
-def _assert_compare_to_fake_dataset(ds, split, token_preprocessed=False):
+def _assert_compare_to_fake_dataset(
+    ds, split, features, token_preprocessed=False
+):
   """Calls assertion to compare fake examples to actual dataaset."""
-  fake_examples = _FAKE_DATASETS[
-      "token_preprocessed" if token_preprocessed else "tokenized"][split]
+  fake_examples = copy.deepcopy(_FAKE_DATASETS[
+      "token_preprocessed" if token_preprocessed else "tokenized"][split])
+
+  for key, feat in features.items():
+    for n, ex in enumerate(fake_examples):
+      if feat.add_eos:
+        fake_examples[n][key] = ex[key][:_SEQUENCE_LENGTH[key] - 1] + (1,)
+      else:
+        fake_examples[n][key] = ex[key][:_SEQUENCE_LENGTH[key]]
 
   expected_output_shapes = {
       "inputs": [None], "targets": [None],
@@ -254,15 +230,17 @@ def _assert_compare_to_fake_dataset(ds, split, token_preprocessed=False):
 
 
 def verify_task_matches_fake_datasets(
-    task, use_cached, token_preprocessed=False, splits=("train", "validation")):
+    task, use_cached, token_preprocessed=False, splits=("train", "validation"),
+):
   """Assert all splits for both tokenized datasets are correct."""
-  sequence_length = {"inputs": 13, "targets": 13}
   for split in splits:
     _assert_compare_to_fake_dataset(
         task.get_dataset(
-            sequence_length, split, use_cached=use_cached, shuffle=False),
+            _SEQUENCE_LENGTH, split, use_cached=use_cached, shuffle=False),
         split,
-        token_preprocessed=token_preprocessed)
+        task.output_features,
+        token_preprocessed=token_preprocessed,
+    )
 
 
 def _maybe_as_bytes(v):
@@ -398,7 +376,8 @@ def add_task(
     dataset_fn,
     text_preprocessor=test_text_preprocessor,
     token_preprocessor=None,
-    splits=("train", "validation")):
+    splits=("train", "validation"),
+    **kwargs):
   TaskRegistry.add(
       name,
       dataset_fn=dataset_fn,
@@ -407,7 +386,8 @@ def add_task(
       token_preprocessor=token_preprocessor,
       sentencepiece_model_path=os.path.join(
           TEST_DATA_DIR, "sentencepiece", "sentencepiece.model"),
-      metric_fns=[])
+      metric_fns=[],
+      **kwargs)
 
 
 def clear_tasks():
@@ -489,10 +469,10 @@ class FakeTaskTest(absltest.TestCase):
     cached_task_dir = os.path.join(self.test_data_dir, "cached_task")
     _dump_fake_dataset(
         os.path.join(cached_task_dir, "train.tfrecord"),
-        _FAKE_CACHED_DATASET["train"], [2, 1], _dump_examples_to_tfrecord)
+        _FAKE_TOKENIZED_DATASET["train"], [2, 1], _dump_examples_to_tfrecord)
     _dump_fake_dataset(
         os.path.join(cached_task_dir, "validation.tfrecord"),
-        _FAKE_CACHED_DATASET["validation"], [2], _dump_examples_to_tfrecord)
+        _FAKE_TOKENIZED_DATASET["validation"], [2], _dump_examples_to_tfrecord)
 
     # Prepare uncached TfdsTask.
     add_tfds_task("uncached_task")
