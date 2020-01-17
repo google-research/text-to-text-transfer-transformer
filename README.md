@@ -11,7 +11,7 @@ T5 can be used as a library for future model development by providing useful mod
 
 * [Library](#library)
 * [Usage](#usage)
-* [GPU Usage] (#gpu-usage)
+* [GPU Usage](#gpu-usage)
 * [Released Model Checkpoints](#released-model-checkpoints)
 * [How to Cite](#how-to-cite)
 
