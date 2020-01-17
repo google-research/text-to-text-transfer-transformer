@@ -294,6 +294,55 @@ class TasksTest(test_utils.FakeTaskTest):
     fn_task = TaskRegistry.get("task_no_eos")
     test_utils.verify_task_matches_fake_datasets(fn_task, use_cached=False)
 
+  def test_non_text_feature(self):
+
+    def _dummy_preprocessor(output):
+      return lambda _, **unused: tf.data.Dataset.from_tensors(output)
+
+    f32_arr = lambda x: np.array(x, dtype=np.float32)
+    i64_arr = lambda x: np.array(x, dtype=np.int64)
+
+    def _materialize(task):
+      list(
+          tfds.as_numpy(
+              TaskRegistry.get_dataset(
+                  task, {"feature": 13}, "train", use_cached=False)))
+
+    test_utils.add_tfds_task(
+        "non_text_containing_eos_ok",
+        output_features={
+            "feature": utils.NonTextFeature(dtype=tf.int64),
+        },
+        token_preprocessor=_dummy_preprocessor({"feature": i64_arr([1, 2, 3])}))
+    _materialize("non_text_containing_eos_ok")
+
+    test_utils.add_tfds_task(
+        "non_text_containing_float_type_ok",
+        output_features={"feature": utils.NonTextFeature(dtype=tf.float32)},
+        token_preprocessor=_dummy_preprocessor({"feature": f32_arr([1, 2, 3])}))
+    _materialize("non_text_containing_float_type_ok")
+
+    test_utils.add_tfds_task(
+        "non_text_containing_wrong_type",
+        output_features={"feature": utils.NonTextFeature(dtype=tf.float32)},
+        token_preprocessor=_dummy_preprocessor({"feature": i64_arr([1, 2, 3])}))
+    with self.assertRaisesRegex(
+        ValueError,
+        "Task dataset has incorrect type for feature 'feature' after token "
+        "preprocessing: Got int64, expected float"):
+      _materialize("non_text_containing_wrong_type")
+
+    test_utils.add_tfds_task(
+        "non_text_containing_wrong_rank",
+        output_features={"feature": utils.NonTextFeature(dtype=tf.int64)},
+        token_preprocessor=_dummy_preprocessor({"feature": i64_arr(4)}))
+    with self.assertRaisesRegex(
+        ValueError,
+        "Task dataset has incorrect rank for feature 'feature' after token "
+        "preprocessing: Got 0, expected 1"):
+      _materialize("non_text_containing_wrong_rank")
+
+
 if __name__ == "__main__":
   tf.disable_v2_behavior()
   tf.enable_eager_execution()
