@@ -51,8 +51,8 @@ setuptools.setup(
         'scipy',
         'sentencepiece',
         'six',
-        'tensorflow-datasets>=1.3.2',
         'tensorflow-text==1.15.0rc0',
+        'tfds-nightly',
     ],
     extras_require={
         'tensorflow': ['tensorflow==1.15'],
