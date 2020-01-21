@@ -800,6 +800,71 @@ class TfdsTask(Task):
     return self.tfds_dataset.size(split)
 
 
+# TODO(adarob): Merge into TfdsTask once we can support caching with slices.
+class SlicedTfdsTask(Task):
+  """A `Task` that uses sliced TensorFlow Datasets to provide the input.
+
+  Supports TFDS S3 slicing
+  (https://www.tensorflow.org/datasets/splits#s3_slicing_api).
+  Unlike `TfdsTask`, `SlicedTfdsTask` does not support caching.
+  """
+
+  def __init__(
+      self,
+      name,
+      tfds_name,
+      split_map,
+      text_preprocessor,
+      sentencepiece_model_path,
+      metric_fns,
+      tfds_data_dir=None,
+      **task_kwargs):
+    """SlicedTfdsTask constructor.
+
+    Args:
+      name: string, a unique name for the Task. A ValueError will be raised if
+        another task with this name is already registered.
+      tfds_name: string, the name and version number of a TFDS dataset,
+        optionally with a config.
+      split_map: dict, a mapping from a canonical split (e.g.,
+        `tfds.split.VALIDATION`) to an (optionally) sliced split name
+        (eg., 'train[0:5%]').
+      text_preprocessor: a function (or list of functions) that (each) takes in
+        a tf.data.Dataset of string features and returns a tf.data.Dataset of
+        string features. Can be set to None as a no-op. If a list is given,
+        they will be executed sequentially.
+      sentencepiece_model_path: string, path to a SentencePiece model file to
+        use for tokenization.
+      metric_fns: list(callable), list of metric functions with the signature
+        metric_fn(targets, predictions) to use during evaluation.
+      tfds_data_dir: string, an optional path to a specific TFDS data directory
+        to use.
+      **task_kwargs: dict, additional keyword arguments for the parent `Task`
+        class.
+    """
+    if ":" not in tfds_name:
+      raise ValueError(
+          "TFDS name must contain a version number, got: %s" % tfds_name)
+
+    def dataset_fn(split, shuffle_files):
+      return tfds.load(
+          tfds_name,
+          split=split_map[split],
+          data_dir=tfds_data_dir,
+          shuffle_files=shuffle_files,
+          download=True,
+          try_gcs=True)
+
+    super(SlicedTfdsTask, self).__init__(
+        name,
+        dataset_fn=dataset_fn,
+        splits=list(split_map.keys()),
+        text_preprocessor=text_preprocessor,
+        sentencepiece_model_path=sentencepiece_model_path,
+        metric_fns=metric_fns,
+        **task_kwargs)
+
+
 class TextLineTask(Task):
   """A `Task` that reads text lines as input.
 
