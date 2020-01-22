@@ -604,40 +604,35 @@ class Task(DatasetProviderBase):
         lambda ex: {k: _trim_and_append_eos(k, v) for k, v in ex.items()},
         num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-  def initialize(self):
-    """Attempts to load cached dataset and stats."""
-    if self._cache_dir:
-      return
-
-    # See if cached data exists in any of the cache directories.
-    potential_cache_dirs = [
-        os.path.join(d, self.name) for d in _GLOBAL_CACHE_DIRECTORIES]
-    for cache_dir in potential_cache_dirs:
-      if tf.io.gfile.exists(os.path.join(cache_dir, "COMPLETED")):
-        self._cache_dir = cache_dir
-        logging.info("'%s' is cached at %s.", self.name, self.cache_dir)
-        return
-    logging.info(
-        "'%s' does not exist in any task cache directories (searched %s).",
-        self.name,
-        potential_cache_dirs,
-    )
-
-  @property
-  def cached(self):
-    """Returns whether or not cached dataset exists, initializing if needed."""
-    self.initialize()
-    return self._cache_dir is not None
-
   @property
   def cache_dir(self):
-    """Returns the cache directory, initializing if needed."""
-    self.assert_cached()
+    """Returns the cache directory (or None), initializing if needed."""
+    if not self._cache_dir:
+      # See if cached data exists in any of the cache directories.
+      potential_cache_dirs = [
+          os.path.join(d, self.name) for d in _GLOBAL_CACHE_DIRECTORIES]
+      for cache_dir in potential_cache_dirs:
+        if tf.io.gfile.exists(os.path.join(cache_dir, "COMPLETED")):
+          self._cache_dir = cache_dir
+          logging.info("'%s' is cached at %s.", self.name, self.cache_dir)
+          break
+
+      if not self._cache_dir:
+        logging.info(
+            "'%s' does not exist in any task cache directories (searched %s).",
+            self.name,
+            potential_cache_dirs,
+        )
     return self._cache_dir
+
+  @property
+  def supports_caching(self):
+    """Wether or not this type of tasks supports offline caching."""
+    return False
 
   def assert_cached(self):
     """Raises an assertion error if cached dataset does not exist."""
-    assert self.cached, (
+    assert self.cache_dir, (
         "'%s' does not exist in any of the task cache directories" % self.name)
 
   def get_cached_stats(self, split=tfds.Split.TRAIN):
@@ -678,6 +673,11 @@ class Task(DatasetProviderBase):
     Returns:
       A mixed tf.data.Dataset.
     """
+    if use_cached and not self.supports_caching:
+      logging.warning(
+          "Task '%s' does not support caching. Switching to on-the-fly "
+          "preprocessing.")
+      use_cached = False
     if use_cached:
       ds = self._get_cached_dataset(split, shuffle)
     else:
@@ -786,6 +786,9 @@ class TfdsTask(Task):
         sentencepiece_model_path=sentencepiece_model_path,
         metric_fns=metric_fns,
         **task_kwargs)
+
+  def supports_caching(self):
+    return True
 
   @property
   def splits(self):

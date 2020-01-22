@@ -106,19 +106,17 @@ class TasksTest(test_utils.FakeTaskTest):
     self.assertEqual(10, self.cached_task.num_input_examples("validation"))
 
   def test_cache_exists(self):
-    self.assertTrue(self.cached_task.cached)
+    self.assertTrue(self.cached_task.cache_dir)
     self.cached_task.assert_cached()
     self.assertEqual(
         os.path.join(self.test_data_dir, "cached_task"),
         self.cached_task.cache_dir)
 
-    self.assertFalse(self.uncached_task.cached)
+    self.assertFalse(self.uncached_task.cache_dir)
     with self.assertRaisesRegex(  # pylint:disable=g-error-prone-assert-raises
         AssertionError,
         "'uncached_task' does not exist in any of the task cache directories"):
       self.uncached_task.assert_cached()
-    with self.assertRaises(AssertionError):
-      _ = self.uncached_task.cache_dir
 
   def test_get_cached_stats(self):
     expected_train_stats = {
@@ -145,11 +143,10 @@ class TasksTest(test_utils.FakeTaskTest):
 
   def test_set_global_cache_dirs(self):
     utils.set_global_cache_dirs([])
-    self.assertFalse(self.cached_task.cached)
+    self.assertFalse(self.cached_task.cache_dir)
 
     utils.set_global_cache_dirs([self.test_data_dir])
-    self.cached_task._initialized = False
-    self.assertTrue(self.cached_task.cached)
+    self.assertTrue(self.cached_task.cache_dir)
 
   def test_get_dataset_cached(self):
     test_utils.verify_task_matches_fake_datasets(
