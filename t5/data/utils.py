@@ -1050,7 +1050,8 @@ class Mixture(DatasetProviderBase):
     rates = [self.get_rate(task) for task in tasks]
     # Sample from the dataset with the rates rates
     dataset = tf.data.experimental.sample_from_datasets(datasets, rates)
-    if split == "train" and use_cached:
+    if (split == "train" and use_cached and
+        all(t.supports_caching for t in tasks)):
       _log_mixing_proportions(tasks, datasets, rates, dataset, sequence_length,
                               compute_stats_empirically)
     return dataset
