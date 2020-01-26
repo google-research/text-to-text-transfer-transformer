@@ -353,12 +353,12 @@ def sentencepiece_vocab(extra_ids=0):
       extra_ids=extra_ids)
 
 
-def add_tfds_task(
-    name,
-    tfds_name="fake:0.0.0",
-    text_preprocessor=test_text_preprocessor,
-    token_preprocessor=None,
-    splits=None):
+def add_tfds_task(name,
+                  tfds_name="fake:0.0.0",
+                  text_preprocessor=test_text_preprocessor,
+                  token_preprocessor=None,
+                  splits=None,
+                  **kwargs):
   TaskRegistry.add(
       name,
       dataset_utils.TfdsTask,
@@ -368,7 +368,8 @@ def add_tfds_task(
       sentencepiece_model_path=os.path.join(TEST_DATA_DIR, "sentencepiece",
                                             "sentencepiece.model"),
       metric_fns=[],
-      splits=splits)
+      splits=splits,
+      **kwargs)
 
 
 def add_task(

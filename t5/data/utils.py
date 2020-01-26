@@ -31,6 +31,7 @@ import re
 from absl import logging
 import gin
 import numpy as np
+import six
 from t5.data import sentencepiece_vocabulary
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
@@ -365,13 +366,39 @@ def get_stats_path(data_dir, split):
 class Feature(object):
   """A container for attributes of output features of data providers."""
 
-  def __init__(self, add_eos=True):
+  def __init__(self,
+               add_eos=True,
+               ensure_no_eos=True,
+               encode=True,
+               dtype=tf.int64):
     """Create a Feature instance.
 
     Args:
       add_eos: bool, whether an EOS token should be added to this feature.
+      ensure_no_eos: bool, whether to validate that the tokenized feature does
+        not contain EOS.
+      encode: bool, whether to encode the feature using a sentencepiece vocab.
+        Also controls whether to perform validation immediately after text
+        processing.
+      dtype: tf.dtype, the dtype of the feature in the final output.
     """
     self.add_eos = add_eos
+    self.ensure_no_eos = ensure_no_eos
+    self.encode = encode
+    self.dtype = dtype
+
+
+class NonTextFeature(Feature):
+  """Subclass of feature specializing for non-text features."""
+
+  def __init__(self, **kwargs):
+    """Create a NonTextFeature instance.
+
+    Args:
+      **kwargs: keyword arguments for Feature constructor
+    """
+    super(NonTextFeature, self).__init__(
+        add_eos=False, ensure_no_eos=False, encode=False, **kwargs)
 
 
 class Task(DatasetProviderBase):
@@ -500,6 +527,9 @@ class Task(DatasetProviderBase):
       return None
     return self._num_input_examples[split]
 
+  def _get_features_to_encode(self):
+    return [name for name, f in six.iteritems(self.output_features) if f.encode]
+
   def _preprocess_dataset(self, dataset, preprocessors, **preprocess_kwargs):
     if not hasattr(preprocessors, "__iter__"):
       preprocessors = [preprocessors]
@@ -507,21 +537,23 @@ class Task(DatasetProviderBase):
       dataset = prep_fn(dataset, **preprocess_kwargs)
     return dataset
 
-  def _validate_dataset(
-      self,
-      dataset,
-      expected_output_type,
-      expected_output_rank,
-      error_label,
-      ensure_no_eos=False):
+  def _validate_dataset(self,
+                        dataset,
+                        features,
+                        error_label,
+                        expected_output_rank,
+                        expected_output_type=None,
+                        ensure_no_eos=False):
     """Validates properties of a tf.data.Dataset, raising Exceptions if needed.
 
     Args:
       dataset: a tf.data.Dataset to validate.
-      expected_output_type: a tf.dtype, the expected type of the model features.
-      expected_output_rank: an int, the expected rank of the model features.
+      features: a list(string), the keys of features to validate
       error_label: a string, an identifier for the previous processing step to
         report in raised ValueErrors.
+      expected_output_rank: an int, the expected rank of the model features.
+      expected_output_type: a tf.dtype, the expected type of the model features.
+        If None, then use the dtype on the individual feature.
       ensure_no_eos: a bool, whether or not to verify that the model features
         contain no EOS tokens.
 
@@ -530,17 +562,21 @@ class Task(DatasetProviderBase):
     """
     types = tf.data.get_output_types(dataset)
     shapes = tf.data.get_output_shapes(dataset)
-    for feat in self.output_features:
+    for feat in features:
       if feat not in types:
         raise ValueError(
             "Task dataset is missing expected output feature after {label}: "
             "{feat}".format(label=error_label, feat=feat))
-      if expected_output_type != types[feat]:
+      expected_feat_type = (
+          expected_output_type or self.output_features[feat].dtype)
+      if expected_feat_type != types[feat]:
         raise ValueError(
             "Task dataset has incorrect type for feature '{feat}' after "
             "{label}: Got {actual}, expected {expected}".format(
-                feat=feat, label=error_label, actual=types[feat].name,
-                expected=expected_output_type.name))
+                feat=feat,
+                label=error_label,
+                actual=types[feat].name,
+                expected=expected_feat_type.name))
       if expected_output_rank != len(shapes[feat]):
         raise ValueError(
             "Task dataset has incorrect rank for feature '{feat}' after "
@@ -549,11 +585,13 @@ class Task(DatasetProviderBase):
                 expected=expected_output_rank))
 
     def _ensure_no_eos(feat, v):
-      if feat not in self.output_features:
+      """Ensure that features don't contain EOS."""
+      if feat not in features or not features[feat].ensure_no_eos:
         return v
       with tf.control_dependencies([
           tf.assert_none_equal(
-              v, tf.constant(1, tf.int64),
+              v,
+              tf.constant(1, features[feat].dtype),
               message="Feature '{feat}' unexpectedly contains EOS=1 token "
               "after {label}.".format(feat=feat, label=error_label))
       ]):
@@ -568,7 +606,10 @@ class Task(DatasetProviderBase):
     """Preprocessed text dataset."""
     dataset = self._preprocess_dataset(dataset, self._text_preprocessor)
     dataset = self._validate_dataset(
-        dataset, expected_output_type=tf.string, expected_output_rank=0,
+        dataset,
+        features=self._get_features_to_encode(),
+        expected_output_type=tf.string,
+        expected_output_rank=0,
         error_label="text preprocessing")
     return dataset
 
@@ -587,7 +628,7 @@ class Task(DatasetProviderBase):
         vocabulary=self.get_vocabulary())
     dataset = self._validate_dataset(
         dataset,
-        expected_output_type=tf.int64,
+        features=self.output_features,
         expected_output_rank=1,
         error_label="token preprocessing",
         ensure_no_eos=True)
@@ -685,7 +726,9 @@ class Task(DatasetProviderBase):
       ds = self.preprocess_text(ds)
       # Tokenize
       ds = encode_string_features(
-          ds, self.get_vocabulary(), keys=self.output_features,
+          ds,
+          self.get_vocabulary(),
+          keys=self._get_features_to_encode(),
           copy_plaintext=True)
 
     if (not use_cached and self.num_input_examples(split) and
