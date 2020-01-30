@@ -270,11 +270,21 @@ def assert_dataset(dataset, expected):
     expected = [expected]
   dataset = list(tfds.as_numpy(dataset))
   _pyunit_proxy.assertEqual(len(dataset), len(expected))
-  for data, expected_item in zip(dataset, expected):
-    _pyunit_proxy.assertEqual(set(data.keys()), set(expected_item.keys()))
-    for key, value in data.items():
+
+  def _compare_dict(actual_dict, expected_dict):
+    _pyunit_proxy.assertEqual(
+        set(actual_dict.keys()), set(expected_dict.keys()))
+    for key, actual_value in actual_dict.items():
+      if isinstance(actual_value, dict):
+        _compare_dict(actual_value, expected_dict[key])
+        continue
+      if isinstance(actual_value, tf.RaggedTensor):
+        actual_value = actual_value.to_list()
       np.testing.assert_array_equal(
-          value, _maybe_as_bytes(expected_item[key]), key)
+          actual_value, _maybe_as_bytes(expected_dict[key]), key)
+
+  for actual_ex, expected_ex in zip(dataset, expected):
+    _compare_dict(actual_ex, expected_ex)
 
 
 def get_fake_dataset(split, shuffle_files=False):
