@@ -293,7 +293,7 @@ def encode_string_features(
     """
     ret = {}
     for k, v in features.items():
-      if v.dtype == tf.string and k in keys:
+      if k in keys and v.dtype == tf.string:
         if copy_plaintext:
           ret["%s_plaintext" % k] = v
         v = tf.cast(vocabulary.encode_tf(v), tf.int64)
