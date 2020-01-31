@@ -277,8 +277,12 @@ class TasksTest(test_utils.FakeTaskTest):
   def test_splits(self):
     test_utils.add_tfds_task("task_with_splits", splits=["validation"])
     task = TaskRegistry.get("task_with_splits")
-    self.assertIn("validation", task.splits)
-    self.assertNotIn("train", task.splits)
+    self.assertListEqual(["validation"], task.splits)
+
+    test_utils.add_tfds_task("task_with_sliced_splits",
+                             splits={"validation": "train[0:1%]"})
+    task = TaskRegistry.get("task_with_splits")
+    self.assertListEqual(["validation"], task.splits)
 
   def test_no_eos(self):
     features = {

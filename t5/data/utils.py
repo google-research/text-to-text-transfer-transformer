@@ -149,22 +149,28 @@ class LazyTfdsLoader(object):
 
   _MEMOIZED_INSTANCES = {}
 
-  def __new__(cls, name, data_dir=None):
+  def __new__(cls, name, data_dir=None, split_map=None):
     """Either creates a new dataset or returns it if it already exists."""
-    key = (name, data_dir)
+    key = (
+        (name, data_dir, tuple(split_map.items()))
+        if split_map else (name, data_dir))
     if key not in cls._MEMOIZED_INSTANCES:
       cls._MEMOIZED_INSTANCES[key] = object.__new__(cls)
     return cls._MEMOIZED_INSTANCES[key]
 
-  def __init__(self, name, data_dir=None):
+  def __init__(self, name, data_dir=None, split_map=None):
     """LazyTfdsLoader constructor.
 
     Args:
       name: str, the name of the TFDS dataset.
       data_dir: str (optional), directory to read/write TFDS data.
+      split_map: dict (optional), mapping from canonical splits
+        (e.g., 'validation') to TFDS splits or slices
+        (e.g., 'train[':1%']).
     """
     self._name = name
     self._data_dir = data_dir
+    self._split_map = split_map
     self._builder = None
 
   def __getstate__(self):
@@ -200,33 +206,26 @@ class LazyTfdsLoader(object):
   def info(self):
     return self.builder.info
 
+  def _map_split(self, split):
+    return self._split_map[split] if self._split_map else split
+
   def files(self, split):
-    """Returns set containing paths to TFDS TFRecord files for the dataset."""
-    self.verify_split(split)
-    files = set()
+    """Returns set of instructions for reading TFDS files for the dataset."""
+    split = self._map_split(split)
+    files = []
 
     def _get_builder_files(builder):
       split_info = builder.info.splits[split]
-      if builder.version.implements(tfds.core.Experiment.S3):
-        num_shards = len(split_info.shard_lengths)
-      else:
-        num_shards = split_info.num_shards
-      return tfds.core.naming.filepaths_for_dataset_split(
-          dataset_name=builder.name,
-          split=split_info.name,
-          num_shards=num_shards,
-          data_dir=builder._data_dir,  # pylint:disable=protected-access
-          filetype_suffix="tfrecord",
-      )
+      return split_info.file_instructions
 
     if self.builder.BUILDER_CONFIGS and "/" not in self.name:
       # If builder has multiple configs, and no particular config was
       # requested, then compute all.
       for config in self.builder.BUILDER_CONFIGS:
         builder_for_config = tfds.builder(self.builder.name, config=config)
-        files.update(_get_builder_files(builder_for_config))
+        files.extend(_get_builder_files(builder_for_config))
     else:
-      files.update(_get_builder_files(self.builder))
+      files.extend(_get_builder_files(self.builder))
 
     if not files:
       logging.fatal("No TFRecord files found for dataset: %s", self.name)
@@ -234,7 +233,7 @@ class LazyTfdsLoader(object):
 
   def load(self, split, shuffle_files):
     """Returns a tf.data.Dataset for the given split."""
-    self.verify_split(split)
+    split = self._map_split(split)
     return tfds.load(
         self._name,
         split=split,
@@ -243,22 +242,17 @@ class LazyTfdsLoader(object):
         download=True,
         try_gcs=True)
 
-  def load_shard(self, shard_path):
+  def load_shard(self, file_instruction):
     """Returns a dataset for a single shard of the TFDS TFRecord files."""
-    ds = tfds.core.file_format_adapter.TFRecordExampleAdapter(
-        self.info.features.get_serialized_info()).dataset_from_filename(
-            shard_path)
-    ds = ds.map(self.info.features.decode_example)
+    ds = self.builder._tfrecords_reader.read_files(  # pylint:disable=protected-access
+        [file_instruction],
+        read_config=tfds.ReadConfig(),
+        shuffle_files=False)
     return ds
-
-  def verify_split(self, split):
-    """Verify that `split` is a valid split."""
-    if split not in self.info.splits.keys():
-      raise ValueError("{} has no '{}' split".format(self.name, split))
 
   def size(self, split):
     """Returns the number of examples in the split."""
-    self.verify_split(split)
+    split = self._map_split(split)
     ds_splits = self.info.splits
     dataset_size = ds_splits[split].num_examples
     # Very large datasets have num_examples = 0; default instead to np.inf
@@ -329,24 +323,6 @@ def dict_to_tfexample(ex):
           (tf.dtype, tf.shape, k, v))
 
   return tf.train.Example(features=tf.train.Features(feature=feature_dict))
-
-
-def inverse_dataset(dataset, label):
-  """Invert examples and prepend the given label to the new inputs.
-
-  Args:
-    dataset: tf.data.Dataset, contains "inputs" and "targets" keys
-    label: str, the label to prepend to the inputs.
-  Returns:
-    a tf.data.Dataset
-  """
-  def map_fn(x):
-    return {
-        "inputs": tf.strings.join([label, x["targets"]]),
-        "targets": x["inputs"],
-    }
-  return dataset.map(
-      map_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 
 # ================================ Tasks =======================================
@@ -764,8 +740,10 @@ class TfdsTask(Task):
         metric_fn(targets, predictions) to use during evaluation.
       tfds_data_dir: string, an optional path to a specific TFDS data directory
         to use.
-      splits: list(string) or None, a list of allowable splits to load. The
-        default, None, uses all available splits from the TFDS dataset info.
+      splits: a list(string) of allowable splits to load, a dict mapping
+        allowable canonical splits (e.g., 'validation') to TFDS splits or slices
+        (e.g., 'train[':1%']), or None. The default, None, uses all available
+        splits from the TFDS dataset info.
       **task_kwargs: dict, additional keyword arguments for the parent `Task`
         class.
     """
@@ -773,7 +751,10 @@ class TfdsTask(Task):
       raise ValueError(
           "TFDS name must contain a version number, got: %s" % tfds_name)
 
-    self._tfds_dataset = LazyTfdsLoader(tfds_name, tfds_data_dir)
+    self._tfds_dataset = LazyTfdsLoader(
+        tfds_name,
+        data_dir=tfds_data_dir,
+        split_map=splits if isinstance(splits, dict) else None)
 
     def dataset_fn(split, shuffle_files):
       return self._tfds_dataset.load(split, shuffle_files)
@@ -781,7 +762,7 @@ class TfdsTask(Task):
     super(TfdsTask, self).__init__(
         name,
         dataset_fn=dataset_fn,
-        splits=splits,
+        splits=list(splits) if splits else None,
         text_preprocessor=text_preprocessor,
         sentencepiece_model_path=sentencepiece_model_path,
         metric_fns=metric_fns,
@@ -801,71 +782,6 @@ class TfdsTask(Task):
 
   def num_input_examples(self, split):
     return self.tfds_dataset.size(split)
-
-
-# TODO(adarob): Merge into TfdsTask once we can support caching with slices.
-class SlicedTfdsTask(Task):
-  """A `Task` that uses sliced TensorFlow Datasets to provide the input.
-
-  Supports TFDS S3 slicing
-  (https://www.tensorflow.org/datasets/splits#s3_slicing_api).
-  Unlike `TfdsTask`, `SlicedTfdsTask` does not support caching.
-  """
-
-  def __init__(
-      self,
-      name,
-      tfds_name,
-      split_map,
-      text_preprocessor,
-      sentencepiece_model_path,
-      metric_fns,
-      tfds_data_dir=None,
-      **task_kwargs):
-    """SlicedTfdsTask constructor.
-
-    Args:
-      name: string, a unique name for the Task. A ValueError will be raised if
-        another task with this name is already registered.
-      tfds_name: string, the name and version number of a TFDS dataset,
-        optionally with a config.
-      split_map: dict, a mapping from a canonical split (e.g.,
-        `tfds.split.VALIDATION`) to an (optionally) sliced split name
-        (eg., 'train[0:5%]').
-      text_preprocessor: a function (or list of functions) that (each) takes in
-        a tf.data.Dataset of string features and returns a tf.data.Dataset of
-        string features. Can be set to None as a no-op. If a list is given,
-        they will be executed sequentially.
-      sentencepiece_model_path: string, path to a SentencePiece model file to
-        use for tokenization.
-      metric_fns: list(callable), list of metric functions with the signature
-        metric_fn(targets, predictions) to use during evaluation.
-      tfds_data_dir: string, an optional path to a specific TFDS data directory
-        to use.
-      **task_kwargs: dict, additional keyword arguments for the parent `Task`
-        class.
-    """
-    if ":" not in tfds_name:
-      raise ValueError(
-          "TFDS name must contain a version number, got: %s" % tfds_name)
-
-    def dataset_fn(split, shuffle_files):
-      return tfds.load(
-          tfds_name,
-          split=split_map[split],
-          data_dir=tfds_data_dir,
-          shuffle_files=shuffle_files,
-          download=True,
-          try_gcs=True)
-
-    super(SlicedTfdsTask, self).__init__(
-        name,
-        dataset_fn=dataset_fn,
-        splits=list(split_map.keys()),
-        text_preprocessor=text_preprocessor,
-        sentencepiece_model_path=sentencepiece_model_path,
-        metric_fns=metric_fns,
-        **task_kwargs)
 
 
 class TextLineTask(Task):

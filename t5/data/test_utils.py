@@ -419,7 +419,7 @@ def mark_completed(cache_dir, task_name):
 # pylint:disable=invalid-name
 FakeLazyTfds = collections.namedtuple(
     "FakeLazyTfds",
-    ["name", "load", "load_shard", "info", "files", "verify_split", "size"])
+    ["name", "load", "load_shard", "info", "files", "size"])
 FakeTfdsInfo = collections.namedtuple("FakeTfdsInfo", ["splits"])
 # pylint:enable=invalid-name
 
@@ -439,12 +439,24 @@ class FakeTaskTest(absltest.TestCase):
     # Mock TFDS
     # Note we don't use mock.Mock since they fail to pickle.
     fake_tfds_paths = {
-        "train": ["train.tfrecord-%05d-of-00002" % i for i in range(2)],
-        "validation": ["validation.tfrecord-00000-of-00001"],
+        "train": [
+            {  # pylint:disable=g-complex-comprehension
+                "filename": "train.tfrecord-%05d-of-00002" % i,
+                "skip": 0,
+                "take": -1
+            }
+            for i in range(2)],
+        "validation": [
+            {
+                "filename": "validation.tfrecord-00000-of-00001",
+                "skip": 0,
+                "take": -1
+            }],
     }
-    def _load_shard(shard_path):
-      if "train" in shard_path:
-        if shard_path.endswith("00000-of-00002"):
+    def _load_shard(shard_instruction):
+      fname = shard_instruction["filename"]
+      if "train" in fname:
+        if fname.endswith("00000-of-00002"):
           return get_fake_dataset("train").take(2)
         else:
           return get_fake_dataset("train").skip(2)
@@ -457,7 +469,6 @@ class FakeTaskTest(absltest.TestCase):
         load_shard=_load_shard,
         info=FakeTfdsInfo(splits={"train": None, "validation": None}),
         files=fake_tfds_paths.get,
-        verify_split=lambda x: x,
         size=lambda x: 30 if x == "train" else 10)
     add_fake_tfds(fake_tfds)
 
