@@ -180,7 +180,7 @@ class LazyTfdsLoader(object):
     return state
 
   def __getnewargs__(self):
-    return self._name, self._data_dir
+    return self._name, self._data_dir, self._split_map
 
   @property
   def name(self):
