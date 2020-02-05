@@ -424,9 +424,8 @@ FakeTfdsInfo = collections.namedtuple("FakeTfdsInfo", ["splits"])
 # pylint:enable=invalid-name
 
 
-def add_fake_tfds(fake_tfds):
-  dataset_utils.LazyTfdsLoader._MEMOIZED_INSTANCES[  # pylint:disable=protected-access
-      (fake_tfds.name, None)] = fake_tfds
+def set_fake_tfds(fake_tfds):
+  dataset_utils.LazyTfdsLoader = lambda *x, **y: fake_tfds
 
 
 class FakeTaskTest(absltest.TestCase):
@@ -470,7 +469,7 @@ class FakeTaskTest(absltest.TestCase):
         info=FakeTfdsInfo(splits={"train": None, "validation": None}),
         files=fake_tfds_paths.get,
         size=lambda x: 30 if x == "train" else 10)
-    add_fake_tfds(fake_tfds)
+    set_fake_tfds(fake_tfds)
 
     # Set up data directory.
     self.test_tmpdir = self.create_tempdir().full_path
@@ -515,11 +514,6 @@ class FakeTaskTest(absltest.TestCase):
             TEST_DATA_DIR, "sentencepiece", "sentencepiece.model"),
         metric_fns=[])
     self.text_line_task = TaskRegistry.get("text_line_task")
-
-    # Auto-verify any split by just retuning the split name
-    dataset_utils.verify_tfds_split = absltest.mock.Mock(
-        side_effect=lambda x, y: y
-    )
 
 
 class FakeMixtureTest(FakeTaskTest):

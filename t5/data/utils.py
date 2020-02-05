@@ -147,16 +147,7 @@ class LazyTfdsLoader(object):
   file operations. Also provides additional utility methods.
   """
 
-  _MEMOIZED_INSTANCES = {}
-
-  def __new__(cls, name, data_dir=None, split_map=None):
-    """Either creates a new dataset or returns it if it already exists."""
-    key = (
-        (name, data_dir, tuple(split_map.items()))
-        if split_map else (name, data_dir))
-    if key not in cls._MEMOIZED_INSTANCES:
-      cls._MEMOIZED_INSTANCES[key] = object.__new__(cls)
-    return cls._MEMOIZED_INSTANCES[key]
+  _MEMOIZED_BUILDERS = {}
 
   def __init__(self, name, data_dir=None, split_map=None):
     """LazyTfdsLoader constructor.
@@ -171,16 +162,6 @@ class LazyTfdsLoader(object):
     self._name = name
     self._data_dir = data_dir
     self._split_map = split_map
-    self._builder = None
-
-  def __getstate__(self):
-    """Remove un-pickle-able attributes and return the state."""
-    state = self.__dict__.copy()
-    del state["_builder"]
-    return state
-
-  def __getnewargs__(self):
-    return self._name, self._data_dir, self._split_map
 
   @property
   def name(self):
@@ -198,9 +179,11 @@ class LazyTfdsLoader(object):
 
   @property
   def builder(self):
-    if not self._builder:
-      self._builder = tfds.builder(self.name, data_dir=self.data_dir)
-    return self._builder
+    builder_key = (self.name, self.data_dir)
+    if builder_key not in LazyTfdsLoader._MEMOIZED_BUILDERS:
+      LazyTfdsLoader._MEMOIZED_BUILDERS[builder_key] = tfds.builder(
+          self.name, data_dir=self.data_dir)
+    return LazyTfdsLoader._MEMOIZED_BUILDERS[builder_key]
 
   @property
   def info(self):
@@ -212,20 +195,14 @@ class LazyTfdsLoader(object):
   def files(self, split):
     """Returns set of instructions for reading TFDS files for the dataset."""
     split = self._map_split(split)
-    files = []
 
-    def _get_builder_files(builder):
-      split_info = builder.info.splits[split]
-      return split_info.file_instructions
-
-    if self.builder.BUILDER_CONFIGS and "/" not in self.name:
+    if "/" not in self.name and self.builder.BUILDER_CONFIGS:
       # If builder has multiple configs, and no particular config was
-      # requested, then compute all.
-      for config in self.builder.BUILDER_CONFIGS:
-        builder_for_config = tfds.builder(self.builder.name, config=config)
-        files.extend(_get_builder_files(builder_for_config))
-    else:
-      files.extend(_get_builder_files(self.builder))
+      # requested, raise an error.
+      raise ValueError("Dataset '%s' has multiple configs." % self.name)
+
+    split_info = self.builder.info.splits[split]
+    files = split_info.file_instructions
 
     if not files:
       logging.fatal("No TFRecord files found for dataset: %s", self.name)
