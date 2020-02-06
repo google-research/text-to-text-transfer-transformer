@@ -22,6 +22,9 @@ from absl.testing import absltest
 from t5.data import test_utils
 import tensorflow.compat.v1 as tf
 
+tf.disable_v2_behavior()
+tf.enable_eager_execution()
+
 mock = absltest.mock
 
 _UNK_STRING = b" \xe2\x81\x87 "
@@ -37,7 +40,7 @@ class SentencepieceVocabularyTest(absltest.TestCase):
     self.assertSequenceEqual(_TEST_TOKENS, vocab.encode(_TEST_STRING))
     self.assertEqual(
         _TEST_STRING,
-        tf.compat.as_str(vocab.decode(_TEST_TOKENS)))
+        tf.compat.as_bytes(vocab.decode(_TEST_TOKENS)))
     self.assertEqual(
         _TEST_TOKENS,
         tuple(vocab.encode_tf(_TEST_STRING).numpy()))
@@ -49,11 +52,9 @@ class SentencepieceVocabularyTest(absltest.TestCase):
     vocab = test_utils.sentencepiece_vocab(extra_ids=10)
     self.assertEqual(36, vocab.vocab_size)
     self.assertEqual("v", vocab.decode([25]))
-    self.assertEqual(_UNK_STRING, tf.compat.as_str(vocab.decode([35])))
+    self.assertEqual(_UNK_STRING, tf.compat.as_bytes(vocab.decode([35])))
     self.assertEqual(_UNK_STRING, vocab.decode_tf([35]).numpy())
 
 
 if __name__ == "__main__":
-  tf.disable_v2_behavior()
-  tf.enable_eager_execution()
   absltest.main()

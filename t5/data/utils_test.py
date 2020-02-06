@@ -27,8 +27,92 @@ from t5.data import utils
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
 
+tf.disable_v2_behavior()
+tf.enable_eager_execution()
+
 TaskRegistry = utils.TaskRegistry
 mock = absltest.mock
+
+
+class LazyTfdsLoaderTest(absltest.TestCase):
+
+  def setUp(self):
+    utils.LazyTfdsLoader._MEMOIZED_BUILDERS = {}
+    super(LazyTfdsLoaderTest, self).setUp()
+
+  def test_builder_memoization(self):
+    tfds.builder = mock.Mock(
+        side_effect=lambda name, data_dir: ",".join([name, data_dir or ""])
+    )
+
+    ds1 = utils.LazyTfdsLoader("ds1")
+    self.assertEqual("ds1,", ds1.builder)
+    self.assertEqual(1, tfds.builder.call_count)
+
+    # Builder should be cached with same name.
+    self.assertEqual("ds1,", ds1.builder)
+    self.assertEqual(1, tfds.builder.call_count)
+
+    # Same name but different data dir is a cache miss.
+    ds1_dir1 = utils.LazyTfdsLoader("ds1", "dir1")
+    self.assertEqual("ds1,dir1", ds1_dir1.builder)
+    self.assertEqual(2, tfds.builder.call_count)
+    # Same name and data dir is a cache hit.
+    self.assertEqual("ds1,dir1", ds1_dir1.builder)
+    self.assertEqual(2, tfds.builder.call_count)
+
+    # Different name is a cache miss.
+    ds2 = utils.LazyTfdsLoader("ds2")
+    self.assertEqual("ds2,", ds2.builder)
+    self.assertEqual(3, tfds.builder.call_count)
+
+    # Different split map name is a cache hit.
+    ds2 = utils.LazyTfdsLoader("ds2", split_map={"train": "validation"})
+    self.assertEqual("ds2,", ds2.builder)
+    self.assertEqual(3, tfds.builder.call_count)
+
+    # Try calling everything again, order shouldn't matter.
+    self.assertEqual("ds1,", ds1.builder)
+    self.assertEqual("ds1,dir1", ds1_dir1.builder)
+    self.assertEqual("ds2,", ds2.builder)
+    self.assertEqual(3, tfds.builder.call_count)
+
+  def test_split_map(self):
+    utils.LazyTfdsLoader._MEMOIZED_BUILDERS[("ds/c1", None)] = mock.Mock(
+        info=mock.Mock(splits={
+            "validation": mock.Mock(
+                num_examples=420,
+                file_instructions=["f1", "f2"]),
+            "test": mock.Mock(
+                num_examples=42,
+                file_instructions=["f3"]),
+        }))
+
+    ds = utils.LazyTfdsLoader(
+        "ds/c1", split_map={"train": "validation", "validation": "test"})
+
+    # test .load()
+    tfds.load = mock.Mock()
+    ds.load("train", shuffle_files=False)
+    tfds.load.assert_called_once_with(
+        "ds/c1",
+        split="validation",
+        data_dir=None,
+        shuffle_files=False,
+        download=True,
+        try_gcs=True)
+
+    # test .size()
+    self.assertEqual(420, ds.size(split="train"))
+    self.assertEqual(42, ds.size(split="validation"))
+    with self.assertRaises(KeyError):
+      ds.size(split="test")
+
+    # test .files()
+    self.assertListEqual(["f1", "f2"], ds.files(split="train"))
+    self.assertListEqual(["f3"], ds.files(split="validation"))
+    with self.assertRaises(KeyError):
+      ds.files(split="test")
 
 
 class TasksTest(test_utils.FakeTaskTest):
@@ -297,87 +381,5 @@ class TasksTest(test_utils.FakeTaskTest):
     test_utils.verify_task_matches_fake_datasets(fn_task, use_cached=False)
 
 
-class LazyTfdsLoaderTest(absltest.TestCase):
-
-  def setUp(self):
-    utils.LazyTfdsLoader._MEMOIZED_BUILDERS = {}
-    super(LazyTfdsLoaderTest, self).setUp()
-
-  def test_builder_memoization(self):
-    tfds.builder = mock.Mock(
-        side_effect=lambda name, data_dir: ",".join([name, data_dir or ""])
-    )
-
-    ds1 = utils.LazyTfdsLoader("ds1")
-    self.assertEqual("ds1,", ds1.builder)
-    self.assertEqual(1, tfds.builder.call_count)
-
-    # Builder should be cached with same name.
-    self.assertEqual("ds1,", ds1.builder)
-    self.assertEqual(1, tfds.builder.call_count)
-
-    # Same name but different data dir is a cache miss.
-    ds1_dir1 = utils.LazyTfdsLoader("ds1", "dir1")
-    self.assertEqual("ds1,dir1", ds1_dir1.builder)
-    self.assertEqual(2, tfds.builder.call_count)
-    # Same name and data dir is a cache hit.
-    self.assertEqual("ds1,dir1", ds1_dir1.builder)
-    self.assertEqual(2, tfds.builder.call_count)
-
-    # Different name is a cache miss.
-    ds2 = utils.LazyTfdsLoader("ds2")
-    self.assertEqual("ds2,", ds2.builder)
-    self.assertEqual(3, tfds.builder.call_count)
-
-    # Different split map name is a cache hit.
-    ds2 = utils.LazyTfdsLoader("ds2", split_map={"train": "validation"})
-    self.assertEqual("ds2,", ds2.builder)
-    self.assertEqual(3, tfds.builder.call_count)
-
-    # Try calling everything again, order shouldn't matter.
-    self.assertEqual("ds1,", ds1.builder)
-    self.assertEqual("ds1,dir1", ds1_dir1.builder)
-    self.assertEqual("ds2,", ds2.builder)
-    self.assertEqual(3, tfds.builder.call_count)
-
-  def test_split_map(self):
-    utils.LazyTfdsLoader._MEMOIZED_BUILDERS[("ds/c1", None)] = mock.Mock(
-        info=mock.Mock(splits={
-            "validation": mock.Mock(
-                num_examples=420,
-                file_instructions=["f1", "f2"]),
-            "test": mock.Mock(
-                num_examples=42,
-                file_instructions=["f3"]),
-        }))
-
-    ds = utils.LazyTfdsLoader(
-        "ds/c1", split_map={"train": "validation", "validation": "test"})
-
-    # test .load()
-    tfds.load = mock.Mock()
-    ds.load("train", shuffle_files=False)
-    tfds.load.assert_called_once_with(
-        "ds/c1",
-        split="validation",
-        data_dir=None,
-        shuffle_files=False,
-        download=True,
-        try_gcs=True)
-
-    # test .size()
-    self.assertEqual(420, ds.size(split="train"))
-    self.assertEqual(42, ds.size(split="validation"))
-    with self.assertRaises(KeyError):
-      ds.size(split="test")
-
-    # test .files()
-    self.assertListEqual(["f1", "f2"], ds.files(split="train"))
-    self.assertListEqual(["f3"], ds.files(split="validation"))
-    with self.assertRaises(KeyError):
-      ds.files(split="test")
-
 if __name__ == "__main__":
-  tf.disable_v2_behavior()
-  tf.enable_eager_execution()
   absltest.main()

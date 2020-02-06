@@ -22,7 +22,9 @@ import collections
 import copy
 import os
 import shutil
+import sys
 
+from absl import flags
 from absl import logging
 from absl.testing import absltest
 import numpy as np
@@ -431,6 +433,14 @@ def set_fake_tfds(fake_tfds):
 class FakeTaskTest(absltest.TestCase):
   """TestCase that sets up fake cached and uncached tasks."""
 
+  def get_tempdir(self):
+    try:
+      flags.FLAGS.test_tmpdir
+    except flags.UnparsedFlagAccessError:
+      # Need to initialize flags when running `pytest`.
+      flags.FLAGS(sys.argv)
+    return self.create_tempdir().full_path
+
   def setUp(self):
     super(FakeTaskTest, self).setUp()
     self.maxDiff = None  # pylint:disable=invalid-name
@@ -472,7 +482,7 @@ class FakeTaskTest(absltest.TestCase):
     set_fake_tfds(fake_tfds)
 
     # Set up data directory.
-    self.test_tmpdir = self.create_tempdir().full_path
+    self.test_tmpdir = self.get_tempdir()
     self.test_data_dir = os.path.join(self.test_tmpdir, "test_data")
     shutil.copytree(TEST_DATA_DIR, self.test_data_dir)
     for root, dirs, _ in os.walk(self.test_data_dir):

@@ -23,13 +23,17 @@ from t5.data import MixtureRegistry
 from t5.data import SentencePieceVocabulary
 from t5.data import test_utils
 from t5.models import mesh_transformer
+import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
+
+tf.disable_v2_behavior()
+tf.enable_eager_execution()
 
 
 class MeshDatasetFnsTest(test_utils.FakeMixtureTest):
 
   def check_ds_shape(self, ds, sequence_length):
-    for k, v in ds.output_shapes.items():
+    for k, v in tf.data.get_output_shapes(ds).items():
       feat = k.split("_")[0]
       if len(v) == 0:  # pylint:disable=g-explicit-length-test
         expected_shape = []

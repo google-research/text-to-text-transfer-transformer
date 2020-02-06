@@ -50,7 +50,7 @@ setuptools.setup(
         'scikit-learn',
         'scipy',
         'sentencepiece',
-        'six',
+        'six>=1.14',
         'tensorflow-text==1.15.0rc0',
         'tfds-nightly',
     ],
@@ -58,11 +58,13 @@ setuptools.setup(
         'tensorflow': ['tensorflow==1.15'],
         'gcp': ['gevent', 'google-api-python-client', 'google-compute-engine',
                 'google-cloud-storage', 'oauth2client'],
+        'cache-tasks': ['apache-beam'],
+        'test': ['pytest'],
     },
     entry_points={
         'console_scripts': [
-            't5_mesh_transformer = '
-            't5.models.mesh_transformer_main:console_entry_point',
+            't5_mesh_transformer = t5.models.mesh_transformer_main:console_entry_point',
+            't5_cache_tasks = t5.data.cache_tasks_main:console_entry_point'
         ],
     },
     classifiers=[

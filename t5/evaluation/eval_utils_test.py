@@ -27,11 +27,14 @@ import pandas as pd
 from t5.evaluation import eval_utils
 import tensorflow.compat.v1 as tf
 
+tf.disable_v2_behavior()
+
 
 class EvalUtilsTest(absltest.TestCase):
 
   def test_parse_events_files(self):
     tb_summary_dir = self.create_tempdir()
+    tf.disable_eager_execution()  # Needed in pytest.
     summary_writer = tf.summary.FileWriter(tb_summary_dir.full_path)
     tags = [
         "eval/foo_task/accuracy",
@@ -147,5 +150,4 @@ step,30,10,10""".format(*[m.name for m in metric_names[:3]])
 
 
 if __name__ == "__main__":
-  tf.disable_v2_behavior()
   absltest.main()
