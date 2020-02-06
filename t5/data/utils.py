@@ -27,6 +27,7 @@ import inspect
 import json
 import os
 import re
+import six
 
 from absl import logging
 import gin
@@ -1086,7 +1087,7 @@ def get_subtasks(task_or_mixture):
 
 def _validate_args(fn, expected_pos_args):
   """Ensure function has exactly expected positional args."""
-  argspec = inspect.getargspec(fn)
+  argspec = inspect.getargspec(fn) if six.PY2 else inspect.getfullargspec(fn)
   expected_pos_args = tuple(expected_pos_args)
   actual_args = tuple(argspec.args)
   if actual_args[:len(expected_pos_args)] != expected_pos_args:
