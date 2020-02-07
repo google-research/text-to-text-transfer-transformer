@@ -1,5 +1,7 @@
 # T5: Text-To-Text Transfer Transformer
 
+[![Build Status](https://travis-ci.org/google-research/text-to-text-transfer-transformer.svg?branch=master)](https://travis-ci.org/google-research/text-to-text-transfer-transformer)
+
 T5 serves primarily as code for reproducing the experiments in [_Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer_][paper]. In the paper, we demonstrate how to achieve state-of-the-art results on multiple NLP tasks using a text-to-text transformer pre-trained on a large text corpus.
 
 The bulk of the code in this repository is used for loading, preprocessing, mixing, and evaluating datasets.
