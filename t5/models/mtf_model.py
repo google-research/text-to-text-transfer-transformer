@@ -126,7 +126,9 @@ class MtfModel(T5Model):
       iterations_per_loop: integer, steps per train loop
     """
 
-    mesh_shape = utils.tpu_mesh_shape(tpu_topology, model_parallelism)
+    # TODO(adarob): Allow setting mesh_shape and mesh_devices directly for GPU.
+    mesh_shape = (
+        utils.tpu_mesh_shape(tpu_topology, model_parallelism) if tpu else "")
 
     sequence_length = sequence_length or {"inputs": 512, "targets": 512}
 
