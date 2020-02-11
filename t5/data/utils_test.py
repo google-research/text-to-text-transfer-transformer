@@ -40,9 +40,10 @@ class LazyTfdsLoaderTest(absltest.TestCase):
     utils.LazyTfdsLoader._MEMOIZED_BUILDERS = {}
     super(LazyTfdsLoaderTest, self).setUp()
 
-  def test_builder_memoization(self):
-    tfds.builder = mock.Mock(
-        side_effect=lambda name, data_dir: ",".join([name, data_dir or ""])
+  @mock.patch("tensorflow_datasets.builder")
+  def test_builder_memoization(self, mock_tfds_builder):
+    mock_tfds_builder.side_effect = (
+        lambda name, data_dir: ",".join([name, data_dir or ""])
     )
 
     ds1 = utils.LazyTfdsLoader("ds1")
@@ -77,7 +78,8 @@ class LazyTfdsLoaderTest(absltest.TestCase):
     self.assertEqual("ds2,", ds2.builder)
     self.assertEqual(3, tfds.builder.call_count)
 
-  def test_split_map(self):
+  @mock.patch("tensorflow_datasets.load")
+  def test_split_map(self, mock_tfds_load):
     utils.LazyTfdsLoader._MEMOIZED_BUILDERS[("ds/c1", None)] = mock.Mock(
         info=mock.Mock(splits={
             "validation": mock.Mock(
@@ -92,9 +94,8 @@ class LazyTfdsLoaderTest(absltest.TestCase):
         "ds/c1", split_map={"train": "validation", "validation": "test"})
 
     # test .load()
-    tfds.load = mock.Mock()
     ds.load("train", shuffle_files=False)
-    tfds.load.assert_called_once_with(
+    mock_tfds_load.assert_called_once_with(
         "ds/c1",
         split="validation",
         data_dir=None,
@@ -255,8 +256,8 @@ class TasksTest(test_utils.FakeTaskTest):
     def fake_load(s, shuffle_files=False):
       del shuffle_files  # Unused, to mimic TFDS API
       return test_utils.get_fake_dataset(s).repeat().take(20)
-    test_utils.set_fake_tfds(
-        utils.LazyTfdsLoader("fake:0.0.0")._replace(load=fake_load))
+    self._tfds_patcher.new.return_value = (
+        self._tfds_patcher.new.return_value._replace(load=fake_load))
 
   def test_invalid_text_preprocessors(self):
     def _dummy_preprocessor(output):

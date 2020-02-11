@@ -426,10 +426,6 @@ FakeTfdsInfo = collections.namedtuple("FakeTfdsInfo", ["splits"])
 # pylint:enable=invalid-name
 
 
-def set_fake_tfds(fake_tfds):
-  dataset_utils.LazyTfdsLoader = lambda *x, **y: fake_tfds
-
-
 class FakeTaskTest(absltest.TestCase):
   """TestCase that sets up fake cached and uncached tasks."""
 
@@ -479,7 +475,9 @@ class FakeTaskTest(absltest.TestCase):
         info=FakeTfdsInfo(splits={"train": None, "validation": None}),
         files=fake_tfds_paths.get,
         size=lambda x: 30 if x == "train" else 10)
-    set_fake_tfds(fake_tfds)
+    self._tfds_patcher = mock.patch(
+        "t5.data.utils.LazyTfdsLoader", new=mock.Mock(return_value=fake_tfds))
+    self._tfds_patcher.start()
 
     # Set up data directory.
     self.test_tmpdir = self.get_tempdir()
@@ -524,6 +522,10 @@ class FakeTaskTest(absltest.TestCase):
             TEST_DATA_DIR, "sentencepiece", "sentencepiece.model"),
         metric_fns=[])
     self.text_line_task = TaskRegistry.get("text_line_task")
+
+  def tearDown(self):
+    super(FakeTaskTest, self).tearDown()
+    self._tfds_patcher.stop()
 
 
 class FakeMixtureTest(FakeTaskTest):
