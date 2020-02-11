@@ -37,7 +37,7 @@ import os
 from absl import app
 from absl import flags
 from t5.data.utils import TaskRegistry
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
 
 FLAGS = flags.FLAGS
