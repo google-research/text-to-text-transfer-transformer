@@ -632,11 +632,17 @@ class Task(DatasetProviderBase):
       ds = self._get_cached_dataset(split, shuffle)
     else:
       ds = self._dataset_fn(split=split, shuffle_files=shuffle)
-      ds = self.preprocess_text(ds)
-      # Tokenize
-      ds = encode_string_features(
-          ds, self.get_vocabulary(), keys=self.output_features,
-          copy_plaintext=True)
+
+      # If there is no vocabulary, it means inputs and targets are already
+      # tokenized.
+      if self.get_vocabulary():
+        ds = self.preprocess_text(ds)
+        # Tokenize
+        ds = encode_string_features(
+            ds,
+            self.get_vocabulary(),
+            keys=self.output_features,
+            copy_plaintext=True)
 
     if (not use_cached and self.num_input_examples(split) and
         self.num_input_examples(split) < _MAX_EXAMPLES_TO_MEM_CACHE):
