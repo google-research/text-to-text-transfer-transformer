@@ -13,7 +13,6 @@
 # limitations under the License.
 
 """Import API modules."""
-from __future__ import absolute_import
 
 import t5.data
 import t5.evaluation

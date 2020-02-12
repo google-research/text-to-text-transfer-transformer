@@ -24,10 +24,6 @@ set and then run this script with the split flag set to test and the cached flag
 set to True.
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import ast
 import collections
 import csv

@@ -14,10 +14,6 @@
 
 """Tests for t5.data.postprocessors."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 from absl.testing import absltest
 
 from t5.data import postprocessors

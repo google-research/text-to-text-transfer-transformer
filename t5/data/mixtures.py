@@ -17,10 +17,6 @@
 This module contains different mixtures for training T5 models.
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import functools
 
 import t5.data.tasks  # pylint: disable=unused-import

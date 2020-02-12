@@ -14,10 +14,6 @@
 
 """Tests for t5.data.cache_tasks_main."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import os
 
 from absl.testing import absltest

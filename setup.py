@@ -39,7 +39,6 @@ setuptools.setup(
         'absl-py',
         'allennlp',
         'babel',
-        'future',
         'gin-config',
         'mesh-tensorflow[transformer]>=0.1.9',
         'nltk',
@@ -50,7 +49,7 @@ setuptools.setup(
         'scikit-learn',
         'scipy',
         'sentencepiece',
-        'six>=1.14',
+        'six>=1.14',  # TODO(adarob): Remove once rouge-score is updated.
         'tensorflow-text==1.15.0rc0',
         'tfds-nightly',
     ],

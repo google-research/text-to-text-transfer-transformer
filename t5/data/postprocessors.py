@@ -14,10 +14,6 @@
 
 """Functions which process model output strings to make them ready for eval."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import tensorflow.compat.v1 as tf
 
 # Note: postprocessors must either accept an `example` and `is_target` kwargs

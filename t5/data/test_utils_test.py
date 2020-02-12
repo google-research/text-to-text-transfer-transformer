@@ -14,10 +14,6 @@
 
 """Tests for asserts."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 from absl.testing import absltest
 from t5.data.test_utils import assert_dataset
 import tensorflow.compat.v1 as tf

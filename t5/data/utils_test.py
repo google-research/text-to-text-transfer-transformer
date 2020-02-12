@@ -12,11 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Lint as: python3
 """Tests for t5.data.utils."""
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import os
 
@@ -38,7 +35,7 @@ class LazyTfdsLoaderTest(absltest.TestCase):
 
   def setUp(self):
     utils.LazyTfdsLoader._MEMOIZED_BUILDERS = {}
-    super(LazyTfdsLoaderTest, self).setUp()
+    super().setUp()
 
   @mock.patch("tensorflow_datasets.builder")
   def test_builder_memoization(self, mock_tfds_builder):

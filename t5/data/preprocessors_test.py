@@ -14,12 +14,7 @@
 
 """Tests for from t5.preprocessors."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 from absl.testing import absltest
-import six
 from t5.data import preprocessors as prep
 from t5.data import test_utils
 import tensorflow.compat.v1 as tf
@@ -130,10 +125,7 @@ class PreprocessorsTest(tf.test.TestCase):
     vocabulary = test_utils.mock_vocabulary({'foo': 10}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
     noise_mask = tf.constant([True, True, False, False, True, False])
-    if six.PY2:
-      expected_output = [11, 10, 12, 13, 14, 15]
-    else:
-      expected_output = [11, 14, 12, 13, 10, 15]
+    expected_output = [11, 14, 12, 13, 10, 15]
     output = self.evaluate(prep.permute_noise_tokens(
         tokens, noise_mask, vocabulary))
     self.assertAllEqual(output, expected_output)
@@ -143,10 +135,7 @@ class PreprocessorsTest(tf.test.TestCase):
     vocabulary = test_utils.mock_vocabulary({'foo': 10}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
     noise_mask = tf.constant([True, True, False, False, True, False])
-    if six.PY2:
-      expected_output = [11, 14, 12, 13, 11, 15]
-    else:
-      expected_output = [11, 11, 12, 13, 15, 15]
+    expected_output = [11, 11, 12, 13, 15, 15]
     output = self.evaluate(prep.noise_token_to_gathered_token(
         tokens, noise_mask, vocabulary))
     self.assertAllEqual(output, expected_output)
@@ -156,10 +145,7 @@ class PreprocessorsTest(tf.test.TestCase):
     vocabulary = test_utils.mock_vocabulary({'foo': 10}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
     noise_mask = tf.constant([True, True, False, False, True, False])
-    if six.PY2:
-      expected_output = [53, 571, 12, 13, 150, 15]
-    else:
-      expected_output = [811, 309, 12, 13, 451, 15]
+    expected_output = [811, 309, 12, 13, 451, 15]
 
     output = self.evaluate(prep.noise_token_to_random_token(
         tokens, noise_mask, vocabulary))
@@ -171,10 +157,7 @@ class PreprocessorsTest(tf.test.TestCase):
     tokens = tf.constant(list(range(10)))
     noise_mask = tf.constant(
         [True, True, False, False, True, False, True, True, True, True])
-    if six.PY2:
-      expected_output = [733, 999, 2, 3, 999, 5, 990, 999, 999, 999]
-    else:
-      expected_output = [436, 999, 2, 3, 999, 5, 999, 999, 999, 999]
+    expected_output = [436, 999, 2, 3, 999, 5, 999, 999, 999, 999]
     output = self.evaluate(prep.noise_token_to_random_token_or_sentinel(
         tokens, noise_mask, vocabulary, random_prob=0.2))
     self.assertAllEqual(output, expected_output)

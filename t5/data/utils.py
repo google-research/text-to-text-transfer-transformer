@@ -12,14 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Lint as: python3
 """Utilities for data loading and processing.
 
 Defines Tasks, TaskRegistry, Mixture, and MixtureRegistry
 """
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import abc
 import collections
@@ -27,7 +24,6 @@ import inspect
 import json
 import os
 import re
-import six
 
 from absl import logging
 import gin
@@ -737,7 +733,7 @@ class TfdsTask(Task):
     def dataset_fn(split, shuffle_files):
       return self._tfds_dataset.load(split, shuffle_files)
 
-    super(TfdsTask, self).__init__(
+    super().__init__(
         name,
         dataset_fn=dataset_fn,
         splits=list(splits) if splits else None,
@@ -811,7 +807,7 @@ class TextLineTask(Task):
           cycle_length=16, block_length=16,
           num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-    super(TextLineTask, self).__init__(
+    super().__init__(
         name,
         dataset_fn=dataset_fn,
         splits=split_to_filepattern.keys(),
@@ -1087,7 +1083,7 @@ def get_subtasks(task_or_mixture):
 
 def _validate_args(fn, expected_pos_args):
   """Ensure function has exactly expected positional args."""
-  argspec = inspect.getargspec(fn) if six.PY2 else inspect.getfullargspec(fn)
+  argspec = inspect.getfullargspec(fn)
   expected_pos_args = tuple(expected_pos_args)
   actual_args = tuple(argspec.args)
   if actual_args[:len(expected_pos_args)] != expected_pos_args:

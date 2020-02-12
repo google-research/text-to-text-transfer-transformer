@@ -25,10 +25,6 @@ t5_cache_tasks \
 
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import importlib
 import json
 import os
@@ -39,7 +35,7 @@ from absl import flags
 from absl import logging
 
 import apache_beam as beam
-from apache_beam.metrics import Metrics
+import apache_beam.metrics as metrics
 import t5
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
@@ -114,7 +110,8 @@ class PreprocessAndTokenize(beam.PTransform):
             ["%s" % inst for inst in self.files]))
 
   def _increment_counter(self, name):
-    Metrics.counter(str("%s_%s" % (self._task.name, self._split)), name).inc()
+    metrics.Metrics.counter(
+        str("%s_%s" % (self._task.name, self._split)), name).inc()
 
   def _emit_tokenized_examples(self, shard_instruction):
     """Emits examples keyed by shard path and index for a single shard."""

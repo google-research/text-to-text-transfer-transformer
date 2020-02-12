@@ -13,12 +13,7 @@
 # limitations under the License.
 
 # Lint as: python3
-"""Testing utilities for the evaluation package.
-"""
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+"""Testing utilities for the evaluation package."""
 
 from absl.testing import absltest
 

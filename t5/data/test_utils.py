@@ -12,11 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Lint as: python3
 """T5 test utilities."""
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import collections
 import copy
@@ -28,7 +25,6 @@ from absl import flags
 from absl import logging
 from absl.testing import absltest
 import numpy as np
-import six
 from t5.data import sentencepiece_vocabulary
 from t5.data import utils as dataset_utils
 import tensorflow.compat.v1 as tf
@@ -161,10 +157,10 @@ def _get_comparable_examples_from_ds(ds):
   """Puts dataset into format that allows examples to be compared in Py2/3."""
   examples = []
   def _clean_value(v):
-    if isinstance(v, six.binary_type):
+    if isinstance(v, bytes):
       return tf.compat.as_text(v)
     if isinstance(v, np.ndarray):
-      if isinstance(v[0], six.binary_type):
+      if isinstance(v[0], bytes):
         return tuple(tf.compat.as_text(s) for s in v)
       return tuple(v)
     return v
@@ -248,7 +244,7 @@ def verify_task_matches_fake_datasets(
 def _maybe_as_bytes(v):
   if isinstance(v, list):
     return [_maybe_as_bytes(x) for x in v]
-  if isinstance(v, six.string_types):
+  if isinstance(v, str):
     return tf.compat.as_bytes(v)
   return v
 
@@ -256,7 +252,7 @@ def _maybe_as_bytes(v):
 def _maybe_as_text(v):
   if isinstance(v, list):
     return [_maybe_as_text(x) for x in v]
-  if isinstance(v, six.binary_type):
+  if isinstance(v, bytes):
     return tf.compat.as_text(v)
   return v
 
@@ -438,7 +434,7 @@ class FakeTaskTest(absltest.TestCase):
     return self.create_tempdir().full_path
 
   def setUp(self):
-    super(FakeTaskTest, self).setUp()
+    super().setUp()
     self.maxDiff = None  # pylint:disable=invalid-name
 
     # Mock TFDS
@@ -524,7 +520,7 @@ class FakeTaskTest(absltest.TestCase):
     self.text_line_task = TaskRegistry.get("text_line_task")
 
   def tearDown(self):
-    super(FakeTaskTest, self).tearDown()
+    super().tearDown()
     self._tfds_patcher.stop()
 
 
@@ -532,7 +528,7 @@ class FakeMixtureTest(FakeTaskTest):
   """TestCase that sets up fake cached and uncached tasks."""
 
   def setUp(self):
-    super(FakeMixtureTest, self).setUp()
+    super().setUp()
     clear_mixtures()
     MixtureRegistry.add(
         "uncached_mixture",

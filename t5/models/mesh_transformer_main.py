@@ -14,10 +14,6 @@
 
 r"""Main file for launching training/eval/predictions of mesh-transformer model."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import importlib
 import os
 import sys

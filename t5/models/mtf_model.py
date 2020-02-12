@@ -15,10 +15,6 @@
 # Lint as: python3
 """Mesh Tensorflow T5 Model."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import functools
 
 import os
