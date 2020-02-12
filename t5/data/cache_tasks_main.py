@@ -73,6 +73,10 @@ flags.DEFINE_list(
     "pipeline_options", ["--runner=DirectRunner"],
     "A comma-separated list of command line arguments to be used as options "
     "for the Beam Pipeline.")
+flags.DEFINE_boolean(
+    "overwrite", False,
+    "If true, overwrite the cached task even if it exists in the cached "
+    "directories.")
 
 
 def _import_modules(modules):
@@ -278,7 +282,7 @@ class GetStats(beam.PTransform):
 
 def run_pipeline(
     pipeline, task_names, cache_dir, max_input_examples=None,
-    excluded_tasks=None, modules_to_import=()):
+    excluded_tasks=None, modules_to_import=(), overwrite=False):
   """Run preprocess pipeline."""
   output_dirs = []
   # Includes all names by default.
@@ -294,10 +298,25 @@ def run_pipeline(
       # TODO(adarob): Add support for not TfdsTasks.
       logging.info("Skipping non-`TfdsTask`: '%s'", task.name)
       continue
-    if task.cache_dir:
+    if task.cache_dir and not overwrite:
       logging.info("Skipping task '%s', which exists in cache dir: %s",
                    task.name, task.cache_dir)
       continue
+
+    if overwrite:
+      if task.cache_dir == cache_dir:
+        # We were asked to overwrite the data, and the given directory that we
+        # should generate the data in already has the data, then delete it.
+        logging.warning(
+            "Overwriting already cached data for task '%s' in cache_dir %s",
+            task.name, cache_dir)
+        tf.io.gfile.rmtree(cache_dir)
+      else:
+        # Cannot overwrite, since cache_dir isn't same as task.cache_dir.
+        logging.warning("Not overwriting data in task.cache_dir since it is "
+                        "different from cache_dir - %s vs %s", task.cache_dir,
+                        cache_dir)
+        continue
 
     if not task.splits:
       logging.warning("Skipping task '%s' with no splits.", task.name)
@@ -352,7 +371,8 @@ def main(_):
     tf.io.gfile.makedirs(FLAGS.output_cache_dir)
     output_dirs = run_pipeline(
         pipeline, FLAGS.tasks, FLAGS.output_cache_dir,
-        FLAGS.max_input_examples, FLAGS.excluded_tasks, FLAGS.module_import)
+        FLAGS.max_input_examples, FLAGS.excluded_tasks, FLAGS.module_import,
+        FLAGS.overwrite)
 
   # TODO(adarob): Figure out a way to write these when each task completes.
   for output_dir in output_dirs:
