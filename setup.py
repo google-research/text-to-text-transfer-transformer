@@ -57,7 +57,11 @@ setuptools.setup(
         'tensorflow': ['tensorflow==1.15'],
         'gcp': ['gevent', 'google-api-python-client', 'google-compute-engine',
                 'google-cloud-storage', 'oauth2client'],
-        'cache-tasks': ['apache-beam'],
+        'cache-tasks': [
+            # TODO(adarob): Remove next line once avro-python3 is fixed.
+            'avro-python3!=1.9.2',
+            'apache-beam',
+        ],
         'test': ['pytest'],
     },
     entry_points={
