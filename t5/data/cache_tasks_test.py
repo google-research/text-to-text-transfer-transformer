@@ -87,6 +87,26 @@ class ProcessTaskBeamTest(test_utils.FakeTaskTest):
     # Check datasets.
     test_utils.verify_task_matches_fake_datasets(uncached_task, use_cached=True)
 
+  def test_overwrite(self):
+    with TestPipeline() as p:
+      _ = cache_tasks_main.run_pipeline(
+          p, ["uncached_task"], cache_dir=self.test_data_dir, overwrite=True)
+    # Add COMPLETED file so that we can load `uncached_task`.
+    test_utils.mark_completed(self.test_data_dir, "uncached_task")
+
+    actual_task_dir = os.path.join(self.test_data_dir, "uncached_task")
+    stat_old = tf.io.gfile.stat(
+        os.path.join(actual_task_dir, "train.tfrecord-00000-of-00002"))
+
+    with TestPipeline() as p:
+      _ = cache_tasks_main.run_pipeline(
+          p, ["uncached_task"], cache_dir=self.test_data_dir, overwrite=True)
+
+    stat_new = tf.io.gfile.stat(
+        os.path.join(actual_task_dir, "train.tfrecord-00000-of-00002"))
+
+    self.assertGreater(stat_new.mtime_nsec, stat_old.mtime_nsec)
+
 
 if __name__ == "__main__":
   tf.disable_v2_behavior()

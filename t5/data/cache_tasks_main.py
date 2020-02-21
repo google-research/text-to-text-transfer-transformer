@@ -298,24 +298,28 @@ def run_pipeline(
       # TODO(adarob): Add support for not TfdsTasks.
       logging.info("Skipping non-`TfdsTask`: '%s'", task.name)
       continue
-    if task.cache_dir and not overwrite:
+
+    task_cache_dir = task.cache_dir
+    output_dir = os.path.join(cache_dir, task.name)
+
+    if task_cache_dir and not overwrite:
       logging.info("Skipping task '%s', which exists in cache dir: %s",
-                   task.name, task.cache_dir)
+                   task.name, task_cache_dir)
       continue
 
-    if overwrite:
-      if task.cache_dir == cache_dir:
+    if task_cache_dir and overwrite:
+      if task_cache_dir == output_dir:
         # We were asked to overwrite the data, and the given directory that we
         # should generate the data in already has the data, then delete it.
         logging.warning(
             "Overwriting already cached data for task '%s' in cache_dir %s",
-            task.name, cache_dir)
-        tf.io.gfile.rmtree(cache_dir)
+            task.name, output_dir)
+        tf.io.gfile.rmtree(output_dir)
       else:
         # Cannot overwrite, since cache_dir isn't same as task.cache_dir.
         logging.warning("Not overwriting data in task.cache_dir since it is "
                         "different from cache_dir - %s vs %s", task.cache_dir,
-                        cache_dir)
+                        output_dir)
         continue
 
     if not task.splits:
@@ -325,7 +329,6 @@ def run_pipeline(
     # Log this task to the terminal.
     print("Caching task '%s' with splits: %s" % (task.name, task.splits))
 
-    output_dir = os.path.join(cache_dir, task.name)
     output_dirs.append(output_dir)
 
     for split in task.splits:
