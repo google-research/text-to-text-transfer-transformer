@@ -181,7 +181,7 @@ class MtfModel(T5Model):
         model_type=self._model_type,
         vocabulary=vocabulary,
         layout_rules=self._layout_rules,
-        mesh_shape=self._mesh_shape,
+        mesh_shape=mtf.Shape([]) if disable_tpu else self._mesh_shape,
         model_dir=self._model_dir,
         batch_size=self.batch_size,
         sequence_length=self._sequence_length,
@@ -316,7 +316,7 @@ class MtfModel(T5Model):
         input_file, output_file)
 
   def export(self, export_dir=None, checkpoint_step=-1, beam_size=1,
-             temperature=1.0,
+             temperature=1.0, batch_size=1,
              sentencepiece_model_path=t5.data.DEFAULT_SPM_PATH):
     """Exports a TensorFlow SavedModel.
 
@@ -329,6 +329,8 @@ class MtfModel(T5Model):
         beam search.
       temperature: float, a value between 0 and 1 (must be 0 if beam_size > 1)
         0.0 means argmax, 1.0 means sample according to predicted distribution.
+      batch_size: int, the (max) number of sequences per predict batch in the
+        SavedModel.
       sentencepiece_model_path: str, path to the SentencePiece model file to use
         for decoding. Must match the one used during training.
     """
@@ -346,6 +348,6 @@ class MtfModel(T5Model):
     export_dir = export_dir or self._model_dir
     utils.export_model(
         self.estimator(vocabulary, disable_tpu=True), export_dir, vocabulary,
-        self._sequence_length, batch_size=self._batch_size,
+        self._sequence_length, batch_size=batch_size,
         checkpoint_path=os.path.join(self._model_dir, model_ckpt))
 
