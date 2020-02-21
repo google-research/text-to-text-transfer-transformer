@@ -22,7 +22,7 @@ with open('README.md') as fp:
 
 setuptools.setup(
     name='t5',
-    version='0.1.8',
+    version='0.2.0',
     description='Text-to-text transfer transformer',
     long_description=_LONG_DESCRIPTION,
     long_description_content_type='text/markdown',
@@ -40,7 +40,7 @@ setuptools.setup(
         'allennlp',
         'babel',
         'gin-config',
-        'mesh-tensorflow[transformer]>=0.1.9',
+        'mesh-tensorflow[transformer]>=0.1.10',
         'nltk',
         'numpy',
         'pandas',

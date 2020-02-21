@@ -176,11 +176,10 @@ class MtfModel(T5Model):
     else:
       self._batch_size = batch_size
 
-  def estimator(self, vocabulary, init_checkpoint=None):
+  def estimator(self, vocabulary, init_checkpoint=None, disable_tpu=False):
     return utils.get_estimator(
         model_type=self._model_type,
-        input_vocab_size=utils.inputs_vocabulary(vocabulary).vocab_size,
-        output_vocab_size=utils.targets_vocabulary(vocabulary).vocab_size,
+        vocabulary=vocabulary,
         layout_rules=self._layout_rules,
         mesh_shape=self._mesh_shape,
         model_dir=self._model_dir,
@@ -194,7 +193,7 @@ class MtfModel(T5Model):
         predict_fn=self._predict_fn,
         variable_filter=self._variable_filter,
         ensemble_inputs=self._ensemble_inputs,
-        use_tpu=self._tpu,
+        use_tpu=None if disable_tpu else self._tpu,
         tpu_job_name=self._tpu_job_name,
         iterations_per_loop=self._iterations_per_loop,
         cluster=self._cluster,
@@ -311,10 +310,10 @@ class MtfModel(T5Model):
       gin.bind_parameter("Bitransformer.decode.temperature", temperature)
 
     vocabulary = t5.data.SentencePieceVocabulary(sentencepiece_model_path)
-    utils.infer_model(self.estimator(vocabulary), vocabulary,
-                      self._sequence_length, self.batch_size,
-                      self._model_type, self._model_dir, checkpoint_steps,
-                      input_file, output_file)
+    utils.infer_model(
+        self.estimator(vocabulary), vocabulary, self._sequence_length,
+        self.batch_size, self._model_type, self._model_dir, checkpoint_steps,
+        input_file, output_file)
 
   def export(self, export_dir=None, checkpoint_step=-1, beam_size=1,
              temperature=1.0,
@@ -345,7 +344,8 @@ class MtfModel(T5Model):
     vocabulary = t5.data.SentencePieceVocabulary(sentencepiece_model_path)
     model_ckpt = "model.ckpt-" + str(checkpoint_step)
     export_dir = export_dir or self._model_dir
-    utils.export_model(self.estimator(vocabulary), export_dir, vocabulary,
-                       self._sequence_length,
-                       os.path.join(self._model_dir, model_ckpt))
+    utils.export_model(
+        self.estimator(vocabulary, disable_tpu=True), export_dir, vocabulary,
+        self._sequence_length, batch_size=self._batch_size,
+        checkpoint_path=os.path.join(self._model_dir, model_ckpt))
 
