@@ -12,18 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Functions for computing metrics."""
+"""Functions for computing metrics.
+
+Every function must accept a list of targets and a list of predictions and
+return a dict of metrics.
+
+Functions should assume all text inputs are unicode strings.
+"""
 
 import collections
 
 import re
 from absl import logging
-from allennlp.tools import squad_eval
 import numpy as np
 import sacrebleu
 import scipy.stats
 import sklearn.metrics
-import tensorflow.compat.v1 as tf
+from t5.evaluation import qa_utils
 
 from rouge_score import rouge_scorer
 from rouge_score import scoring
@@ -40,13 +45,9 @@ def bleu(targets, predictions):
   Returns:
     bleu_score across all targets and predictions
   """
-  # sacrebleu expects unicode
-  predictions = [tf.compat.as_text(x) for x in predictions]
-
   if isinstance(targets[0], list):
-    targets = [[tf.compat.as_text(x) for x in target] for target in targets]
+    targets = [[x for x in target] for target in targets]
   else:
-    targets = [tf.compat.as_text(x) for x in targets]
     # Need to wrap targets in another list for corpus_bleu.
     targets = [targets]
 
@@ -78,7 +79,6 @@ def rouge(targets, predictions, score_keys=None):
 
   def _prepare_summary(summary):
     # Make sure the summary is not bytes-type
-    summary = tf.compat.as_text(summary)
     # Add newlines between sentences so that rougeLsum is computed correctly.
     summary = summary.replace(" . ", " .\n")
     return summary
@@ -99,8 +99,8 @@ def rouge(targets, predictions, score_keys=None):
   return {key: result[key].mid.fmeasure*100 for key in score_keys}
 
 
-def span_qa(targets, predictions):
-  """Computes question answering metrics for span prediction tasks.
+def span_squad(targets, predictions):
+  """Computes SQuAD metrics for span prediction tasks.
 
   Uses qa metric function to compute EM and F1 score.
 
@@ -134,19 +134,19 @@ def span_qa(targets, predictions):
 
     return " ".join(context[start_index:end_index+1])
 
-  contexts = [space_tok(tf.compat.as_text(t["context"])) for t in targets]
+  contexts = [space_tok(t["context"]) for t in targets]
   answers = [t["answers"] for t in targets]
 
-  predictions = [space_tok(tf.compat.as_text(p)) for p in predictions]
+  predictions = [space_tok(p) for p in predictions]
   final_predictions = [
       get_answer_text_from_context(c, p) for c, p in zip(contexts, predictions)
   ]
 
-  return qa(answers, final_predictions)
+  return squad(answers, final_predictions)
 
 
-def qa(targets, predictions):
-  """Computes question answering metrics, maximizing over answers per question.
+def squad(targets, predictions):
+  """Computes SQuAD metrics, maximizing over answers per question.
 
   Args:
     targets: list of lists of strings
@@ -155,22 +155,24 @@ def qa(targets, predictions):
   Returns:
     dict with score_key: squad score across all targets and predictions
   """
-  assert len(targets) == len(predictions)
-  targets = [[tf.compat.as_text(t) for t in u] for u in targets]
-  predictions = [tf.compat.as_text(p) for p in predictions]
-  em = np.mean([
-      squad_eval.metric_max_over_ground_truths(  # pylint:disable=g-complex-comprehension
-          squad_eval.exact_match_score, p, t)
-      for p, t in zip(predictions, targets)
-  ])
-  f1 = np.mean([
-      squad_eval.metric_max_over_ground_truths(squad_eval.f1_score, p, t)
-      for p, t in zip(predictions, targets)
-  ])
-  em *= 100
-  f1 *= 100
-  logging.info("EM = %.2f, F1 = %.2f", em, f1)
-  return {"em": em, "f1": f1}
+  targets = [[qa_utils.normalize_squad(t) for t in u] for u in targets]
+  predictions = [qa_utils.normalize_squad(p) for p in predictions]
+  return qa_utils.qa_metrics(targets, predictions)
+
+
+def trivia_qa(targets, predictions):
+  """Computes TriviaQA metrics, maximizing over answers per question.
+
+  Args:
+    targets: list of lists of strings
+    predictions: list of strings
+
+  Returns:
+    dict with score_key: squad score across all targets and predictions
+  """
+  targets = [[qa_utils.normalize_trivia_qa(t) for t in u] for u in targets]
+  predictions = [qa_utils.normalize_trivia_qa(p) for p in predictions]
+  return qa_utils.qa_metrics(targets, predictions)
 
 
 def accuracy(targets, predictions):

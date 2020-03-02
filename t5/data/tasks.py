@@ -201,7 +201,7 @@ SUPERGLUE_METRICS = collections.OrderedDict([
         metrics.multirc_f1_over_all_answers,
         metrics.mean_group_metric(metrics.exact_match)
     ]),
-    ("record", [metrics.qa]),
+    ("record", [metrics.squad]),
     ("rte", [metrics.accuracy]),
     ("wic", [metrics.accuracy]),
     ("axb", []),  # Only test set available.
@@ -285,7 +285,7 @@ TaskRegistry.add(
     tfds_name="squad/plain_text:1.0.0",
     text_preprocessor=preprocessors.squad,
     postprocess_fn=postprocessors.qa,
-    metric_fns=[metrics.qa],
+    metric_fns=[metrics.squad],
     sentencepiece_model_path=DEFAULT_SPM_PATH)
 
 # Maximized evaluation metrics over all answers.
@@ -296,7 +296,7 @@ TaskRegistry.add(
     text_preprocessor=functools.partial(
         preprocessors.squad, include_context=False),
     postprocess_fn=postprocessors.qa,
-    metric_fns=[metrics.qa],
+    metric_fns=[metrics.squad],
     sentencepiece_model_path=DEFAULT_SPM_PATH)
 
 # Squad span prediction task instead of text.
@@ -306,7 +306,7 @@ TaskRegistry.add(
     tfds_name="squad/plain_text:1.0.0",
     text_preprocessor=preprocessors.squad_span_space_tokenized,
     postprocess_fn=postprocessors.span_qa,
-    metric_fns=[metrics.span_qa],
+    metric_fns=[metrics.span_squad],
     sentencepiece_model_path=DEFAULT_SPM_PATH)
 
 # Deprecated: Use `squad_v010_allanswers` instead.
@@ -315,7 +315,7 @@ TaskRegistry.add(
     TfdsTask,
     tfds_name="squad/plain_text:1.0.0",
     text_preprocessor=preprocessors.squad,
-    metric_fns=[metrics.qa],
+    metric_fns=[metrics.squad],
     sentencepiece_model_path=DEFAULT_SPM_PATH)
 
 # ================================= TriviaQA ===================================

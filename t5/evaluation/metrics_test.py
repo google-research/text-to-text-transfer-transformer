@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Lint as: python3
 """Tests for t5.evaluation.metrics."""
 
 from absl.testing import absltest
@@ -51,39 +52,25 @@ class MetricsTest(test_utils.BaseMetricsTest):
         metrics.rouge([ref, ref], ["", ""]),
         {"rouge1": 0, "rouge2": 0, "rougeLsum": 0})
 
-  def test_rouge_bytes(self):
-    ref = b"this \x7e is a string"
-    self.assertDictClose(
-        metrics.rouge([ref, ref], [ref, ref]),
-        {"rouge1": 100, "rouge2": 100, "rougeLsum": 100})
-
-  def test_same_qa(self):
+  def test_same_squad(self):
     ref = "this is a string"
     self.assertDictClose(
-        metrics.qa([["", ref], [ref, ref]], [ref, ref]), {
+        metrics.squad([["", ref], [ref, ref]], [ref, ref]), {
             "em": 100,
             "f1": 100,
         })
 
-  def test_different_qa(self):
+  def test_different_squad(self):
     ref = "this is a string"
     self.assertDictClose(
-        metrics.qa([[ref, ref], [ref, ref]], ["", ""]), {
+        metrics.squad([[ref, ref], [ref, ref]], ["", ""]), {
             "em": 0,
             "f1": 0
         })
 
-  def test_qa_bytes(self):
-    ref = b"this is a string"
+  def test_squad_big(self):
     self.assertDictClose(
-        metrics.qa([["", ref], [ref, ref]], [ref, ref]), {
-            "em": 100,
-            "f1": 100
-        })
-
-  def test_qa_big(self):
-    self.assertDictClose(
-        metrics.qa(
+        metrics.squad(
             [
                 ["big moose", "hippo"],
                 ["correct1"],
@@ -91,7 +78,44 @@ class MetricsTest(test_utils.BaseMetricsTest):
                 ["a", "b"],
             ],
             [
-                "a big  Moose!",
+                "‘a big  Moose!‘",
+                "wrong",
+                "correct2.2",
+                "c",
+            ],
+        ),
+        {"em": 25., "f1": 35.},
+        places=2
+    )
+
+  def test_squad_small(self):
+    self.assertDictClose(
+        metrics.squad([["abc abd", "$$$$"]], ["abd"]),
+        {"f1": 100 * 2.0 / 3.0, "em": 0.},
+    )
+
+  def test_span_squad(self):
+    ref = "a string"
+    ans_span = "start:2 end:3"
+    context = "this is a string! it has the answer."
+    self.assertDictClose(
+        metrics.span_squad(
+            [{"answers": ["", ref], "context": context},
+             {"answers": [ref, ref], "context": context}],
+            [ans_span, ans_span]),
+        {"em": 100, "f1": 100})
+
+  def test_trivia_qa(self):
+    self.assertDictClose(
+        metrics.trivia_qa(
+            [
+                ["big moose", "hippo"],
+                ["correct1"],
+                ["correct2.1", "correct2.2"],
+                ["a", "b"],
+            ],
+            [
+                "‘a big  Moose!‘",
                 "wrong",
                 "correct2.2",
                 "c",
@@ -100,57 +124,29 @@ class MetricsTest(test_utils.BaseMetricsTest):
         {"em": 50., "f1": 50.},
     )
 
-  def test_qa_small(self):
-    self.assertDictClose(
-        metrics.qa([["abc abd", "$$$$"]], ["abd"]),
-        {"f1": 100 * 2.0 / 3.0, "em": 0.},
-    )
-
-  def test_span_qa(self):
-    ref = "a string"
-    ans_span = "start:2 end:3"
-    context = "this is a string! it has the answer."
-    self.assertDictClose(
-        metrics.span_qa(
-            [{"answers": ["", ref], "context": context},
-             {"answers": [ref, ref], "context": context}],
-            [ans_span, ans_span]),
-        {"em": 100, "f1": 100})
-
-  def test_span_qa_bytes(self):
-    ref = b"a string"
-    ans_span = b"start:2 end:3"
-    context = b"this is a string! it has the answer."
-
-    self.assertDictClose(
-        metrics.span_qa(
-            [{"answers": ["", ref], "context": context},
-             {"answers": [ref, ref], "context": context}],
-            [ans_span, ans_span]),
-        {"em": 100, "f1": 100})
-
-  def test_span_qa_one_word(self):
+  def test_span_squad_one_word(self):
     ref = "answer"
     ans_span = "start:1 end:1"
     context = "the answer"
 
     self.assertDictClose(
-        metrics.span_qa([{
+        metrics.span_squad([{
             "answers": [ref],
             "context": context
         }], [ans_span]), {"em": 100, "f1": 100})
 
-  def test_span_qa_non_numbers(self):
+  def test_span_squad_non_numbers(self):
 
     ref = "answer"
     ans_span = "start:test end:why"
     context = "the answer"
 
     self.assertDictClose(
-        metrics.span_qa([{
+        metrics.span_squad([{
             "answers": [ref],
             "context": context
         }], [ans_span]), {"em": 0, "f1": 0})
+
 
   def test_sequence_accuracy(self):
     s1 = "this is a string."

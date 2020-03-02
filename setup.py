@@ -22,7 +22,7 @@ with open('README.md') as fp:
 
 setuptools.setup(
     name='t5',
-    version='0.2.0',
+    version='0.2.1',
     description='Text-to-text transfer transformer',
     long_description=_LONG_DESCRIPTION,
     long_description_content_type='text/markdown',
@@ -37,7 +37,6 @@ setuptools.setup(
     scripts=[],
     install_requires=[
         'absl-py',
-        'allennlp==0.9.0',  # TODO(adarob): Copy `squad_eval` into T5.
         'babel',
         'gin-config',
         'mesh-tensorflow[transformer]>=0.1.10',
