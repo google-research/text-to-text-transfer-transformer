@@ -35,7 +35,7 @@ for config_suffix in _c4_config_suffixes:
       "c4{name}_v020_unsupervised".format(
           name=config_suffix.replace(".", "_")),
       TfdsTask,
-      tfds_name="c4/en{config}:1.0.0".format(config=config_suffix),
+      tfds_name="c4/en{config}:2.2.0".format(config=config_suffix),
       text_preprocessor=functools.partial(
           preprocessors.rekey, key_map={"inputs": None, "targets": "text"}),
       token_preprocessor=preprocessors.unsupervised,
@@ -46,8 +46,7 @@ for config_suffix in _c4_config_suffixes:
 TaskRegistry.add(
     "wikipedia_20190301.en_v003_unsupervised",
     TfdsTask,
-    # 0.0.4 is identical to 0.0.3 except empty records removed.
-    tfds_name="wikipedia/20190301.en:0.0.4",
+    tfds_name="wikipedia/20190301.en:1.0.0",
     text_preprocessor=functools.partial(
         preprocessors.rekey, key_map={"inputs": None, "targets": "text"}),
     token_preprocessor=preprocessors.unsupervised,
@@ -129,7 +128,7 @@ for b in tfds.text.glue.Glue.builder_configs.values():
   TaskRegistry.add(
       "glue_%s_v002" % b.name,
       TfdsTask,
-      tfds_name="glue/%s:%s" % (b.name, "1.0.0" if b.name == "ax" else "0.0.2"),
+      tfds_name="glue/%s:1.0.0" % b.name,
       text_preprocessor=_get_glue_text_preprocessor(b),
       metric_fns=GLUE_METRICS[b.name],
       sentencepiece_model_path=DEFAULT_SPM_PATH,
@@ -141,7 +140,7 @@ for b in tfds.text.glue.Glue.builder_configs.values():
 TaskRegistry.add(
     "cnn_dailymail_v002",
     TfdsTask,
-    tfds_name="cnn_dailymail/plain_text:0.0.2",
+    tfds_name="cnn_dailymail/plain_text:1.0.0",
     text_preprocessor=functools.partial(preprocessors.summarize,
                                         article_key="article",
                                         summary_key="highlights"),
@@ -151,15 +150,15 @@ TaskRegistry.add(
 # ==================================== WMT =====================================
 # Format: year, tfds builder config, tfds version
 b_configs = [
-    ("14", tfds.translate.wmt14.Wmt14Translate.builder_configs["de-en"], "0.0.3"
+    ("14", tfds.translate.wmt14.Wmt14Translate.builder_configs["de-en"], "1.0.0"
     ),
-    ("14", tfds.translate.wmt14.Wmt14Translate.builder_configs["fr-en"], "0.0.3"
+    ("14", tfds.translate.wmt14.Wmt14Translate.builder_configs["fr-en"], "1.0.0"
     ),
-    ("16", tfds.translate.wmt16.Wmt16Translate.builder_configs["ro-en"], "0.0.3"
+    ("16", tfds.translate.wmt16.Wmt16Translate.builder_configs["ro-en"], "1.0.0"
     ),
-    ("15", tfds.translate.wmt15.Wmt15Translate.builder_configs["fr-en"], "0.0.4"
+    ("15", tfds.translate.wmt15.Wmt15Translate.builder_configs["fr-en"], "1.0.0"
     ),
-    ("19", tfds.translate.wmt19.Wmt19Translate.builder_configs["de-en"], "0.0.3"
+    ("19", tfds.translate.wmt19.Wmt19Translate.builder_configs["de-en"], "1.0.0"
     ),
 ]
 
@@ -181,7 +180,7 @@ b = tfds.translate.wmt_t2t.WmtT2tTranslate.builder_configs["de-en"]
 TaskRegistry.add(
     "wmt_t2t_ende_v003",
     TfdsTask,
-    tfds_name="wmt_t2t_translate/de-en:0.0.1",
+    tfds_name="wmt_t2t_translate/de-en:1.0.0",
     text_preprocessor=functools.partial(
         preprocessors.translate,
         source_language=b.language_pair[1],
@@ -241,7 +240,7 @@ for b in tfds.text.super_glue.SuperGlue.builder_configs.values():
 TaskRegistry.add(
     "dpr_v001_simple",
     TfdsTask,
-    tfds_name="definite_pronoun_resolution/plain_text:0.0.1",
+    tfds_name="definite_pronoun_resolution/plain_text:1.0.0",
     text_preprocessor=preprocessors.definite_pronoun_resolution_simple,
     metric_fns=[metrics.accuracy],
     sentencepiece_model_path=DEFAULT_SPM_PATH)
@@ -271,7 +270,7 @@ TaskRegistry.add(
 TaskRegistry.add(
     "glue_wnli_v002_simple_eval",
     TfdsTask,
-    tfds_name="glue/wnli:0.0.2",
+    tfds_name="glue/wnli:1.0.0",
     text_preprocessor=preprocessors.wnli_simple,
     postprocess_fn=postprocessors.wsc_simple,
     metric_fns=[metrics.accuracy],
@@ -283,7 +282,7 @@ TaskRegistry.add(
 TaskRegistry.add(
     "squad_v010_allanswers",
     TfdsTask,
-    tfds_name="squad/plain_text:0.1.0",
+    tfds_name="squad/plain_text:1.0.0",
     text_preprocessor=preprocessors.squad,
     postprocess_fn=postprocessors.qa,
     metric_fns=[metrics.qa],
@@ -293,7 +292,7 @@ TaskRegistry.add(
 TaskRegistry.add(
     "squad_v010_context_free",
     TfdsTask,
-    tfds_name="squad/plain_text:0.1.0",
+    tfds_name="squad/plain_text:1.0.0",
     text_preprocessor=functools.partial(
         preprocessors.squad, include_context=False),
     postprocess_fn=postprocessors.qa,
@@ -304,7 +303,7 @@ TaskRegistry.add(
 TaskRegistry.add(
     "squad_v010_allanswers_span",
     TfdsTask,
-    tfds_name="squad/plain_text:0.1.0",
+    tfds_name="squad/plain_text:1.0.0",
     text_preprocessor=preprocessors.squad_span_space_tokenized,
     postprocess_fn=postprocessors.span_qa,
     metric_fns=[metrics.span_qa],
@@ -314,7 +313,7 @@ TaskRegistry.add(
 TaskRegistry.add(
     "squad_v010",
     TfdsTask,
-    tfds_name="squad/plain_text:0.1.0",
+    tfds_name="squad/plain_text:1.0.0",
     text_preprocessor=preprocessors.squad,
     metric_fns=[metrics.qa],
     sentencepiece_model_path=DEFAULT_SPM_PATH)
