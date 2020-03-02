@@ -331,6 +331,9 @@ class MtfModel(T5Model):
         0.0 means argmax, 1.0 means sample according to predicted distribution.
       sentencepiece_model_path: str, path to the SentencePiece model file to use
         for decoding. Must match the one used during training.
+
+    Returns:
+      The string path to the exported directory.
     """
     if checkpoint_step == -1:
       checkpoint_step = _get_latest_checkpoint_from_dir(self._model_dir)
@@ -344,7 +347,7 @@ class MtfModel(T5Model):
     vocabulary = t5.data.SentencePieceVocabulary(sentencepiece_model_path)
     model_ckpt = "model.ckpt-" + str(checkpoint_step)
     export_dir = export_dir or self._model_dir
-    utils.export_model(
+    return utils.export_model(
         self.estimator(vocabulary, disable_tpu=True), export_dir, vocabulary,
         self._sequence_length, batch_size=self.batch_size,
         checkpoint_path=os.path.join(self._model_dir, model_ckpt))
