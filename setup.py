@@ -22,7 +22,7 @@ with open('README.md') as fp:
 
 setuptools.setup(
     name='t5',
-    version='0.2.1',
+    version='0.3.0',
     description='Text-to-text transfer transformer',
     long_description=_LONG_DESCRIPTION,
     long_description_content_type='text/markdown',
@@ -39,7 +39,7 @@ setuptools.setup(
         'absl-py',
         'babel',
         'gin-config',
-        'mesh-tensorflow[transformer]>=0.1.10',
+        'mesh-tensorflow[transformer]>=0.1.12',
         'nltk',
         'numpy',
         'pandas',
@@ -49,7 +49,7 @@ setuptools.setup(
         'scipy',
         'sentencepiece',
         'six>=1.14',  # TODO(adarob): Remove once rouge-score is updated.
-        'tensorflow-text==1.15.0rc0',
+        'tensorflow-text==1.15',
         'tfds-nightly',
     ],
     extras_require={

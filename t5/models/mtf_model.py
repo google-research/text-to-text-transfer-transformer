@@ -75,6 +75,8 @@ class MtfModel(T5Model):
       sequence_length=None,
       model_type="bitransformer",
       layout_rules="ensemble:ensemble,batch:batch,d_ff:model,heads:model,vocab:model,experts:batch",
+      mesh_shape=None,
+      mesh_devices=None,
       autostack=True,
       learning_rate_schedule=None,
       keep_checkpoint_max=None,
@@ -101,6 +103,12 @@ class MtfModel(T5Model):
         the (packed) sequence length, e.g. {"inputs": 512, "targets": 128}
       model_type: str, a model type from mesh tf models.
       layout_rules: an input to mtf.convert_to_layout_rules()
+      mesh_shape: an mtf.Shape or string (e.g., "model:2,batch:4") specifying
+        how the data/model should be parallelized. If None (default), the mesh
+        shape will be constructed using the supplied `tpu_topology` and
+        `model_parallelism` arguments.
+      mesh_devices: a list of strings, the device names to use for each mesh
+        slice. Only required for GPU.
       autostack: boolean, internally combine variables.
       learning_rate_schedule: an optional function taking the scalar name
         argument `step` and the numeric argument `total_train_steps` and return
@@ -121,9 +129,7 @@ class MtfModel(T5Model):
       ensemble_inputs: an integer, see `train_model` docstring for details.
       iterations_per_loop: integer, steps per train loop
     """
-
-    # TODO(adarob): Allow setting mesh_shape and mesh_devices directly for GPU.
-    mesh_shape = (
+    mesh_shape = mesh_shape or (
         utils.tpu_mesh_shape(tpu_topology, model_parallelism) if tpu else "")
 
     sequence_length = sequence_length or {"inputs": 512, "targets": 512}
@@ -144,6 +150,7 @@ class MtfModel(T5Model):
 
     self._layout_rules = mtf.convert_to_layout_rules(layout_rules)
     self._mesh_shape = mtf.convert_to_shape(mesh_shape)
+    self._mesh_devices = mesh_devices
 
     self._autostack = autostack
     self._keep_checkpoint_max = keep_checkpoint_max
@@ -182,6 +189,7 @@ class MtfModel(T5Model):
         vocabulary=vocabulary,
         layout_rules=self._layout_rules,
         mesh_shape=mtf.Shape([]) if disable_tpu else self._mesh_shape,
+        mesh_devices=self._mesh_devices,
         model_dir=self._model_dir,
         batch_size=self.batch_size,
         sequence_length=self._sequence_length,
