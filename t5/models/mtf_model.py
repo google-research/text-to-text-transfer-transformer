@@ -199,7 +199,8 @@ class MtfModel(T5Model):
         cluster=self._cluster,
         init_checkpoint=init_checkpoint)
 
-  def train(self, mixture_or_task_name, steps, init_checkpoint=None):
+  def train(self, mixture_or_task_name, steps, init_checkpoint=None,
+            split="train"):
     """Train the model on the given Mixture or Task.
 
     Args:
@@ -210,6 +211,7 @@ class MtfModel(T5Model):
       init_checkpoint: a string, if not None then read in variables from this
         checkpoint path when initializing variables. Will only initialize
         variables that appear both in the current graph and the checkpoint.
+      split: str, the mixture/task split to train on.
     """
     vocabulary = t5.data.get_mixture_or_task(
         mixture_or_task_name).get_vocabulary()
@@ -217,7 +219,7 @@ class MtfModel(T5Model):
         mesh_train_dataset_fn, mixture_or_task_name=mixture_or_task_name)
     utils.train_model(self.estimator(vocabulary, init_checkpoint), vocabulary,
                       self._sequence_length, self.batch_size, dataset_fn,
-                      steps, self._ensemble_inputs)
+                      steps, self._ensemble_inputs, dataset_split=split)
 
   def eval(self, mixture_or_task_name, checkpoint_steps=None, summary_dir=None,
            split="validation"):
@@ -234,7 +236,7 @@ class MtfModel(T5Model):
         checkpoint from the model directory.
       summary_dir: str, path to write TensorBoard events file summaries for
         eval. If None, use model_dir/eval_{split}.
-      split: str, the split to evaluate on.
+      split: str, the mixture/task split to evaluate on.
     """
     if checkpoint_steps == -1:
       checkpoint_steps = _get_latest_checkpoint_from_dir(self._model_dir)
@@ -249,7 +251,7 @@ class MtfModel(T5Model):
                      self._model_dir, dataset_fn, summary_dir, checkpoint_steps)
 
   def finetune(self, mixture_or_task_name, finetune_steps, pretrained_model_dir,
-               pretrained_checkpoint_step=-1):
+               pretrained_checkpoint_step=-1, split="train"):
     """Finetunes a model from an existing checkpoint.
 
     Args:
@@ -262,6 +264,7 @@ class MtfModel(T5Model):
       pretrained_checkpoint_step: int, checkpoint to initialize weights from. If
         -1 (default), use the latest checkpoint from the pretrained model
         directory.
+      split: str, the mixture/task split to finetune on.
     """
     if pretrained_checkpoint_step == -1:
       checkpoint_step = _get_latest_checkpoint_from_dir(pretrained_model_dir)
@@ -272,7 +275,8 @@ class MtfModel(T5Model):
 
     model_ckpt = "model.ckpt-" + str(checkpoint_step)
     self.train(mixture_or_task_name, checkpoint_step + finetune_steps,
-               init_checkpoint=os.path.join(pretrained_model_dir, model_ckpt))
+               init_checkpoint=os.path.join(pretrained_model_dir, model_ckpt),
+               split=split)
 
   def predict(self, input_file, output_file, checkpoint_steps=-1,
               beam_size=1, temperature=1.0,

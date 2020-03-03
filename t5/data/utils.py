@@ -626,7 +626,7 @@ class Task(DatasetProviderBase):
     if use_cached and not self.supports_caching:
       logging.warning(
           "Task '%s' does not support caching. Switching to on-the-fly "
-          "preprocessing.")
+          "preprocessing.", self.name)
       use_cached = False
     if use_cached:
       ds = self._get_cached_dataset(split, shuffle)
