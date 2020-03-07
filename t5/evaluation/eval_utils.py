@@ -167,11 +167,10 @@ def scores_to_df(scores, metric_names=None):
   metric_names = metric_names or METRIC_NAMES
   for tag in scores.keys():
     if tag not in metric_names:
-      raise ValueError(
-          "TensorBoard tag {} not found in metric_names. Known tags: {}".format(
-              tag, metric_names.keys()
-          )
-      )
+      metric_names[tag] = Metric(tag)
+      logging.warning(
+          "TensorBoard tag {} not found in metric_names. "
+          "Using tag as metric name.".format(tag))
 
   # Sort the tags in scores according to metric_names order
   sorted_tags = sorted(
