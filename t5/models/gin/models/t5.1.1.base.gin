@@ -1,0 +1,19 @@
+# -*-Python-*-
+
+# Some improvements on t5.1.0.base:
+#  - GEGLU-activated feedforward layers instead of RELU
+#    see https://arxiv.org/abs/2002.05202
+#    Note that d_ff goes down by a factor of 2/3 to compensate for the extra
+#    projection.
+#  - no dropout on training
+#  - no sharing of embedding weights with classifier layer.
+#
+# Also note that (although it is not dictated by this config), the checkpoints
+#   released for this config were trained on C4 only rather than a mix of tasks.
+
+include 'models/t5.1.0.base.gin'
+
+d_ff = 2048
+DenseReluDense.activation = ["gelu", "linear"]
+dropout_rate = 0.0
+Unitransformer.shared_embedding_and_softmax_weights = False
