@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Import API modules."""
+# Lint as: python3
+r"""Separate file for storing the current version of T5.
 
-import t5.data
-import t5.evaluation
-import t5.models
+Stored in a separate file so that setup.py can reference the version without
+pulling in all the dependencies in __init__.py.
+"""
 
-# Version number.
-from t5.version import __version__
+__version__ = '0.3.1'

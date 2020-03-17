@@ -14,7 +14,14 @@
 
 """Install T5."""
 
+import os
+import sys
 import setuptools
+
+# To enable importing version.py directly, we add its path to sys.path.
+version_path = os.path.join(os.path.dirname(__file__), 't5')
+sys.path.append(version_path)
+from version import __version__  # pylint: disable=g-import-not-at-top
 
 # Get the long description from the README file.
 with open('README.md') as fp:
@@ -22,7 +29,7 @@ with open('README.md') as fp:
 
 setuptools.setup(
     name='t5',
-    version='0.3.0',
+    version=__version__,
     description='Text-to-text transfer transformer',
     long_description=_LONG_DESCRIPTION,
     long_description_content_type='text/markdown',
@@ -49,11 +56,11 @@ setuptools.setup(
         'scipy',
         'sentencepiece',
         'six>=1.14',  # TODO(adarob): Remove once rouge-score is updated.
-        'tensorflow-text==1.15',
+        'tensorflow-text~=1.15',
         'tfds-nightly',
     ],
     extras_require={
-        'tensorflow': ['tensorflow==1.15'],
+        'tensorflow': ['tensorflow~=1.15'],
         'gcp': ['gevent', 'google-api-python-client', 'google-compute-engine',
                 'google-cloud-storage', 'oauth2client'],
         'cache-tasks': [
