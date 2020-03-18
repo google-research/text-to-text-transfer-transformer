@@ -69,10 +69,10 @@ flags.DEFINE_list(
     "Directories to search for Tasks in addition to defaults.")
 
 flags.DEFINE_boolean("use_model_api", False,
-                     "Use model API instead of utils.run.")
+                     "Use Model API instead of utils.run.")
 
 # Note: All the args from here on are only used when use_model_api is set
-flags.DEFINE_enum("mode", "train",
+flags.DEFINE_enum("mode", None,
                   ["train", "finetune", "eval", "predict", "export"],
                   "Mode with which to run the model.")
 
@@ -166,7 +166,6 @@ def main(_):
                  summary_dir=FLAGS.eval_summary_dir,
                  split=FLAGS.eval_split)
     elif FLAGS.mode == "finetune":
-
       if not (FLAGS.checkpoint_mode == "latest" or
               (FLAGS.checkpoint_mode == "specific" and
                len(FLAGS.checkpoint_steps) == 1)):
@@ -199,7 +198,11 @@ def main(_):
       model.export(
           export_dir=FLAGS.export_dir,
           checkpoint_step=checkpoint_steps)
+    else:
+      raise ValueError("--mode flag must be set when using Model API.")
   else:
+    if FLAGS.mode:
+      raise ValueError("--mode flag should only be set when using Model API.")
     utils.run(
         tpu_job_name=FLAGS.tpu_job_name,
         tpu=FLAGS.tpu,
