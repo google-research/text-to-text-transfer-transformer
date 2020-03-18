@@ -298,3 +298,24 @@ def multirc_f1_over_all_answers(targets, predictions):
   return f1_score_with_invalid(
       [t["value"] for t in targets], [p["value"] for p in predictions]
   )
+
+
+def auc(targets, predictions, targets_threshold=None):
+  """Compute Area Under the Receiver Operating Characteristic Curve (ROC AUC).
+
+  Args:
+    targets: np.ndarray of targets, either 0 or 1, or continuous values.
+    predictions: np.ndarray of predictions, any value.
+    targets_threshold: float, if target values are continuous values, this
+      threshold binarizes them.
+  Returns:
+    AUC ROC score.
+  """
+
+  if targets_threshold is not None:
+    targets = np.array(targets)
+    targets = np.where(targets < targets_threshold,
+                       np.zeros_like(targets, dtype=np.int32),
+                       np.ones_like(targets, dtype=np.int32))
+
+  return {"auc": sklearn.metrics.roc_auc_score(targets, predictions)}

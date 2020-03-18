@@ -215,6 +215,16 @@ class MetricsTest(test_utils.BaseMetricsTest):
              {"value": 1}]),
         {"f1": 50.})
 
+  def test_auc(self):
+    self.assertDictClose(
+        metrics.auc([0, 0, 1, 1], [0.1, 0.4, 0.35, 0.8]),
+        {"auc": 0.75})
+
+  def test_auc_non_binary(self):
+    self.assertDictClose(
+        metrics.auc([0.0, 0.2, 0.5, 0.7], [0.1, 0.4, 0.35, 0.8],
+                    targets_threshold=0.5),
+        {"auc": 0.75})
 
 if __name__ == "__main__":
   absltest.main()
