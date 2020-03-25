@@ -742,6 +742,7 @@ class TfdsTask(Task):
         metric_fns=metric_fns,
         **task_kwargs)
 
+  @property
   def supports_caching(self):
     return True
 
