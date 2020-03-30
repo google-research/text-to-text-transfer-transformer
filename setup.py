@@ -46,7 +46,7 @@ setuptools.setup(
         'absl-py',
         'babel',
         'gin-config',
-        'mesh-tensorflow[transformer]>=0.1.12',
+        'mesh-tensorflow[transformer]>=0.1.13',
         'nltk',
         'numpy',
         'pandas',
