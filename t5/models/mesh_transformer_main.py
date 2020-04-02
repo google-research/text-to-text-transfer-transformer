@@ -203,6 +203,11 @@ def main(_):
   else:
     if FLAGS.mode:
       raise ValueError("--mode flag should only be set when using Model API.")
+    if not FLAGS.tpu:
+      with gin.unlock_config():
+        gin.bind_parameter("utils.get_variable_dtype.slice_dtype", "float32")
+        gin.bind_parameter(
+            "utils.get_variable_dtype.activation_dtype", "float32")
     utils.run(
         tpu_job_name=FLAGS.tpu_job_name,
         tpu=FLAGS.tpu,

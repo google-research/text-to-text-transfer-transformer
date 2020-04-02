@@ -184,6 +184,13 @@ class MtfModel(T5Model):
       self._batch_size = batch_size
 
   def estimator(self, vocabulary, init_checkpoint=None, disable_tpu=False):
+
+    if not self._tpu or disable_tpu:
+      with gin.unlock_config():
+        gin.bind_parameter("utils.get_variable_dtype.slice_dtype", "float32")
+        gin.bind_parameter(
+            "utils.get_variable_dtype.activation_dtype", "float32")
+
     return utils.get_estimator(
         model_type=self._model_type,
         vocabulary=vocabulary,
@@ -353,8 +360,6 @@ class MtfModel(T5Model):
       gin.parse_config_file(_operative_config_path(self._model_dir))
       gin.bind_parameter("Bitransformer.decode.beam_size", beam_size)
       gin.bind_parameter("Bitransformer.decode.temperature", temperature)
-      gin.bind_parameter("utils.get_variable_dtype.slice_dtype", "float32")
-      gin.bind_parameter("utils.get_variable_dtype.activation_dtype", "float32")
 
     vocabulary = t5.data.SentencePieceVocabulary(sentencepiece_model_path)
     model_ckpt = "model.ckpt-" + str(checkpoint_step)
