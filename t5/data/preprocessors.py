@@ -2113,7 +2113,7 @@ def noise_span_to_unique_sentinel(tokens, noise_mask, vocabulary):
   with the markers in the targets.
 
   We want to generate training examples like
-  "We hold X to be Y that Z" -> "X these truths Y self evident Z that"
+  "We hold X to be Y that" -> "X these truths Y self evident Z"
 
   Sentinels assigned in decreasing order within the sequence starting at
   vocabulary.size - 1.  That is, we appropriate the last tokens in the
