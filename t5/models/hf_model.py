@@ -216,7 +216,9 @@ class HfPyTorchModel(T5Model):
         if learning_rate_scheduler:
           learning_rate_scheduler.step()
 
-        self._writer.add_scalar("loss", loss.detach().numpy(), self._step)
+        self._writer.add_scalar(
+            "loss", loss.detach().cpu().numpy(), self._step
+        )
         self._writer.add_scalar("step/s", 1 / (time.time() - now), self._step)
         now = time.time()
         self._step += 1
@@ -334,7 +336,7 @@ class HfPyTorchModel(T5Model):
           predicted_tokens = self._model.generate(
               input_ids=self.to_tensor(batch["inputs"]), **generate_kwargs
           )
-          predicted_tokens = predicted_tokens.numpy().tolist()
+          predicted_tokens = predicted_tokens.cpu().numpy().tolist()
           predictions.extend(
               [
                   task.postprocess_fn(vocab.decode(p), example=ex)
