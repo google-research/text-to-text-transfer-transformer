@@ -21,6 +21,7 @@ import os
 import re
 import time
 
+from absl import logging
 import mesh_tensorflow.transformer.dataset as transformer_dataset
 import t5.data
 from t5.models.t5_model import T5Model
@@ -128,7 +129,7 @@ class HfPyTorchModel(T5Model):
     """
     model_dir = model_dir or self._model_dir
     path = os.path.join(model_dir, CHECKPOINT_FILE_FORMAT.format(step))
-    tf.logging.info("Loading from %s", path)
+    logging.info("Loading from %s", path)
     self._model.load_state_dict(torch.load(path))
     self._step = step
 
@@ -201,7 +202,7 @@ class HfPyTorchModel(T5Model):
 
         if not train_step % save_steps:
           # TODO(craffel): Consider saving optimizer and scheduler state.
-          tf.logging.info(f"Saving checkpoint for step {self._step}")
+          logging.info(f"Saving checkpoint for step {self._step}")
           self.save_checkpoint(self._step)
 
         self._model.zero_grad()
@@ -279,7 +280,7 @@ class HfPyTorchModel(T5Model):
 
     for task in tasks:
       if split not in task.splits:
-        tf.logging.info(
+        logging.info(
             "Task {task.name} has no '{split}' split; skipping eval."
         )
     tasks = [task for task in tasks if split in task.splits]
@@ -359,7 +360,7 @@ class HfPyTorchModel(T5Model):
           for metric_name, metric_value in scores.items():
             tag = f"eval/{task.name}/{metric_name}"
             self._writer.add_scalar(tag, metric_value, self._step)
-            tf.logging.info(
+            logging.info(
                 "%s at step %d: %.3f", tag, self._step, metric_value
             )
 
