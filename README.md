@@ -142,7 +142,7 @@ Please use the following command to create a TPU device in the Cloud VM.
 
 ```sh
 ctpu up --name=$TPU_NAME --project=$PROJECT --zone=$ZONE --tpu-size=v3-8  \
-        --tpu-only   --tf-version=1.15 --noconf
+        --tpu-only   --tf-version=2.1 --noconf
 ```
 
 
