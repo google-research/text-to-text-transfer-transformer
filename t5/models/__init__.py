@@ -16,3 +16,4 @@
 
 import t5.models.mesh_transformer
 from t5.models.mtf_model import MtfModel
+from t5.models.hf_model import HfPyTorchModel
