@@ -331,6 +331,7 @@ class HfPyTorchModel(T5Model):
         cached_examples[task.name] = batches
 
     def _eval_current_model():
+      self._model.eval()
       for task in tasks:
         ds = cached_examples[task.name]
         targets = cached_targets[task.name]
