@@ -193,6 +193,8 @@ class HfPyTorchModel(T5Model):
     """
     self._model.train()
     ds = get_dataset(mixture_or_task_name, sequence_length, split, batch_size)
+    # Repeat dataset forever
+    ds = itertools.cycle(ds)
     optimizer = optimizer(self._model.parameters())
     if learning_rate_scheduler:
       learning_rate_scheduler = learning_rate_scheduler(optimizer)
