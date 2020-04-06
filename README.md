@@ -13,7 +13,16 @@ T5 can be used as a library for future model development by providing useful mod
 
 * [Library](#library)
 * [Usage](#usage)
-* [GPU Usage](#gpu-usage)
+  * [Dataset Preparation](#dataset-preparation)
+    * [C4](#c4)
+  * [Installation](#installation)
+  * [Setting up TPUs on GCP](#setting-up-tpus-on-gcp)
+  * [Training](#training)
+  * [Fine-Tuning](#fine-tuning)
+  * [Eval](#eval)
+  * [Decode](#decode)
+  * [Export](#export)
+  * [GPU Usage](#gpu-usage)
 * [Released Model Checkpoints](#released-model-checkpoints)
 * [How to Cite](#how-to-cite)
 
@@ -94,7 +103,22 @@ If using a vanilla task, just make sure any file(s) loaded by your `dataset_fn` 
 
 Most of our predefined `Task`s use [TensorFlow Datasets (TFDS)][tfds] as their data source. When you run our training binary (see instructions [below](#training)) with a `TfdsTask`, the dataset will automatically be downloaded and prepared on its first use. After preparation is complete, the dataset is cached to your local storage to avoid this overhead in future runs.  If working in the cloud, we recommend you set the `--t5_tfds_data_dir` flag to point to a persistent storage location, such as a [GCS bucket][gcs]. This is a requirement when training on TPU.
 
-**Note:**_The [C4][c4] dataset we created for unsupervised pre-training is available in TensorFlow Datasets, but it requires a significant amount of bandwith for downloading the raw [Common Crawl][cc] scrapes and compute for its preparation. We suggest you take advantage of the [Apache Beam][beam] support in TFDS, which enables distributed preprocessing of the dataset and can be run on [Google Cloud Dataflow][gcd]. Otherwise, it is unlikely that you will be able to complete preprocessing in a human lifetime. Read more in the [TFDS Beam instructions][tfds_beam]._
+#### C4
+
+The [C4][c4] dataset we created for unsupervised pre-training is available in TensorFlow Datasets, but it requires a significant amount of bandwith for downloading the raw [Common Crawl][cc] scrapes (~7 TB) and compute for its preparation (~341 CPU-days). We suggest you take advantage of the [Apache Beam][beam] support in TFDS, which enables distributed preprocessing of the dataset and can be run on [Google Cloud Dataflow][gcd]. With 450 workers, the job should complete in ~18 hours.
+
+After defining `MY_PROJECT` and `MY_BUCKET` appropriately, you can build the datast in DataFlow from GCP using the following commands:
+
+```sh
+pip install tfds-nightly[c4,gcp]
+echo 'tfds-nightly[c4]' > beam_requirements.txt
+python -m tensorflow_datasets.scripts.download_and_prepare \
+  --datasets=c4/en \
+  --data_dir=gs://$MY_BUCKET/tensorflow_datasets \
+  --beam_pipeline_options="project=$MY_PROJECT,job_name=c4,staging_location=gs://$MY_BUCKET/binaries,temp_location=gs://$MY_BUCKET/temp,runner=DataflowRunner,requirements_file=/tmp/beam_requirements.txt,experiments=shuffle_mode=service"
+```
+
+Read more in the [TFDS Beam instructions][tfds_beam].
 
 ##### `TextLineTask`
 
@@ -250,7 +274,7 @@ To evaluate a specific checkpoint, simply set the `eval_checkpoint_step` paramet
 You can also use `greedy_decode.gin` or `sample_decode.gin` instead of `beam_search.gin` in the command above.
 
 
-#### Decode
+### Decode
 
 In order to produce predictions from a model in the T5 framework, you need to specify the model directory, decoding method, and which checkpoint step(s) to use for decoding. Assuming you have a text file of input sequences stored at `/path/to/intputs.txt`, an example command would be:
 
@@ -277,7 +301,7 @@ To predict with a specific checkpoint, simply set the `infer_checkpoint_step` pa
 
 You can also use `beam_search.gin` or `greedy_decode.gin` instead of `sample_decode.gin` in the command above.
 
-#### Export
+### Export
 
 You may also want to export a [SavedModel](https://www.tensorflow.org/guide/saved_model), which is useful for serving your trained model, (e.g., when deploying with [ML Engine](https://cloud.google.com/ml-engine/docs/deploying-models)).
 
