@@ -336,10 +336,8 @@ class HfPyTorchModel(T5Model):
         now = time.time()
         self._step += 1
 
-    # Save a final checkpoint step if we didn't just save one
-    if train_step % save_steps:
-      logging.info(f"Saving final checkpoint for step {self._step}")
-      self.save_checkpoint(self._step)
+    logging.info(f"Saving final checkpoint for step {self._step}")
+    self.save_checkpoint(self._step)
 
   def eval(
       self,
