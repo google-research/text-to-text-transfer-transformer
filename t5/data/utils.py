@@ -342,7 +342,8 @@ class Task(DatasetProviderBase):
                postprocess_fn=None,
                token_preprocessor=None,
                output_features=None,
-               num_input_examples=None):
+               num_input_examples=None,
+               supports_caching=False):
     """Task constructor.
 
     Args:
@@ -380,6 +381,7 @@ class Task(DatasetProviderBase):
       num_input_examples: dict(string: int) or None, a dictionary mapping split
         to its size in number of input examples (before preprocessing). The
         `num_input_examples` method will return None if not provided.
+      supports_caching: bool, whether or not this task supports offline caching.
     """
     if not _VALID_TASK_NAME_REGEX.match(name):
       raise ValueError(
@@ -416,6 +418,7 @@ class Task(DatasetProviderBase):
 
     self._splits = splits
     self._num_input_examples = num_input_examples
+    self._supports_caching = supports_caching
 
   @property
   def name(self):
@@ -577,8 +580,8 @@ class Task(DatasetProviderBase):
 
   @property
   def supports_caching(self):
-    """Wether or not this type of tasks supports offline caching."""
-    return False
+    """Wether or not this task supports offline caching."""
+    return self._supports_caching
 
   def assert_cached(self):
     """Raises an assertion error if cached dataset does not exist."""
@@ -696,6 +699,7 @@ class TfdsTask(Task):
       metric_fns,
       tfds_data_dir=None,
       splits=None,
+      supports_caching=True,
       **task_kwargs):
     """TfdsTask constructor.
 
@@ -718,6 +722,7 @@ class TfdsTask(Task):
         allowable canonical splits (e.g., 'validation') to TFDS splits or slices
         (e.g., 'train[':1%']), or None. The default, None, uses all available
         splits from the TFDS dataset info.
+      supports_caching: bool, whether or not this task supports offline caching.
       **task_kwargs: dict, additional keyword arguments for the parent `Task`
         class.
     """
@@ -740,11 +745,8 @@ class TfdsTask(Task):
         text_preprocessor=text_preprocessor,
         sentencepiece_model_path=sentencepiece_model_path,
         metric_fns=metric_fns,
+        supports_caching=supports_caching,
         **task_kwargs)
-
-  @property
-  def supports_caching(self):
-    return True
 
   @property
   def splits(self):
