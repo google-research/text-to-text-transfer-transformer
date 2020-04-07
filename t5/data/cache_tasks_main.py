@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Lint as: python3
 r"""Dumps preprocessed, tokenized tasks as TFRecord of tf.Examples.
 
 Usage:
@@ -295,8 +296,12 @@ def run_pipeline(
   for task_name in task_names:
     task = t5.data.TaskRegistry.get(task_name)
     if not isinstance(task, t5.data.TfdsTask):
-      # TODO(adarob): Add support for not TfdsTasks.
+      # TODO(adarob): Add support for non-TfdsTasks.
       logging.info("Skipping non-`TfdsTask`: '%s'", task.name)
+      continue
+    if not task.supports_caching:
+      logging.info(
+          "Skipping task that does not support caching: '%s'", task.name)
       continue
 
     task_cache_dir = task.cache_dir
