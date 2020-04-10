@@ -58,6 +58,8 @@ setuptools.setup(
         'six>=1.14',  # TODO(adarob): Remove once rouge-score is updated.
         'tensorflow-text',
         'tfds-nightly',
+        'torch',
+        'transformers>=2.7.0',
     ],
     extras_require={
         'gcp': ['gevent', 'google-api-python-client', 'google-compute-engine',
