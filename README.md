@@ -401,6 +401,8 @@ We have released the following checkpoints for pre-trained models described in o
 * **T5-3B** (3 billion parameters): [gs://t5-data/pretrained_models/3B](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/3B/)
 * **T5-11B** (11 billion parameters): [gs://t5-data/pretrained_models/11B](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/11B/)
 
+See [here][released_checkpoints] for a list of additional experimental pre-trained model checkpoints.
+
 # How to Cite
 If you extend or use this work, please cite the [paper][paper] where it was introduced:
 
@@ -416,6 +418,7 @@ If you extend or use this work, please cite the [paper][paper] where it was intr
 ```
 
 [paper]: https://arxiv.org/abs/1910.10683
+[released_checkpoints]: https://github.com/google-research/text-to-text-transfer-transformer/blob/master/released_checkpoints.md
 [beam]: https://beam.apache.org
 [c4]: https://www.tensorflow.org/datasets/catalog/c4
 [cc]: https://commoncrawl.org
