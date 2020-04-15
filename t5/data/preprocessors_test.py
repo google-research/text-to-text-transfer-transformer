@@ -488,6 +488,47 @@ class PreprocessorsTest(tf.test.TestCase):
           [i if i != 'X' else out_split.pop(0) for i in inp])
       self.assertEqual(reconstructed, original)
 
+  def test_fill_in_the_blank_sized(self):
+    def _validate_data(data, valid_bins, og_length=15):
+      # Remove the prefix from the start of the input string
+      self.assertTrue(data['inputs'].startswith('fill: '))
+      inp = data['inputs'].replace('fill: ', '')
+      # Split input into chunks according to blank locations.
+      inp_split = inp.split('_')
+      # Make sure that there is exactly one blank (could be at beginning/end).
+      self.assertLen(inp_split, 3)
+      # Make sure reconstruction is accurate.
+      reconstructed = ''.join([inp_split[0], data['targets']] + inp_split[2:])
+      self.assertEqual(reconstructed, original)
+      # Make sure blank size is correctly chosen.
+      blank_bin = int(inp_split[1])
+      self.assertIn(blank_bin, valid_bins)
+      blank_size = len(data['targets'].split())
+      self.assertGreaterEqual(blank_size, min(og_length, valid_bins[0]))
+      self.assertLessEqual(blank_size, valid_bins[-1])
+      return blank_size, blank_bin
+
+    num_tries = 250
+    original = 'This is a long test with lots of words to see if it works ok.'
+    dataset = tf.data.Dataset.from_tensor_slices(
+        {'text': [original] * num_tries})
+    dataset = prep.fill_in_the_blank_sized(dataset, [1, 4])
+    num_outputs = 0
+    for data in test_utils.dataset_as_text(dataset):
+      blank_size, blank_bin = _validate_data(data, [1, 4])
+      if blank_size <= 2:
+        self.assertEqual(blank_bin, 1)
+      else:
+        self.assertEqual(blank_bin, 4)
+      num_outputs += 1
+    self.assertEqual(num_tries, num_outputs)
+
+    # Check case where bin size is larger than text.
+    dataset = tf.data.Dataset.from_tensor_slices(
+        {'text': [original] * num_tries})
+    dataset = prep.fill_in_the_blank_sized(dataset, [1024])
+    self.assertEmpty(list(test_utils.dataset_as_text(dataset)))
+
   def test_prefix_lm(self):
     num_tries = 100
     original = 'This is a long test with lots of words to see if it works ok.'

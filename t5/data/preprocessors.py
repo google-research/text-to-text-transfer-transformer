@@ -560,6 +560,64 @@ def fill_in_the_blank(dataset,
   return dataset.unbatch()
 
 
+def fill_in_the_blank_sized(
+    dataset,
+    size_bins=(1, 2, 4, 8, 16, 32, 64, 128, 256, 512),
+    text_key='text',
+    label='fill: '):
+  """Fill in the blank preprocessor that labels blank with a binned size.
+
+  The actual blank size is sampled uniformly from the inclusive range of the min
+  and max bin. The blank is then filled in with the closest bin size to the
+  actual blank size.
+
+  Args:
+    dataset: a tf.data.Dataset, the dataset to preprocess.
+    size_bins: a list, a list of blank sizes to select from when labelling the
+      blank.
+    text_key: a string, the key for the text feature to preprocess in the
+      dataset examples.
+    label: a string, the label to prepend to the inputs.
+
+  Returns:
+    a tf.data.Dataset
+  """
+  bins = sorted(size_bins)
+
+  def my_fn(x):
+    """Apply transformation."""
+    words = x['words']
+    n_words = tf.size(words)
+
+    blank_size = tf.random.uniform(
+        [], minval=bins[0], maxval=tf.math.minimum(n_words, bins[-1]),
+        dtype=tf.dtypes.int32)
+    bin_delta = tf.math.abs(bins - blank_size)
+    bin_ = tf.gather(bins, tf.argmin(bin_delta))
+    blank_start = tf.random.uniform(
+        [], minval=0, maxval=tf.math.maximum(0, n_words-blank_size) + 1,
+        dtype=tf.dtypes.int32)
+
+    pre_blank = tf.strings.reduce_join(words[0:blank_start], separator=' ')
+    post_blank = tf.strings.reduce_join(
+        words[blank_start+blank_size:], separator=' ')
+    blank = tf.strings.format('_{}_', bin_)
+    # We strip to handle cases where blank is at beginning or end.
+    input_ = tf.strings.strip(
+        tf.strings.join([pre_blank, blank, post_blank], ' '))
+    input_ = tf.strings.join([label, input_])
+    target = tf.strings.reduce_join(
+        words[blank_start:blank_start+blank_size], separator=' ')
+    return {
+        'inputs': tf.strings.strip(input_),
+        'targets': tf.strings.strip(target)}
+  dataset = _split_text_to_words(dataset, text_key, min_num_words=2)
+  # Filter out examples with fewer words than the minimum.
+  dataset = dataset.filter(lambda x: tf.size(x['words']) >= bins[0])
+  dataset = dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  return dataset
+
+
 def prefix_lm(dataset,
               text_key='text',
               label='prefix: '):
