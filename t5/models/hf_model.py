@@ -381,9 +381,7 @@ class HfPyTorchModel(T5Model):
         `transformers.PretrainedModel.generate()` for options.
     """
     mixture_or_task = t5.data.get_mixture_or_task(mixture_or_task_name)
-    vocab = t5.data.sentencepiece_vocabulary.SentencePieceVocabulary(
-        mixture_or_task.sentencepiece_model_path
-    )
+    vocab = mixture_or_task.output_features["targets"].vocabulary
 
     if isinstance(mixture_or_task, t5.data.Mixture):
       tasks = mixture_or_task.tasks
@@ -494,6 +492,7 @@ class HfPyTorchModel(T5Model):
       batch_size,
       output_file=None,
       sentencepiece_model_path=None,
+      vocabulary=None,
       **generate_kwargs,
   ):
     """Evaluate the model on the given Mixture or Task.
@@ -515,6 +514,12 @@ class HfPyTorchModel(T5Model):
       sentencepiece_model_path: str or None, path to a SentencePiece model file
         or None to use `t5.data.DEFAULT_SPM_PATH` (the model used for all
         pre-trained T5 models.)
+      vocabulary: t5.data.vocabularies.Vocabulary or dict or None. Either the
+        Vocabulary to use for processing inputs and targets, a dict mapping
+        "inputs" to a Vocabulary for encoding the inputs and "targets" for
+        decoding the predictions, or None (default) to use a
+        t5.data.vocabularies.SentencePieceVocabulary with the provided
+        sentencepiece_model_path (as was used in all pre-trained T5 models).
       **generate_kwargs: Additional keyword arguments to pass to
         `transformers.PretrainedModel.generate()`, for example to change the
         decoding strategy. See the documentation for
@@ -530,15 +535,23 @@ class HfPyTorchModel(T5Model):
       with tf.io.gfile.GFile(inputs) as f:
         inputs = [l.strip() for l in f]
 
-    if sentencepiece_model_path is None:
-      sentencepiece_model_path = t5.data.DEFAULT_SPM_PATH
-    vocab = t5.data.sentencepiece_vocabulary.SentencePieceVocabulary(
-        sentencepiece_model_path
-    )
+    if vocabulary is None:
+      if sentencepiece_model_path is None:
+        sentencepiece_model_path = t5.data.DEFAULT_SPM_PATH
+      vocab = t5.data.vocabularies.SentencePieceVocabulary(
+          sentencepiece_model_path
+      )
+      vocabs = {"inputs": vocab, "targets": vocab}
+    elif isinstance(vocabulary, t5.data.vocabularies.Vocabulary):
+      vocabs = {"inputs": vocabulary, "targets": vocabulary}
+    elif isinstance(vocabulary, dict):
+      vocabs = vocabulary
+    else:
+      raise ValueError("vocabulary must be a dict, a Vocabulary, or None")
 
     dataset = tf.data.Dataset.from_tensor_slices(inputs)
     dataset = dataset.map(
-        lambda ex: {"inputs": tf.cast(vocab.encode_tf(ex), tf.int64)},
+        lambda x: {"inputs": tf.cast(vocabs["inputs"].encode_tf(x), tf.int64)},
         num_parallel_calls=t5.data.preprocessors.num_parallel_calls()
     )
     dataset = tokens_to_batches(
@@ -551,7 +564,9 @@ class HfPyTorchModel(T5Model):
           input_ids=self.to_tensor(batch["inputs"]), **generate_kwargs
       )
       predicted_tokens = predicted_tokens.cpu().numpy().tolist()
-      predictions.extend([vocab.decode(p) for p in predicted_tokens])
+      predictions.extend(
+          [vocabs["targets"].decode(p) for p in predicted_tokens]
+      )
 
     for inp, pred in zip(inputs, predictions):
       logging.info("%s\n  -> %s", inp, pred)

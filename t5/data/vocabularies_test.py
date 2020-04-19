@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for t5.data.sentencepiece_vocabulary."""
+"""Tests for t5.data.vocabularies."""
 
 from absl.testing import absltest
 from t5.data import test_utils
@@ -50,6 +50,16 @@ class SentencepieceVocabularyTest(absltest.TestCase):
     self.assertEqual("v", vocab.decode([25]))
     self.assertEqual(_UNK_STRING, tf.compat.as_bytes(vocab.decode([35])))
     self.assertEqual(_UNK_STRING, vocab.decode_tf([35]).numpy())
+
+  def test_equal(self):
+    vocab1 = test_utils.sentencepiece_vocab()
+    vocab2 = test_utils.sentencepiece_vocab()
+    self.assertEqual(vocab1, vocab2)
+
+  def test_not_equal(self):
+    vocab1 = test_utils.sentencepiece_vocab()
+    vocab2 = test_utils.sentencepiece_vocab(10)
+    self.assertNotEqual(vocab1, vocab2)
 
 
 if __name__ == "__main__":

@@ -133,7 +133,7 @@ class PreprocessAndTokenize(beam.PTransform):
 
     ds = self._task.preprocess_text(ds)
     ds = t5.data.encode_string_features(
-        ds, self._task.get_vocabulary(), keys=self._task.output_features,
+        ds, self._task.output_features, keys=self._task.output_features,
         copy_plaintext=True)
 
     for ex in tfds.as_numpy(ds):

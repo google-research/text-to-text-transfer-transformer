@@ -368,9 +368,10 @@ class TasksTest(test_utils.FakeTaskTest):
     self.assertListEqual(["validation"], task.splits)
 
   def test_no_eos(self):
+    default_vocab = test_utils.sentencepiece_vocab()
     features = {
-        "inputs": utils.Feature(add_eos=True),
-        "targets": utils.Feature(add_eos=False),
+        "inputs": utils.Feature(add_eos=True, vocabulary=default_vocab),
+        "targets": utils.Feature(add_eos=False, vocabulary=default_vocab),
     }
     test_utils.add_task(
         "task_no_eos", test_utils.get_fake_dataset, output_features=features

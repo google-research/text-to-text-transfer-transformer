@@ -860,7 +860,7 @@ class PreprocessorsTest(tf.test.TestCase):
 
     for _ in range(0, 10):
       dataset = prep.trivia_qa_truncate_inputs(
-          og_dataset, vocabulary=None, sequence_length={'inputs': 20})
+          og_dataset, output_features=None, sequence_length={'inputs': 20})
 
       for data in test_utils.dataset_as_text(dataset):
         self.assertLen(data['inputs'], 20)
@@ -875,7 +875,7 @@ class PreprocessorsTest(tf.test.TestCase):
 
     for _ in range(0, 5):
       dataset = prep.trivia_qa_truncate_inputs(
-          og_dataset, vocabulary=None, sequence_length={'inputs': 5})
+          og_dataset, output_features=None, sequence_length={'inputs': 5})
 
       for data in test_utils.dataset_as_text(dataset):
         self.assertLen(data['inputs'], 5)
@@ -897,7 +897,7 @@ class PreprocessorsTest(tf.test.TestCase):
     })
 
     dataset = prep.trivia_qa_truncate_inputs(
-        dataset, vocabulary=None, sequence_length=sequence_length)
+        dataset, output_features=None, sequence_length=sequence_length)
 
     assert_dataset(dataset, {
         'inputs': tf.range(0, 10),
@@ -911,7 +911,7 @@ class PreprocessorsTest(tf.test.TestCase):
     })
 
     dataset = prep.trivia_qa_truncate_inputs(
-        dataset, vocabulary=None, sequence_length=sequence_length)
+        dataset, output_features=None, sequence_length=sequence_length)
 
     assert_dataset(dataset, {
         'inputs': tf.range(20, 30),
@@ -925,7 +925,10 @@ class PreprocessorsTest(tf.test.TestCase):
     })
 
     dataset = prep.trivia_qa_truncate_inputs(
-        no_overlap_dataset, vocabulary=None, sequence_length=sequence_length)
+        no_overlap_dataset,
+        output_features=None,
+        sequence_length=sequence_length
+    )
 
     i = 0
     for data in test_utils.dataset_as_text(dataset):
@@ -941,7 +944,9 @@ class PreprocessorsTest(tf.test.TestCase):
       })
 
       dataset = prep.trivia_qa_truncate_inputs(
-          og_dataset, vocabulary=None, sequence_length=sequence_length)
+          og_dataset, output_features=None,
+          sequence_length=sequence_length
+      )
       for data in test_utils.dataset_as_text(dataset):
         self.assertContainsSubset(data['targets'], data['inputs'])
         self.assertLen(data['inputs'], 10)

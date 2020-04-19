@@ -25,8 +25,8 @@ from absl import flags
 from absl import logging
 from absl.testing import absltest
 import numpy as np
-from t5.data import sentencepiece_vocabulary
 from t5.data import utils as dataset_utils
+from t5.data import vocabularies
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
 
@@ -330,9 +330,9 @@ def _split_tsv_preprocessor(dataset, field_names=("prefix", "suffix")):
   return dataset.map(parse_line)
 
 
-def test_token_preprocessor(dataset, vocabulary, **unused_kwargs):
+def test_token_preprocessor(dataset, output_features, **unused_kwargs):
   """Change all occurrences of non-zero even numbered tokens in inputs to 50."""
-  del vocabulary
+  del output_features
 
   def my_fn(ex):
     inputs = ex["inputs"]
@@ -356,7 +356,7 @@ def mock_vocabulary(encode_dict, vocab_size=None):
 
 
 def sentencepiece_vocab(extra_ids=0):
-  return sentencepiece_vocabulary.SentencePieceVocabulary(
+  return vocabularies.SentencePieceVocabulary(
       os.path.join(TEST_DATA_DIR, "sentencepiece", "sentencepiece.model"),
       extra_ids=extra_ids)
 

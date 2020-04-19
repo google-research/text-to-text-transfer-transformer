@@ -1686,7 +1686,7 @@ def split_tokens_to_random_length(dataset, sequence_length, **unused_kwargs):
 
 @gin.configurable()
 def denoise(dataset,
-            vocabulary,
+            output_features,
             noise_density=gin.REQUIRED,
             noise_mask_fn=gin.REQUIRED,
             inputs_fn=gin.REQUIRED,
@@ -1725,7 +1725,7 @@ def denoise(dataset,
 
   Args:
     dataset: A tf.data.Dataset to process.
-    vocabulary: A mesh_tensorflow.transformer.vocabulary.Vocabulary.
+    output_features: a dict mapping feature name to t5.data.Feature.
     noise_density: a float
     noise_mask_fn: a function from (length, noise_density) -> boolean mask
     inputs_fn: a function from (tokens, noise_mask, vocabulary) -> tokens
@@ -1735,7 +1735,14 @@ def denoise(dataset,
     A preprocessed tf.data.Dataset.
   """
   def my_fn(features):
+    """Map function."""
     tokens = features['targets']
+    vocabulary = output_features['targets'].vocabulary
+    if vocabulary != output_features['inputs'].vocabulary:
+      raise ValueError(
+          'denoise creates inputs based on tokenized targets but was applied '
+          'to a task that uses different vocabularies for inputs and targets.'
+      )
     noise_mask = noise_mask_fn(tf.size(tokens), noise_density)
     inputs = inputs_fn(tokens, noise_mask, vocabulary)
     if targets_fn:
@@ -1746,7 +1753,7 @@ def denoise(dataset,
   return dataset.map(my_fn, num_parallel_calls=num_parallel_calls())
 
 
-def trivia_qa_truncate_inputs(dataset, vocabulary, sequence_length):
+def trivia_qa_truncate_inputs(dataset, output_features, sequence_length):
   """Gin configurable token preprocessor for the trivia QA dataset.
 
   This function takes a dataset containing "targets" and "inputs". It searches
@@ -1778,7 +1785,7 @@ def trivia_qa_truncate_inputs(dataset, vocabulary, sequence_length):
   Args:
     dataset: a tf.data.Dataset with dictionaries containing the "inputs" and
       "targets".
-    vocabulary: vocab, unused in this function.
+    output_features: unused by this function.
     sequence_length: a dict, with keys as "inputs" and "targets" indicating the
       maximum number of tokens in each of the sequences.
 
@@ -1787,7 +1794,7 @@ def trivia_qa_truncate_inputs(dataset, vocabulary, sequence_length):
 
   """
 
-  del vocabulary
+  del output_features
 
   def my_fn(features):
     """Function to map original dataset to the new dataset."""
@@ -2112,7 +2119,7 @@ def sentinel_id(vocabulary, return_value=None):
   By default, we use the last token in the vocabulary.
 
   Args:
-    vocabulary: a vocabulary.Vocabulary
+    vocabulary: a t5.data.vocabularies.Vocabulary
     return_value: an optional integer
   Returns:
     an integer
