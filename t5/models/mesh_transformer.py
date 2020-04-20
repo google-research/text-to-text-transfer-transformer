@@ -188,3 +188,30 @@ def get_vocabulary(mixture_or_task_name):
     return (features["inputs"].vocabulary, features["targets"].vocabulary)
   else:
     return provider.get_vocabulary()
+
+
+@gin.configurable()
+def get_sentencepiece_model_path(mixture_or_task_name):
+  """Return the SentencePiece model path for a given mixture or task.
+
+  DEPRECATED. Please pass the vocabulary directly to utils.run instead.
+
+  Args:
+    mixture_or_task_name: string, an identifier for a Mixture or Task in the
+      appropriate registry. Must be specified via gin.
+
+  Returns:
+    Path to a SentencePiece model file.
+  """
+  warnings.warn(
+      "get_sentencepiece_model_path is deprecated. Please pass the mixture or "
+      "task vocabulary directly to the Mesh TensorFlow Transformer instead."
+  )
+  provider = t5.data.get_mixture_or_task(mixture_or_task_name)
+  vocabulary = provider.get_vocabulary()
+  if not isinstance(vocabulary, t5.data.vocabularies.SentencePieceVocabulary):
+    raise ValueError(
+        "get_sentencepiece_model_path was called for a provider that does not "
+        "use a SentencePieceVocabulary."
+    )
+  return vocabulary.sentencepiece_model_file

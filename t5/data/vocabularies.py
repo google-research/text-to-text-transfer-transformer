@@ -77,6 +77,11 @@ class SentencePieceVocabulary(Vocabulary):
     super().__init__(extra_ids=extra_ids)
 
   @property
+  def sentencepiece_model_file(self):
+    """Path to the sentencepiece model file."""
+    return self._sentencepiece_model_file
+
+  @property
   def sp_model(self):
     """Retrieve the SPM."""
     if self._sp_model is None:
