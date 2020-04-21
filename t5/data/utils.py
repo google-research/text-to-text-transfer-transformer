@@ -28,7 +28,7 @@ import re
 from absl import logging
 import gin
 import numpy as np
-from t5.data import vocabularies
+from t5.data import sentencepiece_vocabulary
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
 
@@ -420,7 +420,7 @@ class Task(DatasetProviderBase):
       self._output_features = output_features
     elif output_features is None or isinstance(output_features, list):
       output_features = output_features or _DEFAULT_FEATURE_KEYS
-      default_vocabulary = vocabularies.SentencePieceVocabulary(
+      default_vocabulary = sentencepiece_vocabulary.SentencePieceVocabulary(
           sentencepiece_model_file=sentencepiece_model_path or DEFAULT_SPM_PATH
       )
       self._output_features = {
