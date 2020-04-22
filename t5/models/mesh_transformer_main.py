@@ -150,6 +150,13 @@ def main(_):
         tpu_zone=FLAGS.tpu_zone,
         model_dir=FLAGS.model_dir)
 
+    if FLAGS.checkpoint_mode != "specific" and FLAGS.checkpoint_steps:
+      raise ValueError("checkpoint_mode is set to %s and checkpoint_steps is "
+                       "also set. To use a particular checkpoint, please set "
+                       "checkpoint_mode to 'specific'. For other modes, please "
+                       "ensure that checkpoint_steps is not set."
+                       % FLAGS.checkpoint_mode)
+
     if FLAGS.checkpoint_mode == "latest":
       checkpoint_steps = -1
     elif FLAGS.checkpoint_mode == "all":
