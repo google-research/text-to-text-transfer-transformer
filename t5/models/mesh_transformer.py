@@ -85,7 +85,8 @@ def mesh_eval_dataset_fn(
     vocabulary,
     dataset_split,
     num_eval_examples=None,
-    use_cached=False):
+    use_cached=False,
+    pack=False):
   """Returns all tf.data.Datasets for evaluation on a given mixture.
 
   This uses the format required for utils.run's `eval_dataset_fn` argument in
@@ -101,6 +102,8 @@ def mesh_eval_dataset_fn(
     num_eval_examples: maximum number of examples per task to use for continuous
       eval. If None, use all examples.
     use_cached: bool, whether to load the cached version of this dataset.
+    pack: a boolean, whether to pack examples. This is useful for perplexity
+      evals but should not be used for iterative decoding.
 
   Returns:
     A list of mesh_tensorflow.transformer.dataset.EvalDataset tuples.
@@ -123,7 +126,7 @@ def mesh_eval_dataset_fn(
     ds = transformer_dataset.pack_or_pad(
         ds,
         sequence_length,
-        pack=False,
+        pack=pack,
         feature_keys=tuple(task.output_features),
         ensure_eos=True)
     if num_eval_examples is not None:
