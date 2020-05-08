@@ -1738,7 +1738,8 @@ def denoise(dataset,
     """Map function."""
     tokens = features['targets']
     vocabulary = output_features['targets'].vocabulary
-    if vocabulary != output_features['inputs'].vocabulary:
+    if ('inputs' in output_features and
+        vocabulary != output_features['inputs'].vocabulary):
       raise ValueError(
           'denoise creates inputs based on tokenized targets but was applied '
           'to a task that uses different vocabularies for inputs and targets.'

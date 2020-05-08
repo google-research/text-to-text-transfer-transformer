@@ -17,6 +17,7 @@
 from absl.testing import absltest
 from t5.data import preprocessors as prep
 from t5.data import test_utils
+from t5.data import utils
 import tensorflow.compat.v1 as tf
 
 tf.disable_v2_behavior()
@@ -1023,6 +1024,49 @@ class PreprocessorsTest(tf.test.TestCase):
     og_dataset = tf.data.Dataset.from_tensor_slices(['a\tb', 'c\td'])
     dataset = prep.parse_tsv(og_dataset, field_names=['f1', 'f2'])
     assert_dataset(dataset, [{'f1': 'a', 'f2': 'b'}, {'f1': 'c', 'f2': 'd'}])
+
+  def test_denoise(self):
+    tf.set_random_seed(55)
+
+    vocab = test_utils.sentencepiece_vocab()
+    target_tokens = vocab.encode('The quick brown fox.')
+
+    # This is what it encodes to.
+    self.assertEqual(
+        target_tokens,
+        [3, 2, 20, 4, 3, 2, 8, 13, 2, 3, 2, 23, 7, 19, 22, 3, 2, 7, 2])
+
+    og_dataset = tf.data.Dataset.from_tensor_slices({
+        'targets': [target_tokens],
+    })
+
+    output_features = {
+        'targets': utils.Feature(vocab),
+    }
+
+    # These are the parameters of denoise in the operative config of 'base'.
+    # Except noise_density, bumped up from 0.15 to 0.3 in order to demonstrate
+    # multiple corrupted spans.
+    denoised_dataset = prep.denoise(
+        og_dataset,
+        output_features,
+        noise_density=0.3,
+        noise_mask_fn=prep.random_spans_noise_mask,
+        inputs_fn=prep.noise_span_to_unique_sentinel,
+        targets_fn=prep.nonnoise_span_to_unique_sentinel)
+
+    # Two spans corrupted, [2] and [22, 3, 2, 7, 2], replaced by unique
+    # sentinels 25 and 24 respectively.
+    assert_dataset(denoised_dataset, [
+        {
+            'inputs': [
+                3, 25, 20, 4, 3, 2, 8, 13, 2, 3, 2, 23, 7, 19, 24
+            ],
+            'targets': [
+                25, 2, 24, 22, 3, 2, 7, 2
+            ],
+        },
+    ])
 
 
 if __name__ == '__main__':
