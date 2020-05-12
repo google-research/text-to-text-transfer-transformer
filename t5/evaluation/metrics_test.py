@@ -16,6 +16,8 @@
 """Tests for t5.evaluation.metrics."""
 
 from absl.testing import absltest
+import sklearn.metrics
+
 from t5.evaluation import metrics
 from t5.evaluation import test_utils
 
@@ -176,11 +178,6 @@ class MetricsTest(test_utils.BaseMetricsTest):
         metrics.spearman_corrcoef([0, 2, 1], [0, 1, 2]),
         {"spearman_corrcoef": 50.})
 
-  def test_matthews_corrcoef(self):
-    self.assertDictClose(
-        metrics.matthews_corrcoef([0, 0, 2, 1], [0, 1, 2, 1]),
-        {"matthews_corrcoef": 70.})
-
   def test_f1_score_with_invalid(self):
     self.assertDictClose(
         metrics.f1_score_with_invalid([0, 1, 1, 0], [0, 1, 2, 2]),
@@ -225,6 +222,34 @@ class MetricsTest(test_utils.BaseMetricsTest):
         metrics.auc([0.0, 0.2, 0.5, 0.7], [0.1, 0.4, 0.35, 0.8],
                     targets_threshold=0.5),
         {"auc": 0.75})
+
+  def test_sklearn_wrapper(self):
+    mae_fn = metrics.sklearn_metrics_wrapper("mean_absolute_error")
+    y_true = [[0.5, 1], [-1, 1], [7, -6]]
+    y_pred = [[0, 2], [-1, 2], [8, -5]]
+    self.assertDictClose(
+        mae_fn(y_true, y_pred),
+        {"mean_absolute_error": sklearn.metrics.mean_absolute_error(y_true,
+                                                                    y_pred)})
+
+    hamming_fn = metrics.sklearn_metrics_wrapper(
+        "hamming_loss",
+        metric_dict_str="hamming_100x",
+        metric_post_process_fn=lambda x: 100 * x)
+    y_true = [1, 2, 3, 4]
+    y_pred = [2, 2, 3, 4]
+    self.assertDictClose(
+        hamming_fn(y_true, y_pred),
+        {"hamming_100x": 100 * sklearn.metrics.hamming_loss(y_true, y_pred)})
+
+    y_true = [0, 0, 2, 1]
+    y_pred = [0, 1, 2, 1]
+    matthews_corrcoef_fn = metrics.sklearn_metrics_wrapper(
+        "matthews_corrcoef", metric_post_process_fn=lambda x: 100 * x)
+    self.assertDictClose(
+        matthews_corrcoef_fn(y_true, y_pred),
+        {"matthews_corrcoef": 70.})
+
 
 if __name__ == "__main__":
   absltest.main()

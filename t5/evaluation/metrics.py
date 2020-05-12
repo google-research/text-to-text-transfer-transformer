@@ -209,23 +209,13 @@ def spearman_corrcoef(targets, predictions):
               100 * scipy.stats.spearmanr(targets, predictions)[0]}
 
 
-def matthews_corrcoef(targets, predictions):
-  """Matthews correlation coefficient."""
-  return {
-      "matthews_corrcoef":
-          100 * sklearn.metrics.matthews_corrcoef(targets, predictions)
-  }
-
-
 def mean_multiclass_f1(num_classes):
   """Computes the unweighted average of the F1 per class."""
-  def my_metric(targets, predictions):
-    return {
-        "mean_%dclass_f1" % num_classes: 100 * sklearn.metrics.fbeta_score(
-            targets, predictions, beta=1, labels=range(num_classes),
-            average="macro")
-    }
-  return my_metric
+  return sklearn_metrics_wrapper(
+      "fbeta_score",
+      metric_dict_str="mean_%dclass_f1" % num_classes,
+      metric_post_process_fn=lambda x: 100 * x,
+      beta=1, labels=range(num_classes), average="macro")
 
 
 def exact_match(targets, predictions):
@@ -319,3 +309,31 @@ def auc(targets, predictions, targets_threshold=None):
                        np.ones_like(targets, dtype=np.int32))
 
   return {"auc": sklearn.metrics.roc_auc_score(targets, predictions)}
+
+
+def sklearn_metrics_wrapper(metric_str,
+                            metric_dict_str=None,
+                            metric_post_process_fn=None,
+                            **metric_fn_kwargs):
+  """Wraps any sklearn.metric function and returns a t5 metric function.
+
+  Args:
+    metric_str: string, the function from `sklearn.metrics` to use.
+    metric_dict_str: optional string, if not specified `metric_str` is used as
+      the key in the returned dictionary.
+    metric_post_process_fn: callable, if specified the final computed metric
+      will be passed through this.
+    **metric_fn_kwargs: kwargs, passed to the metric function we are calling.
+  Returns:
+    the function that calculates the metric in a dict.
+  """
+  if not hasattr(sklearn.metrics, metric_str):
+    raise ValueError("sklearn.metrics does not have: %s" % metric_str)
+
+  def fn(targets, predictions):
+    metric_fn = getattr(sklearn.metrics, metric_str)
+    metric_val = metric_fn(targets, predictions, **metric_fn_kwargs)
+    if metric_post_process_fn is not None:
+      metric_val = metric_post_process_fn(metric_val)
+    return {metric_dict_str or metric_str: metric_val}
+  return fn

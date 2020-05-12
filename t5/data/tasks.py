@@ -110,7 +110,8 @@ def _get_glue_postprocess_fn(builder_config):
 
 
 GLUE_METRICS = collections.OrderedDict([
-    ("cola", [metrics.matthews_corrcoef]),
+    ("cola", [metrics.sklearn_metrics_wrapper(
+        "matthews_corrcoef", metric_post_process_fn=lambda x: 100 * x)]),
     ("sst2", [metrics.accuracy]),
     ("mrpc", [metrics.f1_score_with_invalid, metrics.accuracy]),
     ("stsb", [metrics.pearson_corrcoef, metrics.spearman_corrcoef]),
