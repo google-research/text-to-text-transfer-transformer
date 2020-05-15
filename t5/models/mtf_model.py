@@ -160,7 +160,7 @@ class MtfModel(T5Model):
     self._iterations_per_loop = iterations_per_loop
 
     self._cluster = tf.distribute.cluster_resolver.TPUClusterResolver(
-        tpu if (tpu) else "", zone=tpu_zone, project=gcp_project)
+        tpu, zone=tpu_zone, project=gcp_project) if tpu else None
     self._tpu = tpu
     self._tpu_job_name = tpu_job_name
     self._estimator = None
