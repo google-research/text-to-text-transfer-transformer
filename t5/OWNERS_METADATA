@@ -1,5 +1,0 @@
-# Re-adding some filetypes excluded from review requirements in
-# //devtools/piper/admin/configs/trigger_reviewed
-review_requirements {
-  path_expression: "....md"
-}
