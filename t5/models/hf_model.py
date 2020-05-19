@@ -321,12 +321,13 @@ class HfPyTorchModel(T5Model):
         self.save_checkpoint(self._step)
 
       self._model.zero_grad()
-      loss, _, _ = self._model(
+      outputs = self._model(
           input_ids=self.to_tensor(batch["inputs"]),
           attention_mask=self.to_tensor(batch["inputs_mask"]),
           decoder_attention_mask=self.to_tensor(batch["targets_mask"]),
           lm_labels=self.to_tensor(batch["targets"]),
       )
+      loss = outputs[0]
       loss.backward()
       optimizer.step()
       if learning_rate_scheduler:
