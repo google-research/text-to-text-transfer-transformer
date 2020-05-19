@@ -373,6 +373,26 @@ class PreprocessorsTest(tf.test.TestCase):
         },
     )
 
+    # Test id_key argument
+    input_data = {
+        'q1': 'How so?',
+        'q2': 'Why not?',
+        'q3': 'Who?',
+        'uid': test_idx,
+        'label': 0,
+    }
+    og_dataset = tf.data.Dataset.from_tensors(input_data)
+    dataset = prep.glue(og_dataset, benchmark_name, label_names,
+                        feature_names=['q1', 'q2', 'q3'], id_key='uid')
+    assert_dataset(
+        dataset,
+        {
+            'inputs': 'qqp q1: How so? q2: Why not? q3: Who?',
+            'targets': 'not_duplicate',
+            'idx': test_idx,
+        },
+    )
+
   def test_multirc(self):
     og_dataset = tf.data.Dataset.from_tensors({
         'paragraph':

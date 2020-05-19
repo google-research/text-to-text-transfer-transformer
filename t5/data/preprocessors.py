@@ -752,7 +752,7 @@ def neighboring_pairs(dataset, text_key='text', reuse_sentences=True):
 
 
 def glue(
-    dataset, benchmark_name, label_names, feature_names=None):
+    dataset, benchmark_name, label_names, feature_names=None, id_key='idx'):
   """Convert a dataset from glue to text2text examples.
 
   This function uses the feature names from the dataset to unpack examples into
@@ -785,6 +785,7 @@ def glue(
     feature_names: an optional ordered list of feature names. If provided,
       features will be ordered in this way in the output. If not provided, all
       features (except 'idx' and 'label') will be used, sorted by name.
+    id_key: str, key for id in the dataset. If not provided, 'idx' will be used.
   Returns:
     a tf.data.Dataset
   """
@@ -823,7 +824,7 @@ def glue(
       ex['idx/answer'] = x['idx']['answer']
     else:
       # Store the data index in the returned example (used by eval)
-      ex['idx'] = x['idx']
+      ex['idx'] = x[id_key]
 
     ex['inputs'] = joined
     ex['targets'] = label_name
