@@ -340,6 +340,52 @@ class MtfModel(T5Model):
         self.batch_size, self._model_type, self._model_dir, checkpoint_steps,
         input_file, output_file)
 
+  def score(self,
+            inputs,
+            targets,
+            scores_file=None,
+            checkpoint_steps=-1,
+            sentencepiece_model_path=t5.data.DEFAULT_SPM_PATH,
+            vocabulary=None):
+    """Computes log-likelihood of target per example in targets.
+
+    Args:
+      inputs: optional - a string (filename), or a list of strings (inputs)
+      targets: a string (filename), or a list of strings (targets)
+      scores_file: str, path to write example scores to, one per line.
+      checkpoint_steps: int, list of ints, or None. If an int or list of ints,
+        inference will be run on the checkpoint files in `model_dir` whose
+        global steps are closest to the global steps provided. If None, run
+        inference continuously waiting for new checkpoints. If -1, get the
+        latest checkpoint from the model directory.
+      sentencepiece_model_path: str, path to the SentencePiece model file to use
+        for decoding. Must match the one used during training.
+      vocabulary: vocabularies.Vocabulary object to use for tokenization, or
+        None to use a SentencePieceVocabulary with the provided
+        sentencepiece_model_path.
+    """
+    if checkpoint_steps == -1:
+      checkpoint_steps = _get_latest_checkpoint_from_dir(self._model_dir)
+
+    with gin.unlock_config():
+      gin.parse_config_file(_operative_config_path(self._model_dir))
+
+    if vocabulary is None:
+      vocabulary = t5.data.SentencePieceVocabulary(sentencepiece_model_path)
+
+    if isinstance(targets, str):
+      tf.logging.info("scoring targets from file %s" % targets)
+      utils.score_from_files(self.estimator(vocabulary), vocabulary,
+                             self._model_type, self.batch_size,
+                             self._sequence_length, self._model_dir,
+                             checkpoint_steps, inputs, targets, scores_file)
+    else:
+      tf.logging.info("scoring targets from list of strings")
+      utils.score_from_strings(self.estimator(vocabulary), vocabulary,
+                               self._model_type, self.batch_size,
+                               self._sequence_length, self._model_dir,
+                               checkpoint_steps, inputs, targets, scores_file)
+
   def export(self, export_dir=None, checkpoint_step=-1, beam_size=1,
              temperature=1.0,
              sentencepiece_model_path=t5.data.DEFAULT_SPM_PATH,

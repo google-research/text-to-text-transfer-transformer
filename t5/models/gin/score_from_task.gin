@@ -1,0 +1,17 @@
+# -*-Python-*-
+
+import t5.models.mesh_transformer
+
+scores_filename = "/path/to/scores"
+
+utils.run.mode = "score_from_dataset"
+
+score_from_dataset.score_dataset_fn = @t5.models.mesh_transformer.mesh_eval_dataset_fn
+score_from_dataset.scores_filename = %scores_filename
+
+mesh_eval_dataset_fn.mixture_or_task_name = %MIXTURE_NAME
+mesh_eval_dataset_fn.num_eval_examples = 1000
+
+tpu_estimator_model_fn.score_in_predict_mode = True
+
+utils.run.dataset_split = 'test'

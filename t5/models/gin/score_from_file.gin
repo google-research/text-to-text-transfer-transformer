@@ -1,0 +1,13 @@
+# -*-Python-*-
+
+inputs_filename = "/path/to/inputs"
+targets_filename = "/path/to/targets"
+scores_filename = "/path/to/scores"
+
+utils.run.mode = "score_from_files"
+
+score_from_files.inputs_filename = %inputs_filename
+score_from_files.targets_filename  = %targets_filename
+score_from_files.scores_filename = %scores_filename
+
+tpu_estimator_model_fn.score_in_predict_mode = True
