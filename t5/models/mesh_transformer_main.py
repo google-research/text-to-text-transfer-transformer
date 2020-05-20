@@ -73,7 +73,7 @@ flags.DEFINE_boolean("use_model_api", False,
 
 # Note: All the args from here on are only used when use_model_api is set
 flags.DEFINE_enum("mode", None,
-                  ["train", "finetune", "eval", "predict", "export"],
+                  ["train", "finetune", "eval", "predict", "export", "score"],
                   "Mode with which to run the model.")
 
 # Train mode args
@@ -103,7 +103,9 @@ flags.DEFINE_string("eval_split", "validation",
                     "Dataset split to use for evaluation.")
 
 # Predict mode args
-flags.DEFINE_string("input_file", "", "Path to input file for decoding.")
+flags.DEFINE_string("input_file", "",
+                    "Path to input file for decoding or scoring.")
+flags.DEFINE_string("target_file", "", "Path to target file for scoring.")
 flags.DEFINE_string("output_file", "", "Path to output file to save decodes.")
 
 # Export mode args
@@ -192,6 +194,12 @@ def main(_):
           checkpoint_steps=checkpoint_steps,
           input_file=FLAGS.input_file,
           output_file=FLAGS.output_file)
+    elif FLAGS.mode == "score":
+      model.score(
+          FLAGS.input_file,
+          FLAGS.target_file,
+          scores_file=FLAGS.output_file,
+          checkpoint_steps=checkpoint_steps)
     elif FLAGS.mode == "export":
       if not (FLAGS.checkpoint_mode == "latest" or
               (FLAGS.checkpoint_mode == "specific" and
