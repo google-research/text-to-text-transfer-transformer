@@ -326,6 +326,19 @@ class Feature(object):
     self.add_eos = add_eos
 
 
+def print_dataset(dataset):
+  """tf.Print dataset fields for debugging purposes."""
+  def my_fn(x):
+    return {k: tf.Print(v, [v], k + ": ") for k, v in x.items()}
+  return dataset.map(my_fn)
+
+
+@gin.configurable
+def maybe_print_dataset(dataset, should_print=False):
+  """tf.Print dataset for debugging purposes."""
+  return print_dataset(dataset) if should_print else dataset
+
+
 class Task(DatasetProviderBase):
   """A wrapper for a `tf.data.Dataset` along with preprocessing information.
 
@@ -668,6 +681,7 @@ class Task(DatasetProviderBase):
     else:
       ds = self._dataset_fn(split=split, shuffle_files=shuffle)
       ds = self.preprocess_text(ds)
+      ds = maybe_print_dataset(ds)
       # Tokenize
       ds = encode_string_features(
           ds, self.output_features, keys=self.output_features,
@@ -679,6 +693,7 @@ class Task(DatasetProviderBase):
 
     # Post tokenization processing.
     ds = self.preprocess_tokens(ds, sequence_length)
+    ds = maybe_print_dataset(ds)
 
     if shuffle:
       # Shuffle before mixing since preprocessor can output multiple
