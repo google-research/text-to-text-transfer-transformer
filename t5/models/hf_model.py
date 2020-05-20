@@ -519,8 +519,9 @@ class HfPyTorchModel(T5Model):
         Vocabulary to use for processing inputs and targets, a dict mapping
         "inputs" to a Vocabulary for encoding the inputs and "targets" for
         decoding the predictions, or None (default) to use a
-        t5.data.vocabularies.SentencePieceVocabulary with the provided
-        sentencepiece_model_path (as was used in all pre-trained T5 models).
+        t5.data.sentencepiece_vocabulary.SentencePieceVocabulary with the
+        provided sentencepiece_model_path (as was used in all pre-trained T5
+        models).
       **generate_kwargs: Additional keyword arguments to pass to
         `transformers.PretrainedModel.generate()`, for example to change the
         decoding strategy. See the documentation for
@@ -539,7 +540,7 @@ class HfPyTorchModel(T5Model):
     if vocabulary is None:
       if sentencepiece_model_path is None:
         sentencepiece_model_path = t5.data.DEFAULT_SPM_PATH
-      vocab = t5.data.vocabularies.SentencePieceVocabulary(
+      vocab = t5.data.sentencepiece_vocabulary.SentencePieceVocabulary(
           sentencepiece_model_path
       )
       vocabs = {"inputs": vocab, "targets": vocab}
