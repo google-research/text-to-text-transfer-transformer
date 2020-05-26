@@ -492,7 +492,6 @@ class HfPyTorchModel(T5Model):
       sequence_length,
       batch_size,
       output_file=None,
-      sentencepiece_model_path=None,
       vocabulary=None,
       **generate_kwargs,
   ):
@@ -512,9 +511,6 @@ class HfPyTorchModel(T5Model):
       batch_size: int, the number of padded sequences in each batch.
       output_file: str or None, path to write out predictions or None to skip
         writing.
-      sentencepiece_model_path: str or None, path to a SentencePiece model file
-        or None to use `t5.data.DEFAULT_SPM_PATH` (the model used for all
-        pre-trained T5 models.)
       vocabulary: t5.data.vocabularies.Vocabulary or dict or None. Either the
         Vocabulary to use for processing inputs and targets, a dict mapping
         "inputs" to a Vocabulary for encoding the inputs and "targets" for
@@ -538,11 +534,7 @@ class HfPyTorchModel(T5Model):
         inputs = [l.strip() for l in f]
 
     if vocabulary is None:
-      if sentencepiece_model_path is None:
-        sentencepiece_model_path = t5.data.DEFAULT_SPM_PATH
-      vocab = t5.data.sentencepiece_vocabulary.SentencePieceVocabulary(
-          sentencepiece_model_path
-      )
+      vocab = t5.data.get_default_vocabulary()
       vocabs = {"inputs": vocab, "targets": vocab}
     elif isinstance(vocabulary, t5.data.vocabularies.Vocabulary):
       vocabs = {"inputs": vocabulary, "targets": vocabulary}

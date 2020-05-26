@@ -18,7 +18,8 @@ import functools
 
 from t5.data import postprocessors
 from t5.data import preprocessors
-from t5.data.utils import DEFAULT_SPM_PATH
+from t5.data.utils import Feature
+from t5.data.utils import get_default_vocabulary
 from t5.data.utils import set_global_cache_dirs
 from t5.data.utils import TaskRegistry
 from t5.data.utils import TfdsTask
@@ -27,6 +28,10 @@ import tensorflow_datasets as tfds
 
 
 
+DEFAULT_OUTPUT_FEATURES = {
+    "inputs": Feature(vocabulary=get_default_vocabulary(), add_eos=True),
+    "targets": Feature(vocabulary=get_default_vocabulary(), add_eos=True)
+}
 
 # ==================================== C4 ======================================
 _c4_config_suffixes = ["", ".noclean", ".realnewslike", ".webtextlike"]
@@ -39,7 +44,7 @@ for config_suffix in _c4_config_suffixes:
       text_preprocessor=functools.partial(
           preprocessors.rekey, key_map={"inputs": None, "targets": "text"}),
       token_preprocessor=preprocessors.unsupervised,
-      sentencepiece_model_path=DEFAULT_SPM_PATH,
+      output_features=DEFAULT_OUTPUT_FEATURES,
       metric_fns=[])
 
 # ================================ Wikipedia ===================================
@@ -50,7 +55,7 @@ TaskRegistry.add(
     text_preprocessor=functools.partial(
         preprocessors.rekey, key_map={"inputs": None, "targets": "text"}),
     token_preprocessor=preprocessors.unsupervised,
-    sentencepiece_model_path=DEFAULT_SPM_PATH,
+    output_features=DEFAULT_OUTPUT_FEATURES,
     metric_fns=[])
 
 
@@ -132,7 +137,7 @@ for b in tfds.text.glue.Glue.builder_configs.values():
       tfds_name="glue/%s:1.0.0" % b.name,
       text_preprocessor=_get_glue_text_preprocessor(b),
       metric_fns=GLUE_METRICS[b.name],
-      sentencepiece_model_path=DEFAULT_SPM_PATH,
+      output_features=DEFAULT_OUTPUT_FEATURES,
       postprocess_fn=_get_glue_postprocess_fn(b),
       splits=["test"] if b.name == "ax" else None,
   )
@@ -146,7 +151,7 @@ TaskRegistry.add(
                                         article_key="article",
                                         summary_key="highlights"),
     metric_fns=[metrics.rouge],
-    sentencepiece_model_path=DEFAULT_SPM_PATH)
+    output_features=DEFAULT_OUTPUT_FEATURES)
 
 # ==================================== WMT =====================================
 # Format: year, tfds builder config, tfds version
@@ -174,7 +179,7 @@ for prefix, b, tfds_version in b_configs:
           target_language=b.language_pair[0],
           ),
       metric_fns=[metrics.bleu],
-      sentencepiece_model_path=DEFAULT_SPM_PATH)
+      output_features=DEFAULT_OUTPUT_FEATURES)
 
 # Special case for t2t ende.
 b = tfds.translate.wmt_t2t.WmtT2tTranslate.builder_configs["de-en"]
@@ -188,7 +193,7 @@ TaskRegistry.add(
         target_language=b.language_pair[0],
         ),
     metric_fns=[metrics.bleu],
-    sentencepiece_model_path=DEFAULT_SPM_PATH)
+    output_features=DEFAULT_OUTPUT_FEATURES)
 
 # ================================= SuperGlue ==================================
 SUPERGLUE_METRICS = collections.OrderedDict([
@@ -233,7 +238,7 @@ for b in tfds.text.super_glue.SuperGlue.builder_configs.values():
       tfds_name="super_glue/%s:1.0.2" % b.name,
       text_preprocessor=text_preprocessor,
       metric_fns=SUPERGLUE_METRICS[b.name],
-      sentencepiece_model_path=DEFAULT_SPM_PATH,
+      output_features=DEFAULT_OUTPUT_FEATURES,
       postprocess_fn=_get_glue_postprocess_fn(b),
       splits=["test"] if b.name in ["axb", "axg"] else None)
 
@@ -244,7 +249,7 @@ TaskRegistry.add(
     tfds_name="definite_pronoun_resolution/plain_text:1.0.0",
     text_preprocessor=preprocessors.definite_pronoun_resolution_simple,
     metric_fns=[metrics.accuracy],
-    sentencepiece_model_path=DEFAULT_SPM_PATH)
+    output_features=DEFAULT_OUTPUT_FEATURES)
 
 # =================================== WSC ======================================
 TaskRegistry.add(
@@ -254,7 +259,7 @@ TaskRegistry.add(
     text_preprocessor=functools.partial(
         preprocessors.wsc_simple, correct_referent_only=True),
     metric_fns=[],
-    sentencepiece_model_path=DEFAULT_SPM_PATH,
+    output_features=DEFAULT_OUTPUT_FEATURES,
     splits=["train"])
 TaskRegistry.add(
     "super_glue_wsc_v102_simple_eval",
@@ -264,7 +269,7 @@ TaskRegistry.add(
         preprocessors.wsc_simple, correct_referent_only=False),
     postprocess_fn=postprocessors.wsc_simple,
     metric_fns=[metrics.accuracy],
-    sentencepiece_model_path=DEFAULT_SPM_PATH,
+    output_features=DEFAULT_OUTPUT_FEATURES,
     splits=["validation", "test"])
 
 # =================================== WNLI =====================================
@@ -275,7 +280,7 @@ TaskRegistry.add(
     text_preprocessor=preprocessors.wnli_simple,
     postprocess_fn=postprocessors.wsc_simple,
     metric_fns=[metrics.accuracy],
-    sentencepiece_model_path=DEFAULT_SPM_PATH,
+    output_features=DEFAULT_OUTPUT_FEATURES,
     splits=["validation", "test"])
 
 # =================================== Squad ====================================
@@ -287,7 +292,7 @@ TaskRegistry.add(
     text_preprocessor=preprocessors.squad,
     postprocess_fn=postprocessors.qa,
     metric_fns=[metrics.squad],
-    sentencepiece_model_path=DEFAULT_SPM_PATH)
+    output_features=DEFAULT_OUTPUT_FEATURES)
 
 # Maximized evaluation metrics over all answers.
 TaskRegistry.add(
@@ -298,7 +303,7 @@ TaskRegistry.add(
         preprocessors.squad, include_context=False),
     postprocess_fn=postprocessors.qa,
     metric_fns=[metrics.squad],
-    sentencepiece_model_path=DEFAULT_SPM_PATH)
+    output_features=DEFAULT_OUTPUT_FEATURES)
 
 # Squad span prediction task instead of text.
 TaskRegistry.add(
@@ -308,7 +313,7 @@ TaskRegistry.add(
     text_preprocessor=preprocessors.squad_span_space_tokenized,
     postprocess_fn=postprocessors.span_qa,
     metric_fns=[metrics.span_squad],
-    sentencepiece_model_path=DEFAULT_SPM_PATH)
+    output_features=DEFAULT_OUTPUT_FEATURES)
 
 # Deprecated: Use `squad_v010_allanswers` instead.
 TaskRegistry.add(
@@ -317,7 +322,7 @@ TaskRegistry.add(
     tfds_name="squad/plain_text:1.0.0",
     text_preprocessor=preprocessors.squad,
     metric_fns=[metrics.squad],
-    sentencepiece_model_path=DEFAULT_SPM_PATH)
+    output_features=DEFAULT_OUTPUT_FEATURES)
 
 # ================================= TriviaQA ===================================
 TaskRegistry.add(
@@ -327,4 +332,4 @@ TaskRegistry.add(
     text_preprocessor=preprocessors.trivia_qa,
     metric_fns=[],
     token_preprocessor=preprocessors.trivia_qa_truncate_inputs,
-    sentencepiece_model_path=DEFAULT_SPM_PATH)
+    output_features=DEFAULT_OUTPUT_FEATURES)

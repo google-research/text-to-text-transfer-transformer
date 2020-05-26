@@ -373,8 +373,7 @@ def add_tfds_task(
       tfds_name=tfds_name,
       text_preprocessor=text_preprocessor,
       token_preprocessor=token_preprocessor,
-      sentencepiece_model_path=os.path.join(TEST_DATA_DIR, "sentencepiece",
-                                            "sentencepiece.model"),
+      output_features=dataset_utils.Feature(sentencepiece_vocab()),
       metric_fns=[],
       splits=splits)
 
@@ -386,14 +385,14 @@ def add_task(
     token_preprocessor=None,
     splits=("train", "validation"),
     **kwargs):
+  if "output_features" not in kwargs:
+    kwargs["output_features"] = dataset_utils.Feature(sentencepiece_vocab())
   TaskRegistry.add(
       name,
       dataset_fn=dataset_fn,
       splits=splits,
       text_preprocessor=text_preprocessor,
       token_preprocessor=token_preprocessor,
-      sentencepiece_model_path=os.path.join(
-          TEST_DATA_DIR, "sentencepiece", "sentencepiece.model"),
       metric_fns=[],
       **kwargs)
 
@@ -514,8 +513,7 @@ class FakeTaskTest(absltest.TestCase):
         },
         skip_header_lines=1,
         text_preprocessor=[_split_tsv_preprocessor, test_text_preprocessor],
-        sentencepiece_model_path=os.path.join(
-            TEST_DATA_DIR, "sentencepiece", "sentencepiece.model"),
+        output_features=dataset_utils.Feature(sentencepiece_vocab()),
         metric_fns=[])
     self.text_line_task = TaskRegistry.get("text_line_task")
 

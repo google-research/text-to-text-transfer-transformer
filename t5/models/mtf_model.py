@@ -295,9 +295,7 @@ class MtfModel(T5Model):
                split=split)
 
   def predict(self, input_file, output_file, checkpoint_steps=-1,
-              beam_size=1, temperature=1.0,
-              sentencepiece_model_path=t5.data.DEFAULT_SPM_PATH,
-              vocabulary=None):
+              beam_size=1, temperature=1.0, vocabulary=None):
     """Predicts targets from the given inputs.
 
     Args:
@@ -314,11 +312,8 @@ class MtfModel(T5Model):
         beam search.
       temperature: float, a value between 0 and 1 (must be 0 if beam_size > 1)
         0.0 means argmax, 1.0 means sample according to predicted distribution.
-      sentencepiece_model_path: str, path to the SentencePiece model file to use
-        for decoding. Must match the one used during training.
       vocabulary: vocabularies.Vocabulary object to use for tokenization, or
-        None to use a SentencePieceVocabulary with the provided
-        sentencepiece_model_path.
+        None to use the default SentencePieceVocabulary.
     """
     # TODO(sharannarang) : It would be nice to have a function like
     # load_checkpoint that loads the model once and then call decode_from_file
@@ -334,7 +329,7 @@ class MtfModel(T5Model):
       gin.bind_parameter("Bitransformer.decode.temperature", temperature)
 
     if vocabulary is None:
-      vocabulary = t5.data.SentencePieceVocabulary(sentencepiece_model_path)
+      vocabulary = t5.data.get_default_vocabulary()
     utils.infer_model(
         self.estimator(vocabulary), vocabulary, self._sequence_length,
         self.batch_size, self._model_type, self._model_dir, checkpoint_steps,
@@ -345,7 +340,6 @@ class MtfModel(T5Model):
             targets,
             scores_file=None,
             checkpoint_steps=-1,
-            sentencepiece_model_path=t5.data.DEFAULT_SPM_PATH,
             vocabulary=None):
     """Computes log-likelihood of target per example in targets.
 
@@ -358,11 +352,8 @@ class MtfModel(T5Model):
         global steps are closest to the global steps provided. If None, run
         inference continuously waiting for new checkpoints. If -1, get the
         latest checkpoint from the model directory.
-      sentencepiece_model_path: str, path to the SentencePiece model file to use
-        for decoding. Must match the one used during training.
       vocabulary: vocabularies.Vocabulary object to use for tokenization, or
-        None to use a SentencePieceVocabulary with the provided
-        sentencepiece_model_path.
+        None to use the default SentencePieceVocabulary.
     """
     if checkpoint_steps == -1:
       checkpoint_steps = _get_latest_checkpoint_from_dir(self._model_dir)
@@ -371,7 +362,7 @@ class MtfModel(T5Model):
       gin.parse_config_file(_operative_config_path(self._model_dir))
 
     if vocabulary is None:
-      vocabulary = t5.data.SentencePieceVocabulary(sentencepiece_model_path)
+      vocabulary = t5.data.get_default_vocabulary()
 
     if isinstance(targets, str):
       tf.logging.info("scoring targets from file %s" % targets)
@@ -387,9 +378,7 @@ class MtfModel(T5Model):
                                checkpoint_steps, inputs, targets, scores_file)
 
   def export(self, export_dir=None, checkpoint_step=-1, beam_size=1,
-             temperature=1.0,
-             sentencepiece_model_path=t5.data.DEFAULT_SPM_PATH,
-             vocabulary=None):
+             temperature=1.0, vocabulary=None):
     """Exports a TensorFlow SavedModel.
 
     Args:
@@ -401,11 +390,8 @@ class MtfModel(T5Model):
         beam search.
       temperature: float, a value between 0 and 1 (must be 0 if beam_size > 1)
         0.0 means argmax, 1.0 means sample according to predicted distribution.
-      sentencepiece_model_path: str, path to the SentencePiece model file to use
-        for decoding. Must match the one used during training.
       vocabulary: vocabularies.Vocabulary object to use for tokenization, or
-        None to use a SentencePieceVocabulary with the provided
-        sentencepiece_model_path.
+        None to use the default SentencePieceVocabulary.
 
     Returns:
       The string path to the exported directory.
@@ -418,7 +404,7 @@ class MtfModel(T5Model):
       gin.bind_parameter("Bitransformer.decode.temperature", temperature)
 
     if vocabulary is None:
-      vocabulary = t5.data.SentencePieceVocabulary(sentencepiece_model_path)
+      vocabulary = t5.data.get_default_vocabulary()
     model_ckpt = "model.ckpt-" + str(checkpoint_step)
     export_dir = export_dir or self._model_dir
     return utils.export_model(

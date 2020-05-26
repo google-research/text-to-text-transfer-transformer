@@ -45,6 +45,12 @@ _TFDS_DATA_DIR_OVERRIDE = None
 _GLOBAL_CACHE_DIRECTORIES = []
 
 DEFAULT_SPM_PATH = "gs://t5-data/vocabs/cc_all.32000/sentencepiece.model"  # GCS
+DEFAULT_EXTRA_IDS = 100
+
+
+def get_default_vocabulary():
+  return sentencepiece_vocabulary.SentencePieceVocabulary(
+      DEFAULT_SPM_PATH, DEFAULT_EXTRA_IDS)
 
 
 def set_tfds_data_dir_override(tfds_data_dir):
@@ -215,10 +221,7 @@ class LazyTfdsLoader(object):
   def load_shard(self, file_instruction):
     """Returns a dataset for a single shard of the TFDS TFRecord files."""
     ds = self.builder._tfrecords_reader.read_files(  # pylint:disable=protected-access
-        tfds.core.tfrecords_reader.FileInstructions(
-            file_instructions=[file_instruction],
-            num_examples_per_shard=None,
-        ),
+        [file_instruction],
         read_config=tfds.ReadConfig(),
         shuffle_files=False)
     return ds
@@ -352,20 +355,17 @@ class Task(DatasetProviderBase):
                dataset_fn,
                splits,
                text_preprocessor,
-               sentencepiece_model_path=None,
                metric_fns=None,
                postprocess_fn=None,
                token_preprocessor=None,
                output_features=None,
                num_input_examples=None,
-               supports_caching=False):
+               supports_caching=False,
+               sentencepiece_model_path=None):
     """Task constructor.
 
     Attributes of output features, including the vocabulary used for
-    tokenization, should be provided via the `output_features` argument. If a
-    given feature does not have a vocabulary defined, it will use a
-    `vocabularies.SentencePieceVocabulary` whose SentencePiece model path is
-    given by the `sentencepiece_model_path` argument.
+    tokenization, should be provided via the `output_features` argument.
 
     Args:
       name: string, a unique name for the Task. A ValueError will be raised if
@@ -378,11 +378,6 @@ class Task(DatasetProviderBase):
         a tf.data.Dataset of string features and returns a tf.data.Dataset of
         string features. Can be set to None as a no-op. If a list is given,
         they will be executed sequentially.
-      sentencepiece_model_path: str or None, path to a SentencePiece model file
-        to use for tokenization when a `Feature` in `output_features` is not
-        supplied that has a vocabulary defined. For provided `Feature`s in
-        `output_features`, this argument will be ignored. If None, use
-        DEFAULT_SPM_PATH.
       metric_fns: list(callable), list of metric functions with the signature
         `metric_fn(targets, predictions)` to use during evaluation. By default
         (None), an empty list will be used, resulting in no evaluation on this
@@ -397,17 +392,16 @@ class Task(DatasetProviderBase):
         executed sequentially.
         The functions are also passed `sequence_length` and `vocabulary`
         keyword arguments.
-      output_features: list(str) or dict. Output features of the Task. If
-        list(str) is provided, a `Feature` class instance will be created for
-        each provided feature name using the default values. If a dict is
-        provided, it should map feature names to `Feature` class instances. When
-        `output_features` is None (default), two output features for "inputs"
-        and "targets" will be constructed using the default values for the
-        `Feature` class.
+      output_features: dict(str, Feature), Feature, or None. Output
+        features of the Task. If a `Feature` is provided, it will be used for
+        the default feature names ('inputs' and 'targets'). When None (default),
+        a default `Feature` will be constructed for the default feature names.
       num_input_examples: dict(string: int) or None, a dictionary mapping split
         to its size in number of input examples (before preprocessing). The
         `num_input_examples` method will return None if not provided.
       supports_caching: bool, whether or not this task supports offline caching.
+      sentencepiece_model_path: DEPRECATED use `output_features` to specify a
+        non-default vocabulary.
     """
     if not _VALID_TASK_NAME_REGEX.match(name):
       raise ValueError(
@@ -430,22 +424,28 @@ class Task(DatasetProviderBase):
     self._cache_dir = None
     self._stats = {}
 
+    if sentencepiece_model_path == DEFAULT_SPM_PATH:
+      logging.warn(
+          "`sentencepiece_model_path` is deprecated and is ignored. Please "
+          "update your code as this will cause a failure in future versions.")
+    elif sentencepiece_model_path:
+      raise ValueError(
+          "`sentencepiece_model_path` is deprecated. Please use "
+          "`output_features` to specify a non-default vocabulary.")
+
     if hasattr(output_features, "__len__") and not output_features:
       raise ValueError("output_features must be non-empty.")
+    if output_features is None:
+      output_features = Feature(get_default_vocabulary())
     if isinstance(output_features, dict):
-      self._output_features = output_features
-    elif output_features is None or isinstance(output_features, list):
-      output_features = output_features or _DEFAULT_FEATURE_KEYS
-      default_vocabulary = sentencepiece_vocabulary.SentencePieceVocabulary(
-          sentencepiece_model_file=sentencepiece_model_path or DEFAULT_SPM_PATH
-      )
-      self._output_features = {
-          f: Feature(vocabulary=default_vocabulary) for f in output_features
-      }
+      pass
+    elif isinstance(output_features, Feature):
+      output_features = {k: output_features for k in _DEFAULT_FEATURE_KEYS}
     else:
-      raise ValueError("output_features must be a dict, list of str, or None")
+      raise ValueError(
+          "output_features must be a dict, Feature, list of str, or None")
     self._output_features = collections.OrderedDict(
-        sorted(list(self._output_features.items()))
+        sorted(list(output_features.items()))
     )
 
     self._splits = splits
@@ -742,7 +742,6 @@ class TfdsTask(Task):
       name,
       tfds_name,
       text_preprocessor,
-      sentencepiece_model_path,
       metric_fns,
       tfds_data_dir=None,
       splits=None,
@@ -759,8 +758,6 @@ class TfdsTask(Task):
         a tf.data.Dataset of string features and returns a tf.data.Dataset of
         string features. Can be set to None as a no-op. If a list is given,
         they will be executed sequentially.
-      sentencepiece_model_path: string, path to a SentencePiece model file to
-        use for tokenization.
       metric_fns: list(callable), list of metric functions with the signature
         metric_fn(targets, predictions) to use during evaluation.
       tfds_data_dir: string, an optional path to a specific TFDS data directory
@@ -790,7 +787,6 @@ class TfdsTask(Task):
         dataset_fn=dataset_fn,
         splits=list(splits) if splits else None,
         text_preprocessor=text_preprocessor,
-        sentencepiece_model_path=sentencepiece_model_path,
         metric_fns=metric_fns,
         supports_caching=supports_caching,
         **task_kwargs)
@@ -821,7 +817,6 @@ class TextLineTask(Task):
       name,
       split_to_filepattern,
       text_preprocessor,
-      sentencepiece_model_path,
       metric_fns,
       skip_header_lines=0,
       **task_kwargs):
@@ -836,8 +831,6 @@ class TextLineTask(Task):
         a tf.data.Dataset of string features and returns a tf.data.Dataset of
         string features. Can be set to None as a no-op. If a list is given,
         they will be executed sequentially.
-      sentencepiece_model_path: string, path to a SentencePiece model file to
-        use for tokenization.
       metric_fns: list(callable), list of metric functions with the signature
         metric_fn(targets, predictions) to use during evaluation.
       skip_header_lines: int, number of header lines to skip in each source
@@ -862,7 +855,6 @@ class TextLineTask(Task):
         dataset_fn=dataset_fn,
         splits=split_to_filepattern.keys(),
         text_preprocessor=text_preprocessor,
-        sentencepiece_model_path=sentencepiece_model_path,
         metric_fns=metric_fns,
         **task_kwargs)
 
