@@ -215,10 +215,7 @@ class LazyTfdsLoader(object):
   def load_shard(self, file_instruction):
     """Returns a dataset for a single shard of the TFDS TFRecord files."""
     ds = self.builder._tfrecords_reader.read_files(  # pylint:disable=protected-access
-        tfds.core.tfrecords_reader.FileInstructions(
-            file_instructions=[file_instruction],
-            num_examples_per_shard=None,
-        ),
+        [file_instruction],
         read_config=tfds.ReadConfig(),
         shuffle_files=False)
     return ds
