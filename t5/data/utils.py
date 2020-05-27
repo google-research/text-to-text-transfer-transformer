@@ -459,10 +459,6 @@ class Task(DatasetProviderBase):
   def name(self):
     return self._name
 
-  # @property
-  # def postprocess_fn(self):
-  #   return self._postprocess_fn
-
   @property
   def metric_fns(self):
     return self._metric_fns
