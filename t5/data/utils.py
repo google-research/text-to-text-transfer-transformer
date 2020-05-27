@@ -382,9 +382,10 @@ class Task(DatasetProviderBase):
         `metric_fn(targets, predictions)` to use during evaluation. By default
         (None), an empty list will be used, resulting in no evaluation on this
         task.
-      postprocess_fn: function, a function that takes in decoded model outputs
-        (strings) and returns a string which is ready for evaluation using the
-        metric functions in `metric_fns`. Can be set to None as a no-op.
+      postprocess_fn: function (or list of functions) that (each) takes in
+        decoded model outputs (strings) and returns a string which is ready
+        for evaluation using the metric functions in `metric_fns`. Can be
+        set to None as a no-op.
       token_preprocessor: an optional function (or list of functions) that
         (each) takes in a tf.data.Dataset of token features and returns a
         tf.data.Dataset of token features.
