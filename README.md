@@ -42,7 +42,7 @@ Each `Task` is made up of:
 Additionally, you may optionally provide:
 
   * token preprocessor function(s)
-  * a postprocess function
+  * postprocess function(s)
 
 The **data source** can be an arbitrary function that provides a `tf.data.Dataset`, but we also provide simpler wrappers for datasets available in [TensorFlow Datasets (TFDS)][tfds] (a `TfdsTask`) or stored as text files with one example per line (a `TextLineTask`).
 
