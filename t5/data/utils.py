@@ -392,10 +392,12 @@ class Task(DatasetProviderBase):
         executed sequentially.
         The functions are also passed `sequence_length` and `vocabulary`
         keyword arguments.
-      output_features: dict(str, Feature), Feature, or None. Output
-        features of the Task. If a `Feature` is provided, it will be used for
-        the default feature names ('inputs' and 'targets'). When None (default),
-        a default `Feature` will be constructed for the default feature names.
+      output_features: dict(str, Feature), list(str), Feature, or None. Output
+        features of the Task. If list(str) is provided, a default `Feature` will
+        be constructed for each provided feature name. If a `Feature` is
+        provided, it will be used for the default feature names ('inputs' and
+        'targets'). When None (default), a default `Feature` will be constructed
+        for the default feature names.
       num_input_examples: dict(string: int) or None, a dictionary mapping split
         to its size in number of input examples (before preprocessing). The
         `num_input_examples` method will return None if not provided.
@@ -441,6 +443,11 @@ class Task(DatasetProviderBase):
       pass
     elif isinstance(output_features, Feature):
       output_features = {k: output_features for k in _DEFAULT_FEATURE_KEYS}
+    elif isinstance(output_features, list) and all(
+        isinstance(f, str) for f in output_features):
+      output_features = {
+          k: Feature(get_default_vocabulary()) for k in output_features
+      }
     else:
       raise ValueError(
           "output_features must be a dict, Feature, list of str, or None")
