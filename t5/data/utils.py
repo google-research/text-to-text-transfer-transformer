@@ -382,9 +382,11 @@ class Task(DatasetProviderBase):
         `metric_fn(targets, predictions)` to use during evaluation. By default
         (None), an empty list will be used, resulting in no evaluation on this
         task.
-      postprocess_fn: function, a function that takes in decoded model outputs
-        (strings) and returns a string which is ready for evaluation using the
-        metric functions in `metric_fns`. Can be set to None as a no-op.
+      postprocess_fn: function (or list of functions) that (each) takes in
+        decoded model outputs (strings) and returns a string which is ready
+        for evaluation using the metric functions in `metric_fns`. Can be
+        set to None as a no-op. If a list is given, functions will be executed
+        sequentially.
       token_preprocessor: an optional function (or list of functions) that
         (each) takes in a tf.data.Dataset of token features and returns a
         tf.data.Dataset of token features.
@@ -422,7 +424,10 @@ class Task(DatasetProviderBase):
         [] if token_preprocessor is None else token_preprocessor)
     self._metric_fns = metric_fns
     # Use a pass-through if postprocess_fn is not provided
-    self._postprocess_fn = postprocess_fn or (lambda x, **unused_kwargs: x)
+    self._postprocess_fn = (
+        [(lambda x, **unused_kwargs: x)]
+        if postprocess_fn is None else postprocess_fn)
+
     self._cache_dir = None
     self._stats = {}
 
@@ -462,10 +467,6 @@ class Task(DatasetProviderBase):
   @property
   def name(self):
     return self._name
-
-  @property
-  def postprocess_fn(self):
-    return self._postprocess_fn
 
   @property
   def metric_fns(self):
@@ -739,6 +740,15 @@ class Task(DatasetProviderBase):
     if self.get_cached_stats(split)["examples"] <= _MAX_EXAMPLES_TO_MEM_CACHE:
       ds = ds.cache()
     return ds
+
+  def postprocess_fn(self, string, **postprocess_kwargs):
+    """Returns the processed string after applying postprocess function(s)."""
+    postprocessors = self._postprocess_fn
+    if not hasattr(postprocessors, "__iter__"):
+      postprocessors = [self._postprocess_fn]
+    for post_fn in postprocessors:
+      string = post_fn(string, **postprocess_kwargs)
+    return string
 
 
 class TfdsTask(Task):
