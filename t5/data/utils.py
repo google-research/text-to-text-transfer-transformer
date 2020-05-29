@@ -737,6 +737,8 @@ class Task(DatasetProviderBase):
     """Returns the processed string after applying postprocess function(s)"""
     if not hasattr(self._postprocess_fn, "__iter__"):
       postprocessors = [self._postprocess_fn]
+    else:
+      postprocessors = self._postprocess_fn
     for post_fn in postprocessors:
       string = post_fn(string, **postprocess_kwargs)
     return string
