@@ -385,7 +385,8 @@ class Task(DatasetProviderBase):
       postprocess_fn: function (or list of functions) that (each) takes in
         decoded model outputs (strings) and returns a string which is ready
         for evaluation using the metric functions in `metric_fns`. Can be
-        set to None as a no-op.
+        set to None as a no-op. If a list is given, they will be executed
+        sequentially.
       token_preprocessor: an optional function (or list of functions) that
         (each) takes in a tf.data.Dataset of token features and returns a
         tf.data.Dataset of token features.
@@ -731,6 +732,7 @@ class Task(DatasetProviderBase):
     if self.get_cached_stats(split)["examples"] <= _MAX_EXAMPLES_TO_MEM_CACHE:
       ds = ds.cache()
     return ds
+
   def postprocess_fn(self, string, **postprocess_kwargs):
     """Returns the processed string after applying postprocess function(s)"""
     if not hasattr(self._postprocess_fn, "__iter__"):
