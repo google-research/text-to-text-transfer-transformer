@@ -320,6 +320,13 @@ t5_mesh_transformer \
   --export_dir="/path/to/export/dir"
 ```
 
+The command above exports the latest checkpoint in the model directory. To export a particular checkpoint, add the following flags:
+
+```sh
+  --checkpoint_mode="specific" \
+  --checkpoint_steps=1000000
+```
+
 ### GPU Usage
 
 If you would like to use GPU instead of TPUs, you can modify the above commands by removing TPU-specific flags (`--tpu`, `--tpu_zone`, `--gcp_project`) and setting the gin params for `mesh_shape` and `mesh_devices` based on your desired setup.
