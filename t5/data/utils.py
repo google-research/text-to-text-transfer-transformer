@@ -385,7 +385,7 @@ class Task(DatasetProviderBase):
       postprocess_fn: function (or list of functions) that (each) takes in
         decoded model outputs (strings) and returns a string which is ready
         for evaluation using the metric functions in `metric_fns`. Can be
-        set to None as a no-op. If a list is given, they will be executed
+        set to None as a no-op. If a list is given, functions will be executed
         sequentially.
       token_preprocessor: an optional function (or list of functions) that
         (each) takes in a tf.data.Dataset of token features and returns a
@@ -394,10 +394,12 @@ class Task(DatasetProviderBase):
         executed sequentially.
         The functions are also passed `sequence_length` and `vocabulary`
         keyword arguments.
-      output_features: dict(str, Feature), Feature, or None. Output
-        features of the Task. If a `Feature` is provided, it will be used for
-        the default feature names ('inputs' and 'targets'). When None (default),
-        a default `Feature` will be constructed for the default feature names.
+      output_features: dict(str, Feature), list(str), Feature, or None. Output
+        features of the Task. If list(str) is provided, a default `Feature` will
+        be constructed for each provided feature name. If a `Feature` is
+        provided, it will be used for the default feature names ('inputs' and
+        'targets'). When None (default), a default `Feature` will be constructed
+        for the default feature names.
       num_input_examples: dict(string: int) or None, a dictionary mapping split
         to its size in number of input examples (before preprocessing). The
         `num_input_examples` method will return None if not provided.
@@ -423,7 +425,7 @@ class Task(DatasetProviderBase):
     self._metric_fns = metric_fns
     # Use a pass-through if postprocess_fn is not provided
     self._postprocess_fn = (
-        [(lambda x, **unused_kwargs: x)] 
+        [(lambda x, **unused_kwargs: x)]
         if postprocess_fn is None else postprocess_fn)
 
     self._cache_dir = None
@@ -446,6 +448,11 @@ class Task(DatasetProviderBase):
       pass
     elif isinstance(output_features, Feature):
       output_features = {k: output_features for k in _DEFAULT_FEATURE_KEYS}
+    elif isinstance(output_features, list) and all(
+        isinstance(f, str) for f in output_features):
+      output_features = {
+          k: Feature(get_default_vocabulary()) for k in output_features
+      }
     else:
       raise ValueError(
           "output_features must be a dict, Feature, list of str, or None")
@@ -735,14 +742,13 @@ class Task(DatasetProviderBase):
     return ds
 
   def postprocess_fn(self, string, **postprocess_kwargs):
-    """Returns the processed string after applying postprocess function(s)"""
+    """Returns the processed string after applying postprocess function(s)."""
     postprocessors = self._postprocess_fn
     if not hasattr(postprocessors, "__iter__"):
       postprocessors = [self._postprocess_fn]
     for post_fn in postprocessors:
       string = post_fn(string, **postprocess_kwargs)
     return string
-
 
 
 class TfdsTask(Task):
