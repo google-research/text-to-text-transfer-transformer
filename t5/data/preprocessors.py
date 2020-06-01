@@ -786,6 +786,7 @@ def glue(
       features will be ordered in this way in the output. If not provided, all
       features (except 'idx' and 'label') will be used, sorted by name.
     id_key: str, key for id in the dataset. If not provided, 'idx' will be used.
+      if None, no id will be added to the dataset.
   Returns:
     a tf.data.Dataset
   """
@@ -824,7 +825,8 @@ def glue(
       ex['idx/answer'] = x['idx']['answer']
     else:
       # Store the data index in the returned example (used by eval)
-      ex['idx'] = x[id_key]
+      if id_key:
+        ex['idx'] = x[id_key]
 
     ex['inputs'] = joined
     ex['targets'] = label_name
