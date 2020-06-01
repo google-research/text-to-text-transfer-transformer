@@ -423,7 +423,8 @@ class Task(DatasetProviderBase):
     self._metric_fns = metric_fns
     # Use a pass-through if postprocess_fn is not provided
     self._postprocess_fn = (
-        [(lambda x, **unused_kwargs: x)] if postprocess_fn is None else postprocess_fn)
+        [(lambda x, **unused_kwargs: x)] 
+        if postprocess_fn is None else postprocess_fn)
 
     self._cache_dir = None
     self._stats = {}
@@ -735,10 +736,9 @@ class Task(DatasetProviderBase):
 
   def postprocess_fn(self, string, **postprocess_kwargs):
     """Returns the processed string after applying postprocess function(s)"""
-    if not hasattr(self._postprocess_fn, "__iter__"):
+    postprocessors = self._postprocess_fn
+    if not hasattr(postprocessors, "__iter__"):
       postprocessors = [self._postprocess_fn]
-    else:
-      postprocessors = self._postprocess_fn
     for post_fn in postprocessors:
       string = post_fn(string, **postprocess_kwargs)
     return string
