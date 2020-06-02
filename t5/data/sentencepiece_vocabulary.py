@@ -31,8 +31,8 @@ import sentencepiece as sentencepiece_processor
 class SentencePieceVocabulary(vocabularies.Vocabulary):
   """Wrapper for nlp/sentencepiece encoder.
 
-  Assumes the model was built using flags in `build_sentencepiece_model.sh`,
-  which reserve ID=0 is for padding, ID=1 for EOS, and ID=2 for UNK.
+  Assumes the model was built using flags to reserve ID=0 for padding, ID=1 for
+  EOS, and ID=2 for UNK.
   """
 
   def __init__(self, sentencepiece_model_file, extra_ids=None):
@@ -53,13 +53,30 @@ class SentencePieceVocabulary(vocabularies.Vocabulary):
     kwargs = {"extra_ids": extra_ids} if extra_ids is not None else {}
     super().__init__(**kwargs)
 
+  def _load_model(self):
+    """Load SPM and Python tokenizer."""
+    # Handle cases where SP can't load the file, but gfile can.
+    with tf.gfile.GFile(self._sentencepiece_model_file, "rb") as f:
+      self._sp_model = f.read()
+    # Load Python tokenizer and ensure the EOS and PAD IDs are correct.
+    # TODO(adarob): Add support for arbitrary EOS and PAD IDs.
+    self._tokenizer = sentencepiece_processor.SentencePieceProcessor()
+    self._tokenizer.LoadFromSerializedProto(self._sp_model)
+    if self._tokenizer.pad_id() != 0:
+      raise ValueError(
+          f"Vocabulary PAD ID must be 0, got {self._tokenizer.pad_id()}")
+    if self._tokenizer.eos_id() != 1:
+      raise ValueError(
+          f"Vocabulary EOS ID must be 1, got {self._tokenizer.eos_id()}")
+    if self._tokenizer.unk_id() != 2:
+      raise ValueError(
+          f"Vocabulary UNK ID must be 2, got {self._tokenizer.unk_id()}")
+
   @property
   def sp_model(self):
     """Retrieve the SPM."""
     if self._sp_model is None:
-      # Handle cases where SP can't load the file, but gfile can.
-      with tf.gfile.GFile(self._sentencepiece_model_file, "rb") as f:
-        self._sp_model = f.read()
+      self._load_model()
     return self._sp_model
 
   @property
@@ -68,10 +85,9 @@ class SentencePieceVocabulary(vocabularies.Vocabulary):
 
   @property
   def tokenizer(self):
-    """Instantiate and return a tokenizer."""
-    if self._tokenizer is None:
-      self._tokenizer = sentencepiece_processor.SentencePieceProcessor()
-      self._tokenizer.LoadFromSerializedProto(self.sp_model)
+    """Returns the Python tokenizer."""
+    if not self._tokenizer:
+      self._load_model()
     return self._tokenizer
 
   @property
