@@ -364,18 +364,10 @@ class MtfModel(T5Model):
     if vocabulary is None:
       vocabulary = t5.data.get_default_vocabulary()
 
-    if isinstance(targets, str):
-      tf.logging.info("scoring targets from file %s" % targets)
-      utils.score_from_files(self.estimator(vocabulary), vocabulary,
+    utils.score_from_strings(self.estimator(vocabulary), vocabulary,
                              self._model_type, self.batch_size,
                              self._sequence_length, self._model_dir,
                              checkpoint_steps, inputs, targets, scores_file)
-    else:
-      tf.logging.info("scoring targets from list of strings")
-      utils.score_from_strings(self.estimator(vocabulary), vocabulary,
-                               self._model_type, self.batch_size,
-                               self._sequence_length, self._model_dir,
-                               checkpoint_steps, inputs, targets, scores_file)
 
   def export(self, export_dir=None, checkpoint_step=-1, beam_size=1,
              temperature=1.0, vocabulary=None):
@@ -411,4 +403,3 @@ class MtfModel(T5Model):
         self.estimator(vocabulary, disable_tpu=True), export_dir, vocabulary,
         self._sequence_length, batch_size=self.batch_size,
         checkpoint_path=os.path.join(self._model_dir, model_ckpt))
-
