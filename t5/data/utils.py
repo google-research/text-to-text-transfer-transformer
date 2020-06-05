@@ -322,11 +322,18 @@ class Feature(object):
     """Create a Feature instance.
 
     Args:
-      vocabulary: vocabularies.Vocabulary object to use for tokenization.
+      vocabulary: vocabularies.Vocabulary object to use for tokenization,
+        or a callable function returning a vocabulary
       add_eos: bool, whether an EOS token should be added to this Feature.
     """
-    self.vocabulary = vocabulary
+    self._vocabulary = vocabulary
     self.add_eos = add_eos
+
+  @property
+  def vocabulary(self):
+    if callable(self._vocabulary):
+      self._vocabulary = self._vocabulary()
+    return self._vocabulary
 
 
 def print_dataset(dataset):
@@ -361,7 +368,8 @@ class Task(DatasetProviderBase):
                output_features=None,
                num_input_examples=None,
                supports_caching=False,
-               sentencepiece_model_path=None):
+               sentencepiece_model_path=None,
+               shuffle_buffer_size=_SHUFFLE_BUFFER_SIZE):
     """Task constructor.
 
     Attributes of output features, including the vocabulary used for
@@ -406,6 +414,7 @@ class Task(DatasetProviderBase):
       supports_caching: bool, whether or not this task supports offline caching.
       sentencepiece_model_path: DEPRECATED use `output_features` to specify a
         non-default vocabulary.
+      shuffle_buffer_size: an optional integer
     """
     if not _VALID_TASK_NAME_REGEX.match(name):
       raise ValueError(
@@ -430,6 +439,7 @@ class Task(DatasetProviderBase):
 
     self._cache_dir = None
     self._stats = {}
+    self._shuffle_buffer_size = shuffle_buffer_size
 
     if sentencepiece_model_path == DEFAULT_SPM_PATH:
       logging.warn(
@@ -664,7 +674,7 @@ class Task(DatasetProviderBase):
       split=tfds.Split.TRAIN,
       use_cached=False,
       shuffle=True,
-      shuffle_buffer_size=_SHUFFLE_BUFFER_SIZE,
+      shuffle_buffer_size=None,
   ):
     """Returns a tf.data.Dataset from cache or generated on the fly.
 
@@ -706,7 +716,7 @@ class Task(DatasetProviderBase):
     if shuffle:
       # Shuffle before mixing since preprocessor can output multiple
       # (correlated) examples per input.
-      ds = ds.shuffle(shuffle_buffer_size)
+      ds = ds.shuffle(shuffle_buffer_size or self._shuffle_buffer_size)
 
     return ds
 

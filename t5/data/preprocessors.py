@@ -1604,6 +1604,8 @@ def reduce_concat_tokens(dataset,
   Returns:
     a dataset
   """
+  dataset = dataset.map(lambda x: {feature_key: x[feature_key]},
+                        num_parallel_calls=tf.data.experimental.AUTOTUNE)
   dataset = dataset.padded_batch(batch_size, padded_shapes={feature_key: [-1]})
   def _my_fn(x):
     tokens = tf.reshape(x[feature_key], [-1])
@@ -1678,6 +1680,12 @@ def split_tokens(dataset,
 def split_tokens_to_inputs_length(dataset, sequence_length, **unused_kwargs):
   return split_tokens(dataset,
                       max_tokens_per_segment=sequence_length['inputs'])
+
+
+@gin.configurable
+def split_tokens_to_targets_length(dataset, sequence_length, **unused_kwargs):
+  return split_tokens(dataset,
+                      max_tokens_per_segment=sequence_length['targets'])
 
 
 @gin.configurable
