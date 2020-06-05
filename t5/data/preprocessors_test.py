@@ -249,6 +249,16 @@ class PreprocessorsTest(tf.test.TestCase):
             'answers': ['The answer . ', 'Another answer . '],
         })
 
+  def test_pad_nonspaced_languages(self):
+    dataset = tf.data.Dataset.from_tensor_slices(
+        {'text': ['Hello there. 你好吗？']})
+    dataset = prep.pad_nonspaced_languages(dataset)
+    assert_dataset(
+        dataset,
+        {
+            'text': 'Hello there. 你 好 吗 ？',
+        })
+
   def test_triviaqa(self):
     answers = ['key', 'keys']
     contexts = [

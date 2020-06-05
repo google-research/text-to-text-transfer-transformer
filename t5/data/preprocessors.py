@@ -134,6 +134,56 @@ def summarize(dataset, article_key, summary_key):
   return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 
+# Unicode ranges for characters in non-spaced languages.
+# https://en.wikipedia.org/wiki/Category:Writing_systems_without_word_boundaries
+# https://en.wikipedia.org/wiki/Han_unification#Unicode_ranges
+# https://linguistics.stackexchange.com/questions/6131
+NON_SPACED_LANGUAGE_RANGES = (
+    '\u1000-\u104f',  # Burmese
+    '\u4e00-\u9fff',  # CJK Unified Ideographs
+    '\u3400-\u4dbf',  # CJK Unified Ideographs Extension A
+    '\uf900-\ufaff',  # CJK Compatibility Ideographs
+    '\u2e80-\u2eff',  # CJK Radicals Supplement
+    '\u31c0-\u31ef',  # CJK Strokes
+    '\u3000-\u303f',  # CJK Symbols and Punctuation
+    '\u3040-\u309f',  # Japanese Hiragana
+    '\u30a0-\u30ff',  # Japanese Katakana
+    '\ua980-\ua9df',  # Javanese
+    '\u1780-\u17ff',  # Khmer
+    '\u19e0-\u19ff',  # Khmer Symbols
+    '\u0e80-\u0eff',  # Lao
+    '\u1980-\u19df',  # Tai Lue
+    '\u1a20-\u1aaf',  # Tai Tham
+    '\u0e00-\u0e7f',  # Thai
+    '\u0f00-\u0fff',  # Tibetan
+)
+
+
+def pad_nonspaced_languages(dataset, text_key='text'):
+  """Pad non-spaced languages with spaces around each character.
+
+  Args:
+    dataset: a tf.data.Dataset to process.
+    text_key: a string, the key for the text feature to preprocess in the
+      dataset examples.
+
+  Returns:
+    a tf.data.Dataset with the modified examples.
+  """
+  def my_fn(x):
+    res = dict(x)
+    text = res[text_key]
+    # Add spaces around any character from a non-spaced language.
+    pattern = ''.join(NON_SPACED_LANGUAGE_RANGES)
+    text = tf.strings.regex_replace(text, u'([{}])'.format(pattern), r' \1 ')
+    # Collapse consecutive whitespace into one space.
+    text = tf.strings.regex_replace(text, r'\s+', ' ')
+    res[text_key] = text
+    return res
+
+  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+
 def _pad_punctuation(text):
   """Adds spaces around punctuation."""
   # Add space around punctuation.
