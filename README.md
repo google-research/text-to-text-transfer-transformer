@@ -23,6 +23,7 @@ T5 can be used as a library for future model development by providing useful mod
   * [Decode](#decode)
   * [Export](#export)
   * [GPU Usage](#gpu-usage)
+  * [Google Usage](#google-usage)
 * [Released Model Checkpoints](#released-model-checkpoints)
 * [How to Cite](#how-to-cite)
 
@@ -84,7 +85,7 @@ The Hugging Face API is currently experimental and subject to change, but provid
 If you want to use our largest models on TPUs and/or reproduce the results in our paper, you should use the [MtfModel](https://github.com/google-research/text-to-text-transfer-transformer/tree/master/t5/models/mtf_model.py) API and the `t5_mesh_transformer` binary.
 If you are interested fine-tuning our models on a GPU in PyTorch, you should try the [HfPyTorchModel](https://github.com/google-research/text-to-text-transfer-transformer/tree/master/t5/models/hf_model.py) API.
 Since the HfPyTorchModel is experimental, the remainder of this README assumes usage of the MtfModel and its associated binary.
-A usage example of HfPyTorchModel is available [here](https://github.com/google-research/text-to-text-transfer-transformer/tree/master/t5/models/hf_model.py#L27).
+A usage example of HfPyTorchModel is available [here](https://github.com/google-research/text-to-text-transfer-transformer/blob/a08f0d1c4a7caa6495aec90ce769a29787c3c87c/t5/models/hf_model.py#L38).
 
 ## Usage
 
@@ -154,7 +155,7 @@ pip install t5[gcp]
 
 ### Setting up TPUs on GCP
 
-You will first need to launch a Virtual Machine (VM) on Google Cloud. Details about launching the VM can be found at the [Google Cloud Documentation](http://cloud/compute/docs/instances/create-start-instance).
+You will first need to launch a Virtual Machine (VM) on Google Cloud. Details about launching the VM can be found at the [Google Cloud Documentation](https://cloud.google.com/compute/docs/instances/create-start-instance).
 
 In order to run training or eval on Cloud TPUs, you must set up the following variables based on your project, zone and GCS bucket appropriately. Please refer to the [Cloud TPU Quickstart](https://cloud.google.com/tpu/docs/quickstart) guide for more details.
 
@@ -201,7 +202,7 @@ python -c "import t5; print(t5.data.MixtureRegistry.names())"
 
 You may also define additional tasks and mixtures in a new file and import it using the `--module_import` flag.
 
-Alternatively, you could train with a TSV file where each line is formatted as `<input>\t<target>` (see [above](#using-a-tsv-file)).
+Alternatively, you could train with a TSV file where each line is formatted as `<input>\t<target>` (see [above](#using-a-tsv-file-directly)).
 
 ### Fine-tuning
 
@@ -225,8 +226,8 @@ The correct pre-trained checkpoint path is included in the operative config.
 
 You may also define additional tasks and mixtures in a new file and import it using the `--module_import` flag.
 
-Alternatively, you could fine-tune with a TSV file where each line is formatted as `<input>\t<target>` (see [above](#using-a-tsv-file)). For example, you could try one of the paired translation datasets from WMT '19 [News Commentary 14](http://data.statmt.org/news-commentary/v14/training/) training set
-(e.g., [English-French](http://data.statmt.org/news-commentary/v14/training/)). When using a TSV file, you would replace the `MIXTURE_NAME` flag with:
+Alternatively, you could fine-tune with a TSV file where each line is formatted as `<input>\t<target>` (see [above](#using-a-tsv-file-directly)). For example, you could try one of the paired translation datasets from WMT '19 [News Commentary 14](http://data.statmt.org/news-commentary/v14/training/) training set
+(e.g., [English-French](http://data.statmt.org/news-commentary/v14/training/news-commentary-v14.en-fr.tsv.gz)). When using a TSV file, you would replace the `MIXTURE_NAME` flag with:
 
 ```sh
 --gin_param="utils.run.train_dataset_fn = @t5.models.mesh_transformer.tsv_dataset_fn"
