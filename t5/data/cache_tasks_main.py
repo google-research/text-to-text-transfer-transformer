@@ -368,9 +368,8 @@ def main(_):
 
   _import_modules(FLAGS.module_import)
 
-  if FLAGS.tasks_additional_cache_dirs:
-    t5.data.add_global_cache_dirs(
-        [FLAGS.output_cache_dir] + FLAGS.tasks_additional_cache_dirs)
+  t5.data.add_global_cache_dirs(
+      [FLAGS.output_cache_dir] + FLAGS.tasks_additional_cache_dirs)
 
   output_dirs = []
   pipeline_options = beam.options.pipeline_options.PipelineOptions(
