@@ -50,12 +50,11 @@ setuptools.setup(
         'nltk',
         'numpy',
         'pandas',
-        'rouge-score',
+        'rouge-score>=0.0.4',
         'sacrebleu',
         'scikit-learn',
         'scipy',
         'sentencepiece',
-        'six>=1.14',  # TODO(adarob): Remove once rouge-score is updated.
         'tensorflow-text',
         'tfds-nightly',
         'torch',

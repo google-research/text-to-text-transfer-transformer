@@ -3,7 +3,7 @@ python:
   - "3.6"
 # command to install dependencies
 install:
-  - pip install -e .[cache-tasks,test]
+  - pip install -U -e .[cache-tasks,test]
 # command to run tests
 script:
   - pytest
