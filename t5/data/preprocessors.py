@@ -301,7 +301,7 @@ def squad(dataset, include_context=True):
     {'id': <id>, context': <article>, 'question': <question>,
      'answers': { 'text': [<n answers>] }}
   This function will return examples of the format:
-    {'inputs': 'question: <question> context: <article>'
+    {'inputs': 'question: <question> context: <article>',
      'targets': '<answer_0>',
      'id': <id>, 'question': <question>, 'context': <context>,
      'answers': [<n answers>]},
