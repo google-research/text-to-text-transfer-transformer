@@ -16,6 +16,7 @@
 
 from absl.testing import absltest
 from t5.data import test_utils
+from t5.data import vocabularies
 import tensorflow.compat.v1 as tf
 
 tf.disable_v2_behavior()
@@ -26,6 +27,8 @@ mock = absltest.mock
 _UNK_STRING = b" \xe2\x81\x87 "
 _TEST_STRING = b"this is a test"
 _TEST_TOKENS = (11, 8, 6, 3, 8, 6, 3, 5, 10)
+_TEST_BYTE_IDS = \
+    (119, 107, 108, 118, 35, 108, 118, 35, 100, 35, 119, 104, 118, 119)
 
 
 class SentencepieceVocabularyTest(absltest.TestCase):
@@ -61,6 +64,45 @@ class SentencepieceVocabularyTest(absltest.TestCase):
     vocab2 = test_utils.sentencepiece_vocab(10)
     self.assertNotEqual(vocab1, vocab2)
 
+
+class ByteVocabularyTest(absltest.TestCase):
+
+  def test_vocab(self):
+    vocab = vocabularies.ByteVocabulary()
+    self.assertEqual(259, vocab.vocab_size)
+    self.assertSequenceEqual(
+        _TEST_BYTE_IDS,
+        vocab.encode(_TEST_STRING.decode()))
+    self.assertEqual(
+        _TEST_STRING,
+        tf.compat.as_bytes(vocab.decode(_TEST_BYTE_IDS)))
+    self.assertEqual(
+        _TEST_BYTE_IDS,
+        tuple(vocab.encode_tf(_TEST_STRING).numpy()))
+    self.assertEqual(
+        _TEST_STRING,
+        vocab.decode_tf(_TEST_BYTE_IDS).numpy())
+
+  def test_extra_ids(self):
+    vocab = vocabularies.ByteVocabulary(extra_ids=10)
+    self.assertEqual(269, vocab.vocab_size)
+    self.assertEqual("a", vocab.decode([100]))
+    self.assertEqual("", vocab.decode([268]))
+
+  def test_out_of_vocab(self):
+    vocab = vocabularies.ByteVocabulary()
+    self.assertEqual(259, vocab.vocab_size)
+    self.assertEqual("", vocab.decode([260]))
+
+  def test_equal(self):
+    vocab1 = vocabularies.ByteVocabulary()
+    vocab2 = vocabularies.ByteVocabulary()
+    self.assertEqual(vocab1, vocab2)
+
+  def test_not_equal(self):
+    vocab1 = vocabularies.ByteVocabulary()
+    vocab2 = vocabularies.ByteVocabulary(10)
+    self.assertNotEqual(vocab1, vocab2)
 
 if __name__ == "__main__":
   absltest.main()
