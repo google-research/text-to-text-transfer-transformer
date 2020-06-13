@@ -294,6 +294,7 @@ def trivia_qa(dataset):
   return dataset.unbatch()
 
 
+@gin.configurable(blacklist=['dataset'])
 def squad(dataset, include_context=True):
   """Convert SQuAD examples to a text2text pair.
 
