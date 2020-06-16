@@ -15,6 +15,8 @@
 """Tests for from t5.preprocessors."""
 
 from absl.testing import absltest
+import gin
+from t5 import data as t5_data
 from t5.data import preprocessors as prep
 from t5.data import test_utils
 from t5.data import utils
@@ -248,6 +250,21 @@ class PreprocessorsTest(tf.test.TestCase):
             'question': 'A question ? ',
             'answers': ['The answer . ', 'Another answer . '],
         })
+
+  def test_gin_configurable_preprocessors(self):
+    gin.clear_config()
+
+    gin.parse_config("""
+      t5.data.get_preprocessor_by_name.name = 'rekey'
+      t5.data.get_preprocessor_by_name.kwargs = {'key_map': {'inputs': 'other', 'targets': 'text'}}
+    """)
+    prep_rekey = t5_data.get_preprocessor_by_name()
+    og_dataset = tf.data.Dataset.from_tensors({
+        'text': 'That is good.', 'other': 'That is bad.'})
+    dataset = prep_rekey(og_dataset)
+    assert_dataset(
+        dataset,
+        {'inputs': 'That is bad.', 'targets': 'That is good.'})
 
   def test_pad_nonspaced_languages(self):
     dataset = tf.data.Dataset.from_tensor_slices(

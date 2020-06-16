@@ -14,6 +14,10 @@
 
 """Import data modules."""
 
+import functools
+
+import gin
+
 import t5.data.mixtures
 import t5.data.postprocessors
 import t5.data.preprocessors
@@ -25,3 +29,27 @@ import t5.data.tasks
 import t5.data.test_utils
 from t5.data.utils import *  # pylint:disable=wildcard-import
 import t5.data.vocabularies
+
+
+@gin.configurable
+def get_preprocessor_by_name(name=None, kwargs=None):
+  """Returns a closure of any preprocessor function with its arguments.
+
+  The main use-case is to use this (with gin scopes) to make any preprocessor
+  function available in a gin file to configure and use.
+
+  See: `PreprocessorsTest.test_gin_configurable_preprocessors`
+
+  Args:
+    name: str, name of the preprocessor function to configure.
+    kwargs: optional dictionary, the arguments to configure.
+
+  Returns:
+    a closure of the preprocessor function along with its arguments.
+  """
+
+  assert name is not None
+  f = getattr(t5.data.preprocessors, name)
+  if kwargs is None:
+    return f
+  return functools.partial(f, **kwargs)
