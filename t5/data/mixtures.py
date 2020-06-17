@@ -26,6 +26,35 @@ from t5.data.utils import rate_unsupervised
 import tensorflow_datasets as tfds
 
 
+_SUPER_GLUE_WEIGHT_MAPPING = {
+    "dpr_v001_simple": 1_322.,
+    "super_glue_wsc_v102_simple_train": 554.,
+    "super_glue_wsc_v102_simple_eval": 104.,
+    "super_glue_boolq_v102": 9_427.,
+    "super_glue_cb_v102": 250.,
+    "super_glue_copa_v102": 400.,
+    "super_glue_multirc_v102": 27_243.,
+    "super_glue_record_v102": 100_730.,
+    "super_glue_rte_v102": 2_490.,
+    "super_glue_wic_v102": 5_428.,
+    "super_glue_axb_v102": 0.,
+    "super_glue_axg_v102": 0.,
+}
+
+_GLUE_WEIGHT_MAPPING = {
+    'glue_cola_v002': 8_551.,
+    'glue_sst2_v002': 67_349.,
+    'glue_mrpc_v002': 3_668.,
+    'glue_qqp_v002': 363_849.,
+    'glue_stsb_v002': 5_749.,
+    'glue_mnli_v002': 392_702.,
+    'glue_qnli_v002': 104_743.,
+    'glue_rte_v002': 2_490.,
+    'glue_mnli_mismatched_v002': 0.,
+    'glue_mnli_matched_v002': 0.,
+    'glue_ax_v002': 0.,
+}
+
 # We omit WNLI because we train on WSC/DPR simple instead
 _glue_tasks = [
     "glue_%s_v002" % b.name
@@ -33,16 +62,24 @@ _glue_tasks = [
     if "wnli" not in b.name
 ]
 
+_glue_tasks_with_weights = [
+    (name, _GLUE_WEIGHT_MAPPING[name])
+    for name in _glue_tasks
+]
+
 _wsc_dpr_tasks = [
     "dpr_v001_simple",
     "super_glue_wsc_v102_simple_train",
     "super_glue_wsc_v102_simple_eval",
 ]
+
 _super_glue_tasks = _wsc_dpr_tasks + [
     "super_glue_%s_v102" % b.name
     for b in tfds.text.super_glue.SuperGlue.builder_configs.values()
     if "wsc" not in b.name
 ]
+
+_super_glue_tasks_with_weight = [(name, _SUPER_GLUE_WEIGHT_MAPPING[name]) for name in _super_glue_tasks]
 
 _supervised_tasks = (
     _glue_tasks + _super_glue_tasks +
@@ -104,6 +141,12 @@ MixtureRegistry.add(
     [("c4_v020_unsupervised", rate_unsupervised)] +
     _glue_tasks + _super_glue_tasks +
     ["squad_v010_allanswers"],
+    default_rate=rate_num_examples)
+
+MixtureRegistry.add(
+    "supervised_without_wmt",
+    _glue_tasks_with_weights + _super_glue_tasks_with_weight +
+    [("squad_v010_allanswers", 87_599)],
     default_rate=rate_num_examples)
 
 MixtureRegistry.add(
