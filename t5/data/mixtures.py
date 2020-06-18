@@ -41,6 +41,7 @@ _SUPER_GLUE_WEIGHT_MAPPING = {
     "super_glue_axg_v102": 0.,
 }
 
+# We omit WNLI because we train on WSC/DPR simple instead
 _GLUE_WEIGHT_MAPPING = {
     'glue_cola_v002': 8_551.,
     'glue_sst2_v002': 67_349.,
@@ -55,17 +56,8 @@ _GLUE_WEIGHT_MAPPING = {
     'glue_ax_v002': 0.,
 }
 
-# We omit WNLI because we train on WSC/DPR simple instead
-_glue_tasks = [
-    "glue_%s_v002" % b.name
-    for b in tfds.text.glue.Glue.builder_configs.values()
-    if "wnli" not in b.name
-]
-
-_glue_tasks_with_weight = [
-    (name, _GLUE_WEIGHT_MAPPING[name])
-    for name in _glue_tasks
-]
+_glue_tasks = _GLUE_WEIGHT_MAPPING.keys()
+_glue_tasks_with_weight = list(_GLUE_WEIGHT_MAPPING.items())
 
 _wsc_dpr_tasks = [
     "dpr_v001_simple",
@@ -73,13 +65,8 @@ _wsc_dpr_tasks = [
     "super_glue_wsc_v102_simple_eval",
 ]
 
-_super_glue_tasks = _wsc_dpr_tasks + [
-    "super_glue_%s_v102" % b.name
-    for b in tfds.text.super_glue.SuperGlue.builder_configs.values()
-    if "wsc" not in b.name
-]
-
-_super_glue_tasks_with_weight = [(name, _SUPER_GLUE_WEIGHT_MAPPING[name]) for name in _super_glue_tasks]
+_super_glue_tasks = _SUPER_GLUE_WEIGHT_MAPPING.keys()
+_super_glue_tasks_with_weight = list(_SUPER_GLUE_WEIGHT_MAPPING.items())
 
 _supervised_tasks = (
     _glue_tasks + _super_glue_tasks +
