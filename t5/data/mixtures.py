@@ -56,7 +56,7 @@ _GLUE_WEIGHT_MAPPING = {
     'glue_ax_v002': 0.,
 }
 
-_glue_tasks = _GLUE_WEIGHT_MAPPING.keys()
+_glue_tasks = list(_GLUE_WEIGHT_MAPPING.keys())
 _glue_tasks_with_weight = list(_GLUE_WEIGHT_MAPPING.items())
 
 _wsc_dpr_tasks = [
@@ -65,7 +65,7 @@ _wsc_dpr_tasks = [
     "super_glue_wsc_v102_simple_eval",
 ]
 
-_super_glue_tasks = _SUPER_GLUE_WEIGHT_MAPPING.keys()
+_super_glue_tasks = list(_SUPER_GLUE_WEIGHT_MAPPING.keys())
 _super_glue_tasks_with_weight = list(_SUPER_GLUE_WEIGHT_MAPPING.items())
 
 _supervised_tasks = (
