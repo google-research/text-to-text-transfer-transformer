@@ -25,7 +25,7 @@ from t5.data.utils import rate_num_examples
 from t5.data.utils import rate_unsupervised
 import tensorflow_datasets as tfds
 
-
+# These weights are based on the number of examples in each dataset.
 _SUPER_GLUE_WEIGHT_MAPPING = {
     "dpr_v001_simple": 1_322.,
     "super_glue_wsc_v102_simple_train": 554.,
@@ -41,6 +41,7 @@ _SUPER_GLUE_WEIGHT_MAPPING = {
     "super_glue_axg_v102": 0.,
 }
 
+# These weights are based on the number of examples in each dataset.
 # We omit WNLI because we train on WSC/DPR simple instead
 _GLUE_WEIGHT_MAPPING = {
     'glue_cola_v002': 8_551.,
@@ -128,7 +129,6 @@ MixtureRegistry.add(
     _glue_tasks + _super_glue_tasks +
     ["squad_v010_allanswers"],
     default_rate=rate_num_examples)
-
 
 MixtureRegistry.add(
     "all_equal",
