@@ -142,11 +142,6 @@ MixtureRegistry.add(
     ["squad_v010_allanswers"],
     default_rate=rate_num_examples)
 
-MixtureRegistry.add(
-    "supervised_without_wmt",
-    _glue_tasks_with_weight + _super_glue_tasks_with_weight +
-    [("squad_v010_allanswers", 87_599)],
-    default_rate=rate_num_examples)
 
 MixtureRegistry.add(
     "all_equal",
