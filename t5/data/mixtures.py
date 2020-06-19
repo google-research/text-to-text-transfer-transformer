@@ -25,24 +25,49 @@ from t5.data.utils import rate_num_examples
 from t5.data.utils import rate_unsupervised
 import tensorflow_datasets as tfds
 
+# These weights are based on the number of examples in each dataset.
+_SUPER_GLUE_WEIGHT_MAPPING = {
+    "dpr_v001_simple": 1_322.,
+    "super_glue_wsc_v102_simple_train": 259.,
+    "super_glue_wsc_v102_simple_eval": 0.,
+    "super_glue_boolq_v102": 9_427.,
+    "super_glue_cb_v102": 250.,
+    "super_glue_copa_v102": 400.,
+    "super_glue_multirc_v102": 27_243.,
+    "super_glue_record_v102": 138_854.,
+    "super_glue_rte_v102": 2_490.,
+    "super_glue_wic_v102": 5_428.,
+    "super_glue_axb_v102": 0.,
+    "super_glue_axg_v102": 0.,
+}
 
+# These weights are based on the number of examples in each dataset.
 # We omit WNLI because we train on WSC/DPR simple instead
-_glue_tasks = [
-    "glue_%s_v002" % b.name
-    for b in tfds.text.glue.Glue.builder_configs.values()
-    if "wnli" not in b.name
-]
+_GLUE_WEIGHT_MAPPING = {
+    'glue_cola_v002': 8_551.,
+    'glue_sst2_v002': 67_349.,
+    'glue_mrpc_v002': 3_668.,
+    'glue_qqp_v002': 363_849.,
+    'glue_stsb_v002': 5_749.,
+    'glue_mnli_v002': 392_702.,
+    'glue_qnli_v002': 104_743.,
+    'glue_rte_v002': 2_490.,
+    'glue_mnli_mismatched_v002': 0.,
+    'glue_mnli_matched_v002': 0.,
+    'glue_ax_v002': 0.,
+}
+
+_glue_tasks = list(_GLUE_WEIGHT_MAPPING.keys())
+_glue_tasks_with_weight = list(_GLUE_WEIGHT_MAPPING.items())
 
 _wsc_dpr_tasks = [
     "dpr_v001_simple",
     "super_glue_wsc_v102_simple_train",
     "super_glue_wsc_v102_simple_eval",
 ]
-_super_glue_tasks = _wsc_dpr_tasks + [
-    "super_glue_%s_v102" % b.name
-    for b in tfds.text.super_glue.SuperGlue.builder_configs.values()
-    if "wsc" not in b.name
-]
+
+_super_glue_tasks = list(_SUPER_GLUE_WEIGHT_MAPPING.keys())
+_super_glue_tasks_with_weight = list(_SUPER_GLUE_WEIGHT_MAPPING.items())
 
 _supervised_tasks = (
     _glue_tasks + _super_glue_tasks +
@@ -70,13 +95,12 @@ _finetune_tasks = [
 
 MixtureRegistry.add(
     "glue_v002_proportional",
-    _glue_tasks, default_rate=rate_num_examples)
+    _glue_tasks_with_weight)
 
 
 MixtureRegistry.add(
     "super_glue_v102_proportional",
-    _super_glue_tasks,
-    default_rate=rate_num_examples)
+    _super_glue_tasks_with_weight)
 
 
 # mnli and its associated dev sets: mnli_matched and mnli_mismatched
@@ -114,9 +138,17 @@ MixtureRegistry.add(
 
 
 def _dedupe(name):
+  rate = None
+  if name in _GLUE_WEIGHT_MAPPING:
+    rate = _GLUE_WEIGHT_MAPPING[name]
+  elif name in _SUPER_GLUE_WEIGHT_MAPPING:
+    rate = _SUPER_GLUE_WEIGHT_MAPPING[name]
+  if rate is None:
+    return rate_num_examples
   if "glue" in name and "rte" in name:
-    return functools.partial(rate_num_examples, scale=0.5)
-  return rate_num_examples
+    rate *= 0.5
+  return rate
+
 
 MixtureRegistry.add(
     "all_proportional",
@@ -137,6 +169,16 @@ MixtureRegistry.add(
 
 # ================== Leave-one-out cotrain then finetune =======================
 
+
+def assign_weight_or_rate_num_examples(name):
+  if name in _GLUE_WEIGHT_MAPPING:
+    return _GLUE_WEIGHT_MAPPING[name]
+  elif name in _SUPER_GLUE_WEIGHT_MAPPING:
+    return _SUPER_GLUE_WEIGHT_MAPPING[name]
+  else:
+    return rate_num_examples
+
+
 for task_name in _finetune_tasks:
   task_names = set(_supervised_tasks + ["c4_v020_unsupervised"])
 
@@ -144,12 +186,12 @@ for task_name in _finetune_tasks:
   if task_name == "glue_v002_proportional":
     task_names -= set(_glue_tasks)
     # No de-duping needed
-    tasks = [(t, rate_num_examples) for t in task_names]
+    tasks = [(t, assign_weight_or_rate_num_examples(t)) for t in task_names]
   # Special case to treat all Super GLUE tasks as one task.
   elif task_name == "super_glue_v102_proportional":
     task_names -= set(_super_glue_tasks)
     # No de-duping needed
-    tasks = [(t, rate_num_examples) for t in task_names]
+    tasks = [(t, assign_weight_or_rate_num_examples(t)) for t in task_names]
   else:
     task_names -= {task_name}
     # Use de-duping since we have GLUE and SuperGLUE
@@ -188,5 +230,4 @@ MixtureRegistry.add(
 # ================================= WSC + DPR ==================================
 MixtureRegistry.add(
     "wsc_dpr_simple_proportional",
-    _wsc_dpr_tasks,
-    default_rate=rate_num_examples)
+    [(name, _SUPER_GLUE_WEIGHT_MAPPING[name]) for name in _wsc_dpr_tasks])
