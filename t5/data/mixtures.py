@@ -28,13 +28,13 @@ import tensorflow_datasets as tfds
 # These weights are based on the number of examples in each dataset.
 _SUPER_GLUE_WEIGHT_MAPPING = {
     "dpr_v001_simple": 1_322.,
-    "super_glue_wsc_v102_simple_train": 554.,
-    "super_glue_wsc_v102_simple_eval": 104.,
+    "super_glue_wsc_v102_simple_train": 259.,
+    "super_glue_wsc_v102_simple_eval": 0.,
     "super_glue_boolq_v102": 9_427.,
     "super_glue_cb_v102": 250.,
     "super_glue_copa_v102": 400.,
     "super_glue_multirc_v102": 27_243.,
-    "super_glue_record_v102": 100_730.,
+    "super_glue_record_v102": 138_854.,
     "super_glue_rte_v102": 2_490.,
     "super_glue_wic_v102": 5_428.,
     "super_glue_axb_v102": 0.,
