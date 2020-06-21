@@ -266,6 +266,7 @@ t5_mesh_transformer \
   --t5_tfds_data_dir=${DATA_DIR} \
   --gin_file="eval.gin" \
   --gin_file="beam_search.gin" \
+  --gin_param="run.dataset_split = 'validation'" \
   --gin_param="utils.tpu_mesh_shape.tpu_topology = '2x2'" \
   --gin_param="MIXTURE_NAME = 'glue_mrpc_v002'" \
   --gin_param="eval_checkpoint_step = 'all'"
