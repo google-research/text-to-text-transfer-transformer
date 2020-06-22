@@ -12,11 +12,9 @@ jobs:
       with:
         python-version: '3.x'
     - name: Install dependencies
-      run: |
-      - pip install -e .[cache-tasks,test]
+      run: pip install -e .[cache-tasks,test]
     - name: Test with pytest
-      run: |
-        pytest
+      run: pytest
     # The below step just reports the success or failure of tests as a "commit status".
     # This is needed for copybara integration.
     - name: Report success or failure as github status
