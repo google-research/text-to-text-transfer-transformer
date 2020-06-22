@@ -31,5 +31,5 @@ jobs:
             "state": "'$lowercase_status'",
             "target_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
             "description": "'$status'",
-            "context": "github-actions/Build"
+            "context": "github-actions/build"
             }'
