@@ -70,7 +70,7 @@ class MtfModel(T5Model):
       gcp_project=None,
       tpu_topology="2x2",
       model_parallelism=8,
-      batch_size=("tokens_per_batch", 1024),
+      batch_size=("sequences_per_batch", 1),
       sequence_length=None,
       model_type="bitransformer",
       layout_rules="ensemble:ensemble,batch:batch,d_ff:model,heads:model,vocab:model,experts:batch",

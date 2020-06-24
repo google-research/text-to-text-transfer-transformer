@@ -112,6 +112,9 @@ flags.DEFINE_string("output_file", "", "Path to output file to save decodes.")
 flags.DEFINE_string(
     "export_dir", "",
     "Directory to export SavedModels to. Will use `model_dir` if unspecified.")
+flags.DEFINE_integer(
+    "export_batch_size", 1,
+    "Number of sequences per batch in exported SavedModel.")
 
 FLAGS = flags.FLAGS
 
@@ -210,6 +213,7 @@ def main(_):
       if isinstance(checkpoint_steps, list):
         checkpoint_steps = checkpoint_steps[0]
 
+      model.batch_size = FLAGS.export_batch_size
       model.export(
           export_dir=FLAGS.export_dir,
           checkpoint_step=checkpoint_steps)
