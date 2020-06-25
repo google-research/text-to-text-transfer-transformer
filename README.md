@@ -309,7 +309,7 @@ You can also use `beam_search.gin` or `greedy_decode.gin` instead of `sample_dec
 
 ### Export
 
-You may also want to export a [SavedModel](https://www.tensorflow.org/guide/saved_model), which is useful for serving your trained model, (e.g., when deploying with [ML Engine](https://cloud.google.com/ml-engine/docs/deploying-models)).
+You may also want to export a [`SavedModel`](https://www.tensorflow.org/guide/saved_model), which is useful for serving your trained model, (e.g., when deploying with [ML Engine](https://cloud.google.com/ml-engine/docs/deploying-models) or in a [Docker](https://docs.docker.com) image).
 
 ```sh
 t5_mesh_transformer \
@@ -327,6 +327,8 @@ The command above exports the latest checkpoint in the model directory. To expor
   --checkpoint_mode="specific" \
   --checkpoint_steps=1000000
 ```
+
+The [t5-deploy notebook](https://colab.research.google.com/github/google-research/text-to-text-transfer-transformer/blob/master/notebooks/t5-deploy.ipynb) demonstrates exporting a `SavedModel` and packaging it in a [Docker](https://docs.docker.com) image for serving.
 
 ### GPU Usage
 
