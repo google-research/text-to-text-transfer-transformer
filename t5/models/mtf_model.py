@@ -360,6 +360,8 @@ class MtfModel(T5Model):
 
     with gin.unlock_config():
       gin.parse_config_file(_operative_config_path(self._model_dir))
+      # The following config setting ensures we do scoring instead of inference.
+      gin.bind_parameter("tpu_estimator_model_fn.score_in_predict_mode", True)
 
     if vocabulary is None:
       vocabulary = t5.data.get_default_vocabulary()
