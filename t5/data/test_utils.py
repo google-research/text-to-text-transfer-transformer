@@ -517,6 +517,22 @@ class FakeTaskTest(absltest.TestCase):
         metric_fns=[])
     self.text_line_task = TaskRegistry.get("text_line_task")
 
+    # Prepare uncached Task.
+    def _dataset_fn(split, shuffle_files):
+      del split
+      del shuffle_files
+      filepattern = os.path.join(self.test_data_dir, "train.tsv*")
+      return tf.data.TextLineDataset(filepattern)
+    TaskRegistry.add(
+        "general_task",
+        dataset_utils.Task,
+        dataset_fn=_dataset_fn,
+        splits=["train"],
+        text_preprocessor=[_split_tsv_preprocessor, test_text_preprocessor],
+        output_features=dataset_utils.Feature(sentencepiece_vocab()),
+        metric_fns=[])
+    self.general_task = TaskRegistry.get("general_task")
+
   def tearDown(self):
     super().tearDown()
     self._tfds_patcher.stop()

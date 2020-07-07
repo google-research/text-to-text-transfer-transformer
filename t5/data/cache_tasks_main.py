@@ -86,17 +86,15 @@ def _import_modules(modules):
       importlib.import_module(module)
 
 
-class PreprocessAndTokenize(beam.PTransform):
-  """Preprocesses and tokenizes a Task.
-
-  Expects input to be a PCollection of sharded file paths.
+class BasePreprocessAndTokenizeTask(beam.PTransform):
+  """Abstract base class to preprocess and tokenize a Task.
 
   Returns a PCollection of tokenized example dicts containing Tensors.
   """
 
   def __init__(
       self, task, split, max_input_examples=None, modules_to_import=()):
-    """PreprocessAndTokenize constructor.
+    """BasePreprocessAndTokenizeTask constructor.
 
     Args:
       task: Task, the task to process.
@@ -109,26 +107,32 @@ class PreprocessAndTokenize(beam.PTransform):
     self._max_input_examples = max_input_examples
     self._split = split
     self._modules_to_import = modules_to_import
-    self.files = self._task.tfds_dataset.files(split)
+    self.shards = self._get_shards()
     logging.info(
-        "%s %s files: %s", task.name, split, ", ".join(
-            ["%s" % inst for inst in self.files]))
+        "%s %s shards: %s", task.name, split, ", ".join(
+            ["%s" % f for f in self.shards]))
+
+  def _get_shards(self):
+    raise NotImplementedError
+
+  def _load_shard(self, shard):
+    raise NotImplementedError
 
   def _increment_counter(self, name):
     metrics.Metrics.counter(
         str("%s_%s" % (self._task.name, self._split)), name).inc()
 
-  def _emit_tokenized_examples(self, shard_instruction):
+  def _emit_tokenized_examples(self, shard):
     """Emits examples keyed by shard path and index for a single shard."""
     _import_modules(self._modules_to_import)
-    logging.info("Processing shard: %s", shard_instruction)
+    logging.info("Processing shard: %s", shard)
     self._increment_counter("input-shards")
 
-    ds = self._task.tfds_dataset.load_shard(shard_instruction)
+    ds = self._load_shard(shard)
 
     if self._max_input_examples:
       num_shard_examples = int(
-          self._max_input_examples / len(self.files))
+          self._max_input_examples / len(self.shards))
       ds = ds.repeat().take(num_shard_examples)
 
     ds = self._task.preprocess_text(ds)
@@ -138,14 +142,56 @@ class PreprocessAndTokenize(beam.PTransform):
 
     for ex in tfds.as_numpy(ds):
       self._increment_counter("examples")
+      logging.info(ex)
       yield ex
 
   def expand(self, pipeline):
     return (
         pipeline
-        | beam.Create(self.files)
+        | beam.Create(self.shards)
         | beam.FlatMap(self._emit_tokenized_examples)
         | beam.Reshuffle())  # Allows for additional parallelization.
+
+
+class PreprocessAndTokenizeTfdsTask(BasePreprocessAndTokenizeTask):
+  """Preprocesses and tokenizes a TfdsTask.
+
+  Returns a PCollection of tokenized example dicts containing Tensors.
+  """
+
+  def _get_shards(self):
+    return self._task.tfds_dataset.files(self._split)
+
+  def _load_shard(self, shard):
+    return self._task.tfds_dataset.load_shard(shard)
+
+
+class PreprocessAndTokenizeTextLineTask(BasePreprocessAndTokenizeTask):
+  """Preprocesses and tokenizes a TextLineTask.
+
+  Returns a PCollection of tokenized example dicts containing Tensors.
+  """
+
+  def _get_shards(self):
+    return tf.io.gfile.glob(self._task._split_to_filepattern[self._split])  # pylint:disable=protected-access
+
+  def _load_shard(self, shard):
+    return tf.data.TextLineDataset(shard).skip(self._task._skip_header_lines)  # pylint:disable=protected-access
+
+
+class PreprocessAndTokenizeGenericTask(BasePreprocessAndTokenizeTask):
+  """Preprocesses and tokenizes a generic Task.
+
+  Cannot be distributed.
+
+  Returns a PCollection of tokenized example dicts containing Tensors.
+  """
+
+  def _get_shards(self):
+    return ["Unkown"]
+
+  def _load_shard(self, unused_shard):
+    return self._task._dataset_fn(self._split, shuffle_files=False)  # pylint:disable=protected-access
 
 
 class WriteExampleTfRecord(beam.PTransform):
@@ -295,10 +341,6 @@ def run_pipeline(
       if included_regex.match(t) and not excluded_regex.match(t)]
   for task_name in task_names:
     task = t5.data.TaskRegistry.get(task_name)
-    if not isinstance(task, t5.data.TfdsTask):
-      # TODO(adarob): Add support for non-TfdsTasks.
-      logging.info("Skipping non-`TfdsTask`: '%s'", task.name)
-      continue
     if not task.supports_caching:
       logging.info(
           "Skipping task that does not support caching: '%s'", task.name)
@@ -336,11 +378,21 @@ def run_pipeline(
 
     output_dirs.append(output_dir)
 
+    if isinstance(task, t5.data.TfdsTask):
+      pat_cls = PreprocessAndTokenizeTfdsTask
+    elif isinstance(task, t5.data.TextLineTask):
+      pat_cls = PreprocessAndTokenizeTextLineTask
+    else:
+      logging.warning(
+          "Generic Task '%s' cannot be distributed. To speed up preprocessing, "
+          "use a TfdsTask or TextLineTask instead.", task.name)
+      pat_cls = PreprocessAndTokenizeGenericTask
+
     for split in task.splits:
       label = "%s_%s" % (task.name, split)
-      pat = PreprocessAndTokenize(
-          task, split, max_input_examples, modules_to_import)
-      num_shards = len(pat.files)
+
+      pat = pat_cls(task, split, max_input_examples, modules_to_import)
+      num_shards = len(pat.shards)
       examples = (
           pipeline
           | "%s_pat" % label >> pat)

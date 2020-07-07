@@ -367,7 +367,7 @@ class Task(DatasetProviderBase):
                token_preprocessor=None,
                output_features=None,
                num_input_examples=None,
-               supports_caching=False,
+               supports_caching=True,
                sentencepiece_model_path=None,
                shuffle_buffer_size=_SHUFFLE_BUFFER_SIZE):
     """Task constructor.
@@ -772,7 +772,6 @@ class TfdsTask(Task):
       metric_fns,
       tfds_data_dir=None,
       splits=None,
-      supports_caching=True,
       **task_kwargs):
     """TfdsTask constructor.
 
@@ -793,7 +792,6 @@ class TfdsTask(Task):
         allowable canonical splits (e.g., 'validation') to TFDS splits or slices
         (e.g., 'train[':1%']), or None. The default, None, uses all available
         splits from the TFDS dataset info.
-      supports_caching: bool, whether or not this task supports offline caching.
       **task_kwargs: dict, additional keyword arguments for the parent `Task`
         class.
     """
@@ -815,7 +813,6 @@ class TfdsTask(Task):
         splits=list(splits) if splits else None,
         text_preprocessor=text_preprocessor,
         metric_fns=metric_fns,
-        supports_caching=supports_caching,
         **task_kwargs)
 
   @property
@@ -865,6 +862,9 @@ class TextLineTask(Task):
       **task_kwargs: dict, additional keyword arguments for the parent `Task`
         class.
     """
+    self._split_to_filepattern = split_to_filepattern
+    self._skip_header_lines = skip_header_lines
+
     def dataset_fn(split, shuffle_files):
       filepattern = split_to_filepattern[split]
 
@@ -880,7 +880,7 @@ class TextLineTask(Task):
     super().__init__(
         name,
         dataset_fn=dataset_fn,
-        splits=split_to_filepattern.keys(),
+        splits=list(split_to_filepattern.keys()),
         text_preprocessor=text_preprocessor,
         metric_fns=metric_fns,
         **task_kwargs)

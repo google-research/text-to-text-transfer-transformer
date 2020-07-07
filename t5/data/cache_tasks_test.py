@@ -49,24 +49,28 @@ class ProcessTaskBeamTest(test_utils.FakeTaskTest):
             }
         }))
 
-  def test_pipeline(self):
+  def validate_pipeline(self, task_name):
     self.assertTrue(TaskRegistry.get("cached_task").cache_dir)
-    self.assertFalse(TaskRegistry.get("uncached_task").cache_dir)
+    task = TaskRegistry.get(task_name)
+    self.assertFalse(task.cache_dir)
 
     with TestPipeline() as p:
       output_dirs = cache_tasks_main.run_pipeline(
-          p, ["cached_task", "uncached_task"], cache_dir=self.test_data_dir)
+          p, ["cached_task", task_name], cache_dir=self.test_data_dir)
 
-    actual_task_dir = os.path.join(self.test_data_dir, "uncached_task")
+    actual_task_dir = os.path.join(self.test_data_dir, task_name)
     expected_task_dir = os.path.join(test_utils.TEST_DATA_DIR, "cached_task")
     expected_tfrecord_files = [
-        "train.tfrecord-00000-of-00002",
-        "train.tfrecord-00001-of-00002",
-        "validation.tfrecord-00000-of-00001"]
+        "train.tfrecord-00000-of-00002", "train.tfrecord-00001-of-00002",
+    ]
     expected_auxiliary_files = [
-        "stats.train.json", "stats.validation.json",
-        "info.train.json", "info.validation.json"]
+        "stats.train.json", "info.train.json"
+    ]
 
+    if "validation" in task.splits:
+      expected_tfrecord_files.append("validation.tfrecord-00000-of-00001")
+      expected_auxiliary_files.extend(
+          ["stats.validation.json", "info.validation.json"])
     self.assertEqual([actual_task_dir], output_dirs)
     self.assertCountEqual(
         expected_tfrecord_files + expected_auxiliary_files,
@@ -79,13 +83,23 @@ class ProcessTaskBeamTest(test_utils.FakeTaskTest):
               os.path.join(actual_task_dir, fname)).read().replace(", ", ","))
 
     # Add COMPLETED file so that we can load `uncached_task`.
-    test_utils.mark_completed(self.test_data_dir, "uncached_task")
+    test_utils.mark_completed(self.test_data_dir, task_name)
 
     # Load task.
-    uncached_task = TaskRegistry.get("uncached_task")
+    uncached_task = TaskRegistry.get(task_name)
 
     # Check datasets.
-    test_utils.verify_task_matches_fake_datasets(uncached_task, use_cached=True)
+    test_utils.verify_task_matches_fake_datasets(
+        uncached_task, use_cached=True, splits=task.splits)
+
+  def test_tfds_pipeline(self):
+    self.validate_pipeline("uncached_task")
+
+  def test_text_line_pipeline(self):
+    self.validate_pipeline("text_line_task")
+
+  def test_general_pipeline(self):
+    self.validate_pipeline("text_line_task")
 
   def test_overwrite(self):
     with TestPipeline() as p:
