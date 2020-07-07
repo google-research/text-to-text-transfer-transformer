@@ -68,7 +68,7 @@ class MtfModel(T5Model):
       tpu_job_name=None,
       tpu_zone=None,
       gcp_project=None,
-      tpu_topology="2x2",
+      tpu_topology="v2-8",
       model_parallelism=8,
       batch_size=("sequences_per_batch", 1),
       sequence_length=None,
@@ -93,7 +93,7 @@ class MtfModel(T5Model):
       tpu_job_name: str, name of the TPU worker binary.
       tpu_zone: str, GCE zone where the Cloud TPU is located
       gcp_project: str, project name for the Cloud TPU-enabled project.
-      tpu_topology: str, e.g. "2x2".
+      tpu_topology: str, e.g. "2x2" or "v2-8".
       model_parallelism: integer, the number of cores per model replica.
       batch_size: An integer or a (method, value) pair to pass to
         compute_batch_size(). Note that this is the global batch size and not
