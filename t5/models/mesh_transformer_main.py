@@ -75,10 +75,22 @@ flags.DEFINE_boolean("use_model_api", False,
 flags.DEFINE_enum("mode", None,
                   ["train", "finetune", "eval", "predict", "export", "score"],
                   "Mode with which to run the model.")
+flags.DEFINE_integer("batch_size", 1,
+                     "Number of sequences per batch.")
+flags.DEFINE_integer("input_sequence_length", 512,
+                     "Number of tokens in input sequence.")
+flags.DEFINE_integer("target_sequence_length", 512,
+                     "Number of tokens in target sequence.")
+
+# TPU-specific args.
+flags.DEFINE_string("tpu_topology", "v2-8",
+                    "The TPU topology being used. Ignored if --tpu not set.")
+flags.DEFINE_integer("model_parallelism", 8,
+                     "The number of cores per model replica. Ignored if --tpu "
+                     "not set.")
 
 # Train mode args
 flags.DEFINE_integer("train_steps", 1000, "Number of training iterations.")
-
 flags.DEFINE_string("mixture_or_task", "wmt_t2t_ende_v003",
                     "Name of Mixture or Task to use for training/evaluation.")
 flags.DEFINE_string("pretrained_model_dir", "",
@@ -91,7 +103,6 @@ flags.DEFINE_enum(
     "'export' modes. Can specify a list of checkpoints or all or the latest "
     "checkpoint. 'finetune' and 'export' modes work with 'latest' or "
     "'specific' with a single checkpoint.")
-
 flags.DEFINE_list(
     "checkpoint_steps", [],
     "Checkpoint step numbers used for 'eval', 'predict', and 'finetune' modes. "
@@ -112,9 +123,6 @@ flags.DEFINE_string("output_file", "", "Path to output file to save decodes.")
 flags.DEFINE_string(
     "export_dir", "",
     "Directory to export SavedModels to. Will use `model_dir` if unspecified.")
-flags.DEFINE_integer(
-    "export_batch_size", 1,
-    "Number of sequences per batch in exported SavedModel.")
 
 FLAGS = flags.FLAGS
 
@@ -153,7 +161,13 @@ def main(_):
         tpu=FLAGS.tpu,
         gcp_project=FLAGS.gcp_project,
         tpu_zone=FLAGS.tpu_zone,
-        model_dir=FLAGS.model_dir)
+        tpu_topology=FLAGS.tpu_topology,
+        model_parallelism=FLAGS.model_parallelism,
+        model_dir=FLAGS.model_dir,
+        batch_size=FLAGS.batch_size,
+        sequence_length={"inputs": FLAGS.input_sequence_length,
+                         "targets": FLAGS.target_sequence_length}
+    )
 
     if FLAGS.checkpoint_mode != "specific" and FLAGS.checkpoint_steps:
       raise ValueError("checkpoint_mode is set to %s and checkpoint_steps is "
@@ -213,7 +227,6 @@ def main(_):
       if isinstance(checkpoint_steps, list):
         checkpoint_steps = checkpoint_steps[0]
 
-      model.batch_size = FLAGS.export_batch_size
       model.export(
           export_dir=FLAGS.export_dir,
           checkpoint_step=checkpoint_steps)
