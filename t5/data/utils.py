@@ -705,7 +705,7 @@ class Task(DatasetProviderBase):
       ds = maybe_print_dataset(ds)
       # Tokenize
       ds = encode_string_features(
-          ds, self.get_vocabulary(), keys=self.output_features,
+          ds, self.output_features, keys=self.output_features,
           copy_plaintext=copy_plaintext)
 
     if (not use_cached and self.num_input_examples(split) and
