@@ -39,7 +39,7 @@ _INFO_FILENAME = "info.{split}.json"
 _STATS_FILENAME = "stats.{split}.json"
 _TFRECORD_PREFIX = "{split}.tfrecord"
 _MAX_EXAMPLES_TO_MEM_CACHE = 10000
-_SHUFFLE_BUFFER_SIZE = 1000
+SHUFFLE_BUFFER_SIZE = 1000
 
 _TFDS_DATA_DIR_OVERRIDE = None
 _GLOBAL_CACHE_DIRECTORIES = []
@@ -369,7 +369,7 @@ class Task(DatasetProviderBase):
                num_input_examples=None,
                supports_caching=True,
                sentencepiece_model_path=None,
-               shuffle_buffer_size=_SHUFFLE_BUFFER_SIZE):
+               shuffle_buffer_size=SHUFFLE_BUFFER_SIZE):
     """Task constructor.
 
     Attributes of output features, including the vocabulary used for
