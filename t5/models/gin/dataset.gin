@@ -11,7 +11,6 @@ mesh_train_dataset_fn.use_cached = False
 
 # Plumbing
 utils.run.train_dataset_fn = @t5.models.mesh_transformer.mesh_train_dataset_fn
-utils.run.vocabulary = @t5.data.sentencepiece_vocabulary.SentencePieceVocabulary()
-SentencePieceVocabulary.sentencepiece_model_file = @t5.models.mesh_transformer.get_sentencepiece_model_path()
 mesh_train_dataset_fn.mixture_or_task_name = %MIXTURE_NAME
-get_sentencepiece_model_path.mixture_or_task_name = %MIXTURE_NAME
+mesh_transformer.get_vocabulary.mixture_or_task_name = %MIXTURE_NAME
+utils.run.vocabulary = @mesh_transformer.get_vocabulary()

@@ -37,18 +37,12 @@ The global step of the output checkpoint is set to either the value of the
 global_step flag (if nonzero) or the global step in the first input checkpoint.
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import os
 import re
 from absl import app
 from absl import flags
 from absl import logging
 import numpy as np
-import six
-from six.moves import zip  # pylint: disable=redefined-builtin
 import tensorflow.compat.v1 as tf
 
 FLAGS = flags.FLAGS
@@ -179,8 +173,8 @@ def main(_):
   # Build a model consisting only of variables, set them to the average values.
   with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
-    for p, assign_op, (name, value) in zip(placeholders, assign_ops,
-                                           six.iteritems(var_values)):
+    for p, assign_op, (name, value) in zip(
+        placeholders, assign_ops, var_values.items()):
       sess.run(assign_op, {p: value})
     # Use the built saver to save the averaged checkpoint.
     saver.save(sess, output_path)

@@ -1,0 +1,4 @@
+# -*-Python-*-
+
+# "small" model form https://arxiv.org/abs/1910.10683
+include 'models/bi_v1_small.gin'

@@ -13,23 +13,17 @@
 # limitations under the License.
 
 # Lint as: python3
-"""Testing utilities for the evaluation package.
-"""
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import google_type_annotations
-from __future__ import print_function
+"""Testing utilities for the evaluation package."""
 
 from absl.testing import absltest
 
 
 class BaseMetricsTest(absltest.TestCase):
 
-  def assertDictClose(self, a, b, delta=None):
+  def assertDictClose(self, a, b, delta=None, places=None):
     self.assertCountEqual(a.keys(), b.keys())
     for k in a:
       try:
-        self.assertAlmostEqual(a[k], b[k], delta=delta)
+        self.assertAlmostEqual(a[k], b[k], delta=delta, places=places)
       except AssertionError as e:
         raise AssertionError(str(e) + " for key '%s'" % k)

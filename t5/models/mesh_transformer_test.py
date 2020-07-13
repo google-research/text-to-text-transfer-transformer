@@ -14,22 +14,21 @@
 
 """Tests for t5.models.mesh_transformer."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 from absl.testing import absltest
-from t5.data import MixtureRegistry
-from t5.data import SentencePieceVocabulary
+import t5.data
 from t5.data import test_utils
 from t5.models import mesh_transformer
+import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
+
+tf.disable_v2_behavior()
+tf.enable_eager_execution()
 
 
 class MeshDatasetFnsTest(test_utils.FakeMixtureTest):
 
   def check_ds_shape(self, ds, sequence_length):
-    for k, v in ds.output_shapes.items():
+    for k, v in tf.data.get_output_shapes(ds).items():
       feat = k.split("_")[0]
       if len(v) == 0:  # pylint:disable=g-explicit-length-test
         expected_shape = []
@@ -46,12 +45,12 @@ class MeshDatasetFnsTest(test_utils.FakeMixtureTest):
     else:
       dataset_fn = mesh_transformer.mesh_eval_dataset_fn
       split = tfds.Split.VALIDATION
-    spm = MixtureRegistry.get(mixture_name).sentencepiece_model_path
+    vocabulary = t5.data.MixtureRegistry.get(mixture_name).get_vocabulary()
     sequence_length = {"inputs": 13, "targets": 13}
     output = dataset_fn(
         mixture_name,
         sequence_length=sequence_length,
-        vocabulary=SentencePieceVocabulary(spm),
+        vocabulary=vocabulary,
         dataset_split=split,
         use_cached=use_cached)
     if train:

@@ -1,0 +1,4 @@
+# -*-Python-*-
+
+# "11B" model form https://arxiv.org/abs/1910.10683
+include 'models/bi_v1_11B.gin'

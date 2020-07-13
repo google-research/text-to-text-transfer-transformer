@@ -24,10 +24,6 @@ set and then run this script with the split flag set to test and the cached flag
 set to True.
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import ast
 import collections
 import csv
@@ -36,8 +32,9 @@ import os
 
 from absl import app
 from absl import flags
+import t5.data
 from t5.data.utils import TaskRegistry
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
 
 FLAGS = flags.FLAGS
@@ -49,6 +46,7 @@ flags.DEFINE_string("out_dir", None, "Path to write output file.")
 flags.DEFINE_string("split", "test", "Split, should typically be test.")
 flags.DEFINE_boolean("super", False, "Whether to make SuperGLUE-style file.")
 flags.DEFINE_boolean("cached", True, "Whether to used cached dataset.")
+flags.DEFINE_list("additional_task_cache_dirs", [], "Dirs with cached tasks.")
 
 FILE_NAME_MAP = {
     "boolq": "BoolQ",
@@ -75,6 +73,7 @@ _FAKE_LEN = {"inputs": 512, "targets": 512}
 
 
 def main(_):
+  t5.data.add_global_cache_dirs(FLAGS.additional_task_cache_dirs)
   out_file = os.path.join(
       FLAGS.out_dir, "{}.{{extension}}".format(FILE_NAME_MAP[FLAGS.tfds_name])
   )

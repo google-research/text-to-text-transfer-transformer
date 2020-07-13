@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Lint as: python3
 """Tests for t5.evaluation.metrics."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 from absl.testing import absltest
+import sklearn.metrics
+
 from t5.evaluation import metrics
 from t5.evaluation import test_utils
 
@@ -55,39 +54,25 @@ class MetricsTest(test_utils.BaseMetricsTest):
         metrics.rouge([ref, ref], ["", ""]),
         {"rouge1": 0, "rouge2": 0, "rougeLsum": 0})
 
-  def test_rouge_bytes(self):
-    ref = b"this \x7e is a string"
-    self.assertDictClose(
-        metrics.rouge([ref, ref], [ref, ref]),
-        {"rouge1": 100, "rouge2": 100, "rougeLsum": 100})
-
-  def test_same_qa(self):
+  def test_same_squad(self):
     ref = "this is a string"
     self.assertDictClose(
-        metrics.qa([["", ref], [ref, ref]], [ref, ref]), {
+        metrics.squad([["", ref], [ref, ref]], [ref, ref]), {
             "em": 100,
             "f1": 100,
         })
 
-  def test_different_qa(self):
+  def test_different_squad(self):
     ref = "this is a string"
     self.assertDictClose(
-        metrics.qa([[ref, ref], [ref, ref]], ["", ""]), {
+        metrics.squad([[ref, ref], [ref, ref]], ["", ""]), {
             "em": 0,
             "f1": 0
         })
 
-  def test_qa_bytes(self):
-    ref = b"this is a string"
+  def test_squad_big(self):
     self.assertDictClose(
-        metrics.qa([["", ref], [ref, ref]], [ref, ref]), {
-            "em": 100,
-            "f1": 100
-        })
-
-  def test_qa_big(self):
-    self.assertDictClose(
-        metrics.qa(
+        metrics.squad(
             [
                 ["big moose", "hippo"],
                 ["correct1"],
@@ -95,7 +80,44 @@ class MetricsTest(test_utils.BaseMetricsTest):
                 ["a", "b"],
             ],
             [
-                "a big  Moose!",
+                "‘a big  Moose!‘",
+                "wrong",
+                "correct2.2",
+                "c",
+            ],
+        ),
+        {"em": 25., "f1": 35.},
+        places=2
+    )
+
+  def test_squad_small(self):
+    self.assertDictClose(
+        metrics.squad([["abc abd", "$$$$"]], ["abd"]),
+        {"f1": 100 * 2.0 / 3.0, "em": 0.},
+    )
+
+  def test_span_squad(self):
+    ref = "a string"
+    ans_span = "start:2 end:3"
+    context = "this is a string! it has the answer."
+    self.assertDictClose(
+        metrics.span_squad(
+            [{"answers": ["", ref], "context": context},
+             {"answers": [ref, ref], "context": context}],
+            [ans_span, ans_span]),
+        {"em": 100, "f1": 100})
+
+  def test_trivia_qa(self):
+    self.assertDictClose(
+        metrics.trivia_qa(
+            [
+                ["big moose", "hippo"],
+                ["correct1"],
+                ["correct2.1", "correct2.2"],
+                ["a", "b"],
+            ],
+            [
+                "‘a big  Moose!‘",
                 "wrong",
                 "correct2.2",
                 "c",
@@ -104,57 +126,29 @@ class MetricsTest(test_utils.BaseMetricsTest):
         {"em": 50., "f1": 50.},
     )
 
-  def test_qa_small(self):
-    self.assertDictClose(
-        metrics.qa([["abc abd", "$$$$"]], ["abd"]),
-        {"f1": 100 * 2.0 / 3.0, "em": 0.},
-    )
-
-  def test_span_qa(self):
-    ref = "a string"
-    ans_span = "start:2 end:3"
-    context = "this is a string! it has the answer."
-    self.assertDictClose(
-        metrics.span_qa(
-            [{"answers": ["", ref], "context": context},
-             {"answers": [ref, ref], "context": context}],
-            [ans_span, ans_span]),
-        {"em": 100, "f1": 100})
-
-  def test_span_qa_bytes(self):
-    ref = b"a string"
-    ans_span = b"start:2 end:3"
-    context = b"this is a string! it has the answer."
-
-    self.assertDictClose(
-        metrics.span_qa(
-            [{"answers": ["", ref], "context": context},
-             {"answers": [ref, ref], "context": context}],
-            [ans_span, ans_span]),
-        {"em": 100, "f1": 100})
-
-  def test_span_qa_one_word(self):
+  def test_span_squad_one_word(self):
     ref = "answer"
     ans_span = "start:1 end:1"
     context = "the answer"
 
     self.assertDictClose(
-        metrics.span_qa([{
+        metrics.span_squad([{
             "answers": [ref],
             "context": context
         }], [ans_span]), {"em": 100, "f1": 100})
 
-  def test_span_qa_non_numbers(self):
+  def test_span_squad_non_numbers(self):
 
     ref = "answer"
     ans_span = "start:test end:why"
     context = "the answer"
 
     self.assertDictClose(
-        metrics.span_qa([{
+        metrics.span_squad([{
             "answers": [ref],
             "context": context
         }], [ans_span]), {"em": 0, "f1": 0})
+
 
   def test_sequence_accuracy(self):
     s1 = "this is a string."
@@ -183,11 +177,6 @@ class MetricsTest(test_utils.BaseMetricsTest):
     self.assertDictClose(
         metrics.spearman_corrcoef([0, 2, 1], [0, 1, 2]),
         {"spearman_corrcoef": 50.})
-
-  def test_matthews_corrcoef(self):
-    self.assertDictClose(
-        metrics.matthews_corrcoef([0, 0, 2, 1], [0, 1, 2, 1]),
-        {"matthews_corrcoef": 70.})
 
   def test_f1_score_with_invalid(self):
     self.assertDictClose(
@@ -222,6 +211,44 @@ class MetricsTest(test_utils.BaseMetricsTest):
              {"value": 0},
              {"value": 1}]),
         {"f1": 50.})
+
+  def test_auc(self):
+    self.assertDictClose(
+        metrics.auc([0, 0, 1, 1], [0.1, 0.4, 0.35, 0.8]),
+        {"auc": 0.75})
+
+  def test_auc_non_binary(self):
+    self.assertDictClose(
+        metrics.auc([0.0, 0.2, 0.5, 0.7], [0.1, 0.4, 0.35, 0.8],
+                    targets_threshold=0.5),
+        {"auc": 0.75})
+
+  def test_sklearn_wrapper(self):
+    mae_fn = metrics.sklearn_metrics_wrapper("mean_absolute_error")
+    y_true = [[0.5, 1], [-1, 1], [7, -6]]
+    y_pred = [[0, 2], [-1, 2], [8, -5]]
+    self.assertDictClose(
+        mae_fn(y_true, y_pred),
+        {"mean_absolute_error": sklearn.metrics.mean_absolute_error(y_true,
+                                                                    y_pred)})
+
+    hamming_fn = metrics.sklearn_metrics_wrapper(
+        "hamming_loss",
+        metric_dict_str="hamming_100x",
+        metric_post_process_fn=lambda x: 100 * x)
+    y_true = [1, 2, 3, 4]
+    y_pred = [2, 2, 3, 4]
+    self.assertDictClose(
+        hamming_fn(y_true, y_pred),
+        {"hamming_100x": 100 * sklearn.metrics.hamming_loss(y_true, y_pred)})
+
+    y_true = [0, 0, 2, 1]
+    y_pred = [0, 1, 2, 1]
+    matthews_corrcoef_fn = metrics.sklearn_metrics_wrapper(
+        "matthews_corrcoef", metric_post_process_fn=lambda x: 100 * x)
+    self.assertDictClose(
+        matthews_corrcoef_fn(y_true, y_pred),
+        {"matthews_corrcoef": 70.})
 
 
 if __name__ == "__main__":

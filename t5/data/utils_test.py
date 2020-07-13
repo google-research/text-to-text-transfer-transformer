@@ -12,11 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Lint as: python3
 """Tests for t5.data.utils."""
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import os
 
@@ -27,7 +24,93 @@ from t5.data import utils
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
 
+tf.disable_v2_behavior()
+tf.enable_eager_execution()
+
 TaskRegistry = utils.TaskRegistry
+mock = absltest.mock
+
+
+class LazyTfdsLoaderTest(absltest.TestCase):
+
+  def setUp(self):
+    utils.LazyTfdsLoader._MEMOIZED_BUILDERS = {}
+    super().setUp()
+
+  @mock.patch("tensorflow_datasets.builder")
+  def test_builder_memoization(self, mock_tfds_builder):
+    mock_tfds_builder.side_effect = (
+        lambda name, data_dir: ",".join([name, data_dir or ""])
+    )
+
+    ds1 = utils.LazyTfdsLoader("ds1")
+    self.assertEqual("ds1,", ds1.builder)
+    self.assertEqual(1, tfds.builder.call_count)
+
+    # Builder should be cached with same name.
+    self.assertEqual("ds1,", ds1.builder)
+    self.assertEqual(1, tfds.builder.call_count)
+
+    # Same name but different data dir is a cache miss.
+    ds1_dir1 = utils.LazyTfdsLoader("ds1", "dir1")
+    self.assertEqual("ds1,dir1", ds1_dir1.builder)
+    self.assertEqual(2, tfds.builder.call_count)
+    # Same name and data dir is a cache hit.
+    self.assertEqual("ds1,dir1", ds1_dir1.builder)
+    self.assertEqual(2, tfds.builder.call_count)
+
+    # Different name is a cache miss.
+    ds2 = utils.LazyTfdsLoader("ds2")
+    self.assertEqual("ds2,", ds2.builder)
+    self.assertEqual(3, tfds.builder.call_count)
+
+    # Different split map name is a cache hit.
+    ds2 = utils.LazyTfdsLoader("ds2", split_map={"train": "validation"})
+    self.assertEqual("ds2,", ds2.builder)
+    self.assertEqual(3, tfds.builder.call_count)
+
+    # Try calling everything again, order shouldn't matter.
+    self.assertEqual("ds1,", ds1.builder)
+    self.assertEqual("ds1,dir1", ds1_dir1.builder)
+    self.assertEqual("ds2,", ds2.builder)
+    self.assertEqual(3, tfds.builder.call_count)
+
+  @mock.patch("tensorflow_datasets.load")
+  def test_split_map(self, mock_tfds_load):
+    utils.LazyTfdsLoader._MEMOIZED_BUILDERS[("ds/c1", None)] = mock.Mock(
+        info=mock.Mock(splits={
+            "validation": mock.Mock(
+                num_examples=420,
+                file_instructions=["f1", "f2"]),
+            "test": mock.Mock(
+                num_examples=42,
+                file_instructions=["f3"]),
+        }))
+
+    ds = utils.LazyTfdsLoader(
+        "ds/c1", split_map={"train": "validation", "validation": "test"})
+
+    # test .load()
+    ds.load("train", shuffle_files=False)
+    mock_tfds_load.assert_called_once_with(
+        "ds/c1",
+        split="validation",
+        data_dir=None,
+        shuffle_files=False,
+        download=True,
+        try_gcs=True)
+
+    # test .size()
+    self.assertEqual(420, ds.size(split="train"))
+    self.assertEqual(42, ds.size(split="validation"))
+    with self.assertRaises(KeyError):
+      ds.size(split="test")
+
+    # test .files()
+    self.assertListEqual(["f1", "f2"], ds.files(split="train"))
+    self.assertListEqual(["f3"], ds.files(split="validation"))
+    with self.assertRaises(KeyError):
+      ds.files(split="test")
 
 
 class TasksTest(test_utils.FakeTaskTest):
@@ -170,8 +253,8 @@ class TasksTest(test_utils.FakeTaskTest):
     def fake_load(s, shuffle_files=False):
       del shuffle_files  # Unused, to mimic TFDS API
       return test_utils.get_fake_dataset(s).repeat().take(20)
-    test_utils.add_fake_tfds(
-        utils.LazyTfdsLoader("fake:0.0.0")._replace(load=fake_load))
+    self._tfds_patcher.new.return_value = (
+        self._tfds_patcher.new.return_value._replace(load=fake_load))
 
   def test_invalid_text_preprocessors(self):
     def _dummy_preprocessor(output):
@@ -277,13 +360,18 @@ class TasksTest(test_utils.FakeTaskTest):
   def test_splits(self):
     test_utils.add_tfds_task("task_with_splits", splits=["validation"])
     task = TaskRegistry.get("task_with_splits")
-    self.assertIn("validation", task.splits)
-    self.assertNotIn("train", task.splits)
+    self.assertListEqual(["validation"], task.splits)
+
+    test_utils.add_tfds_task("task_with_sliced_splits",
+                             splits={"validation": "train[0:1%]"})
+    task = TaskRegistry.get("task_with_splits")
+    self.assertListEqual(["validation"], task.splits)
 
   def test_no_eos(self):
+    default_vocab = test_utils.sentencepiece_vocab()
     features = {
-        "inputs": utils.Feature(add_eos=True),
-        "targets": utils.Feature(add_eos=False),
+        "inputs": utils.Feature(add_eos=True, vocabulary=default_vocab),
+        "targets": utils.Feature(add_eos=False, vocabulary=default_vocab),
     }
     test_utils.add_task(
         "task_no_eos", test_utils.get_fake_dataset, output_features=features
@@ -291,7 +379,6 @@ class TasksTest(test_utils.FakeTaskTest):
     fn_task = TaskRegistry.get("task_no_eos")
     test_utils.verify_task_matches_fake_datasets(fn_task, use_cached=False)
 
+
 if __name__ == "__main__":
-  tf.disable_v2_behavior()
-  tf.enable_eager_execution()
   absltest.main()

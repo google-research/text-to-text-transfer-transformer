@@ -10,4 +10,4 @@ preprocessors.denoise.noise_density = 0.25
 # maximum target sequence length should be about 512 * 0.25 * 2
 utils.run.sequence_length = {"inputs": 512, "targets": 256}
 
-sentencepiece_vocabulary.SentencePieceVocabulary.extra_ids = 100
+vocabularies.Vocabulary.extra_ids = 100

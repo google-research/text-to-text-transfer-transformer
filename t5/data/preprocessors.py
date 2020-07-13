@@ -14,10 +14,6 @@
 
 """Preprocess tensorflow.data.Dataset()."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import collections
 import math
 import re
@@ -138,6 +134,56 @@ def summarize(dataset, article_key, summary_key):
   return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 
+# Unicode ranges for characters in non-spaced languages.
+# https://en.wikipedia.org/wiki/Category:Writing_systems_without_word_boundaries
+# https://en.wikipedia.org/wiki/Han_unification#Unicode_ranges
+# https://linguistics.stackexchange.com/questions/6131
+NON_SPACED_LANGUAGE_RANGES = (
+    '\u1000-\u104f',  # Burmese
+    '\u4e00-\u9fff',  # CJK Unified Ideographs
+    '\u3400-\u4dbf',  # CJK Unified Ideographs Extension A
+    '\uf900-\ufaff',  # CJK Compatibility Ideographs
+    '\u2e80-\u2eff',  # CJK Radicals Supplement
+    '\u31c0-\u31ef',  # CJK Strokes
+    '\u3000-\u303f',  # CJK Symbols and Punctuation
+    '\u3040-\u309f',  # Japanese Hiragana
+    '\u30a0-\u30ff',  # Japanese Katakana
+    '\ua980-\ua9df',  # Javanese
+    '\u1780-\u17ff',  # Khmer
+    '\u19e0-\u19ff',  # Khmer Symbols
+    '\u0e80-\u0eff',  # Lao
+    '\u1980-\u19df',  # Tai Lue
+    '\u1a20-\u1aaf',  # Tai Tham
+    '\u0e00-\u0e7f',  # Thai
+    '\u0f00-\u0fff',  # Tibetan
+)
+
+
+def pad_nonspaced_languages(dataset, text_key='text'):
+  """Pad non-spaced languages with spaces around each character.
+
+  Args:
+    dataset: a tf.data.Dataset to process.
+    text_key: a string, the key for the text feature to preprocess in the
+      dataset examples.
+
+  Returns:
+    a tf.data.Dataset with the modified examples.
+  """
+  def my_fn(x):
+    res = dict(x)
+    text = res[text_key]
+    # Add spaces around any character from a non-spaced language.
+    pattern = ''.join(NON_SPACED_LANGUAGE_RANGES)
+    text = tf.strings.regex_replace(text, u'([{}])'.format(pattern), r' \1 ')
+    # Collapse consecutive whitespace into one space.
+    text = tf.strings.regex_replace(text, r'\s+', ' ')
+    res[text_key] = text
+    return res
+
+  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+
 def _pad_punctuation(text):
   """Adds spaces around punctuation."""
   # Add space around punctuation.
@@ -255,7 +301,7 @@ def squad(dataset, include_context=True):
     {'id': <id>, context': <article>, 'question': <question>,
      'answers': { 'text': [<n answers>] }}
   This function will return examples of the format:
-    {'inputs': 'question: <question> context: <article>'
+    {'inputs': 'question: <question> context: <article>',
      'targets': '<answer_0>',
      'id': <id>, 'question': <question>, 'context': <context>,
      'answers': [<n answers>]},
@@ -564,6 +610,64 @@ def fill_in_the_blank(dataset,
   return dataset.unbatch()
 
 
+def fill_in_the_blank_sized(
+    dataset,
+    size_bins=(1, 2, 4, 8, 16, 32, 64, 128, 256, 512),
+    text_key='text',
+    label='fill: '):
+  """Fill in the blank preprocessor that labels blank with a binned size.
+
+  The actual blank size is sampled uniformly from the inclusive range of the min
+  and max bin. The blank is then filled in with the closest bin size to the
+  actual blank size.
+
+  Args:
+    dataset: a tf.data.Dataset, the dataset to preprocess.
+    size_bins: a list, a list of blank sizes to select from when labelling the
+      blank.
+    text_key: a string, the key for the text feature to preprocess in the
+      dataset examples.
+    label: a string, the label to prepend to the inputs.
+
+  Returns:
+    a tf.data.Dataset
+  """
+  bins = sorted(size_bins)
+
+  def my_fn(x):
+    """Apply transformation."""
+    words = x['words']
+    n_words = tf.size(words)
+
+    blank_size = tf.random.uniform(
+        [], minval=bins[0], maxval=tf.math.minimum(n_words, bins[-1]),
+        dtype=tf.dtypes.int32)
+    bin_delta = tf.math.abs(bins - blank_size)
+    bin_ = tf.gather(bins, tf.argmin(bin_delta))
+    blank_start = tf.random.uniform(
+        [], minval=0, maxval=tf.math.maximum(0, n_words-blank_size) + 1,
+        dtype=tf.dtypes.int32)
+
+    pre_blank = tf.strings.reduce_join(words[0:blank_start], separator=' ')
+    post_blank = tf.strings.reduce_join(
+        words[blank_start+blank_size:], separator=' ')
+    blank = tf.strings.format('_{}_', bin_)
+    # We strip to handle cases where blank is at beginning or end.
+    input_ = tf.strings.strip(
+        tf.strings.join([pre_blank, blank, post_blank], ' '))
+    input_ = tf.strings.join([label, input_])
+    target = tf.strings.reduce_join(
+        words[blank_start:blank_start+blank_size], separator=' ')
+    return {
+        'inputs': tf.strings.strip(input_),
+        'targets': tf.strings.strip(target)}
+  dataset = _split_text_to_words(dataset, text_key, min_num_words=2)
+  # Filter out examples with fewer words than the minimum.
+  dataset = dataset.filter(lambda x: tf.size(x['words']) >= bins[0])
+  dataset = dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  return dataset
+
+
 def prefix_lm(dataset,
               text_key='text',
               label='prefix: '):
@@ -698,7 +802,7 @@ def neighboring_pairs(dataset, text_key='text', reuse_sentences=True):
 
 
 def glue(
-    dataset, benchmark_name, label_names, feature_names=None):
+    dataset, benchmark_name, label_names, feature_names=None, id_key='idx'):
   """Convert a dataset from glue to text2text examples.
 
   This function uses the feature names from the dataset to unpack examples into
@@ -731,6 +835,8 @@ def glue(
     feature_names: an optional ordered list of feature names. If provided,
       features will be ordered in this way in the output. If not provided, all
       features (except 'idx' and 'label') will be used, sorted by name.
+    id_key: str, key for id in the dataset. If not provided, 'idx' will be used.
+      if None, no id will be added to the dataset.
   Returns:
     a tf.data.Dataset
   """
@@ -769,7 +875,8 @@ def glue(
       ex['idx/answer'] = x['idx']['answer']
     else:
       # Store the data index in the returned example (used by eval)
-      ex['idx'] = x['idx']
+      if id_key:
+        ex['idx'] = x[id_key]
 
     ex['inputs'] = joined
     ex['targets'] = label_name
@@ -1547,6 +1654,8 @@ def reduce_concat_tokens(dataset,
   Returns:
     a dataset
   """
+  dataset = dataset.map(lambda x: {feature_key: x[feature_key]},
+                        num_parallel_calls=tf.data.experimental.AUTOTUNE)
   dataset = dataset.padded_batch(batch_size, padded_shapes={feature_key: [-1]})
   def _my_fn(x):
     tokens = tf.reshape(x[feature_key], [-1])
@@ -1624,6 +1733,12 @@ def split_tokens_to_inputs_length(dataset, sequence_length, **unused_kwargs):
 
 
 @gin.configurable
+def split_tokens_to_targets_length(dataset, sequence_length, **unused_kwargs):
+  return split_tokens(dataset,
+                      max_tokens_per_segment=sequence_length['targets'])
+
+
+@gin.configurable
 def split_tokens_to_random_length(dataset, sequence_length, **unused_kwargs):
   return split_tokens(dataset,
                       min_tokens_per_segment=8,
@@ -1632,7 +1747,7 @@ def split_tokens_to_random_length(dataset, sequence_length, **unused_kwargs):
 
 @gin.configurable()
 def denoise(dataset,
-            vocabulary,
+            output_features,
             noise_density=gin.REQUIRED,
             noise_mask_fn=gin.REQUIRED,
             inputs_fn=gin.REQUIRED,
@@ -1671,7 +1786,7 @@ def denoise(dataset,
 
   Args:
     dataset: A tf.data.Dataset to process.
-    vocabulary: A mesh_tensorflow.transformer.vocabulary.Vocabulary.
+    output_features: a dict mapping feature name to t5.data.Feature.
     noise_density: a float
     noise_mask_fn: a function from (length, noise_density) -> boolean mask
     inputs_fn: a function from (tokens, noise_mask, vocabulary) -> tokens
@@ -1681,7 +1796,15 @@ def denoise(dataset,
     A preprocessed tf.data.Dataset.
   """
   def my_fn(features):
+    """Map function."""
     tokens = features['targets']
+    vocabulary = output_features['targets'].vocabulary
+    if ('inputs' in output_features and
+        vocabulary != output_features['inputs'].vocabulary):
+      raise ValueError(
+          'denoise creates inputs based on tokenized targets but was applied '
+          'to a task that uses different vocabularies for inputs and targets.'
+      )
     noise_mask = noise_mask_fn(tf.size(tokens), noise_density)
     inputs = inputs_fn(tokens, noise_mask, vocabulary)
     if targets_fn:
@@ -1692,7 +1815,7 @@ def denoise(dataset,
   return dataset.map(my_fn, num_parallel_calls=num_parallel_calls())
 
 
-def trivia_qa_truncate_inputs(dataset, vocabulary, sequence_length):
+def trivia_qa_truncate_inputs(dataset, output_features, sequence_length):
   """Gin configurable token preprocessor for the trivia QA dataset.
 
   This function takes a dataset containing "targets" and "inputs". It searches
@@ -1724,7 +1847,7 @@ def trivia_qa_truncate_inputs(dataset, vocabulary, sequence_length):
   Args:
     dataset: a tf.data.Dataset with dictionaries containing the "inputs" and
       "targets".
-    vocabulary: vocab, unused in this function.
+    output_features: unused by this function.
     sequence_length: a dict, with keys as "inputs" and "targets" indicating the
       maximum number of tokens in each of the sequences.
 
@@ -1733,7 +1856,7 @@ def trivia_qa_truncate_inputs(dataset, vocabulary, sequence_length):
 
   """
 
-  del vocabulary
+  del output_features
 
   def my_fn(features):
     """Function to map original dataset to the new dataset."""
@@ -2058,7 +2181,7 @@ def sentinel_id(vocabulary, return_value=None):
   By default, we use the last token in the vocabulary.
 
   Args:
-    vocabulary: a vocabulary.Vocabulary
+    vocabulary: a t5.data.vocabularies.Vocabulary
     return_value: an optional integer
   Returns:
     an integer
@@ -2117,7 +2240,7 @@ def noise_span_to_unique_sentinel(tokens, noise_mask, vocabulary):
   with the markers in the targets.
 
   We want to generate training examples like
-  "We hold X to be Y that Z" -> "X these truths Y self evident Z that"
+  "We hold X to be Y that" -> "X these truths Y self evident Z"
 
   Sentinels assigned in decreasing order within the sequence starting at
   vocabulary.size - 1.  That is, we appropriate the last tokens in the

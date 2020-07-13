@@ -12,17 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Functions which process model output strings to make them ready for eval."""
+"""Functions which process model output bytes to make them ready for eval.
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+Note: postprocessors must either accept an `example` and `is_target` kwargs
+or include `**unused_kwargs` in their signature. The `example` will be the
+full example.
+
+These functions should assume input strings to be unicode, but that strings
+in the `example` dict will be in bytes.
+"""
 
 import tensorflow.compat.v1 as tf
-
-# Note: postprocessors must either accept an `example` and `is_target` kwargs
-# or include `**unused_kwargs` in their signature. The `example` will be the
-# full example.
 
 
 def string_to_float(string, default=-1., **unused_kwargs):
@@ -34,14 +34,13 @@ def string_to_float(string, default=-1., **unused_kwargs):
 
 
 def lower_text(string, **unused_kwargs):
-  """Converts bytes or string to a string."""
-  return tf.compat.as_text(string).lower()
+  """Lowercases text."""
+  return string.lower()
 
 
 def string_label_to_class_id(
     string_label, label_classes, default=-1, **unused_kwargs):
   """Returns index of string_label in label_classes or default if not found."""
-  string_label = tf.compat.as_text(string_label)
   if string_label in label_classes:
     return label_classes.index(string_label)
   else:
@@ -63,7 +62,7 @@ def multirc(string_label, example=None, is_target=False):
 def qa(answer, example=None, is_target=False):
   """Returns answer, or all answers if the full example is provided."""
   if is_target:
-    return example["answers"]
+    return [tf.compat.as_text(a) for a in example["answers"]]
   return answer
 
 
@@ -71,7 +70,10 @@ def span_qa(answer, example=None, is_target=False):
   """Returns answer, or a dict with answers and context if the example is provided."""
 
   if is_target:
-    return {"answers": example["answers"], "context": example["context"]}
+    return {
+        "answers": [tf.compat.as_text(a) for a in example["answers"]],
+        "context": tf.compat.as_text(example["context"])
+    }
 
   return answer
 
@@ -89,12 +91,12 @@ def wsc_simple(prediction, example=None, is_target=False):
 
   def clean(s):
     """Ignore capitalization and determiners."""
-    s = s.strip().lower()
+    s = tf.compat.as_text(s).strip().lower()
     return " ".join([w for w in s.split(" ") if w not in determiners])
 
   # We aren't using the label but rather using the extracted referent so that we
   # can see if the prediction is equivalent to the referent.
-  referent = clean(example["targets_plaintext"].decode("utf-8"))
+  referent = clean(example["targets_plaintext"])
   prediction = clean(prediction)
 
   if ("'" in prediction) != ("'" in referent):

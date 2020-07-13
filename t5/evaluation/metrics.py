@@ -13,22 +13,22 @@
 # limitations under the License.
 
 """Functions for computing metrics.
-"""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+Every function must accept a list of targets and a list of predictions and
+return a dict of metrics.
+
+Functions should assume all text inputs are unicode strings.
+"""
 
 import collections
 
 import re
 from absl import logging
-from allennlp.tools import squad_eval
 import numpy as np
 import sacrebleu
 import scipy.stats
 import sklearn.metrics
-import tensorflow.compat.v1 as tf
+from t5.evaluation import qa_utils
 
 from rouge_score import rouge_scorer
 from rouge_score import scoring
@@ -45,13 +45,9 @@ def bleu(targets, predictions):
   Returns:
     bleu_score across all targets and predictions
   """
-  # sacrebleu expects unicode
-  predictions = [tf.compat.as_text(x) for x in predictions]
-
   if isinstance(targets[0], list):
-    targets = [[tf.compat.as_text(x) for x in target] for target in targets]
+    targets = [[x for x in target] for target in targets]
   else:
-    targets = [tf.compat.as_text(x) for x in targets]
     # Need to wrap targets in another list for corpus_bleu.
     targets = [targets]
 
@@ -83,7 +79,6 @@ def rouge(targets, predictions, score_keys=None):
 
   def _prepare_summary(summary):
     # Make sure the summary is not bytes-type
-    summary = tf.compat.as_text(summary)
     # Add newlines between sentences so that rougeLsum is computed correctly.
     summary = summary.replace(" . ", " .\n")
     return summary
@@ -104,8 +99,8 @@ def rouge(targets, predictions, score_keys=None):
   return {key: result[key].mid.fmeasure*100 for key in score_keys}
 
 
-def span_qa(targets, predictions):
-  """Computes question answering metrics for span prediction tasks.
+def span_squad(targets, predictions):
+  """Computes SQuAD metrics for span prediction tasks.
 
   Uses qa metric function to compute EM and F1 score.
 
@@ -139,19 +134,19 @@ def span_qa(targets, predictions):
 
     return " ".join(context[start_index:end_index+1])
 
-  contexts = [space_tok(tf.compat.as_text(t["context"])) for t in targets]
+  contexts = [space_tok(t["context"]) for t in targets]
   answers = [t["answers"] for t in targets]
 
-  predictions = [space_tok(tf.compat.as_text(p)) for p in predictions]
+  predictions = [space_tok(p) for p in predictions]
   final_predictions = [
       get_answer_text_from_context(c, p) for c, p in zip(contexts, predictions)
   ]
 
-  return qa(answers, final_predictions)
+  return squad(answers, final_predictions)
 
 
-def qa(targets, predictions):
-  """Computes question answering metrics, maximizing over answers per question.
+def squad(targets, predictions):
+  """Computes SQuAD metrics, maximizing over answers per question.
 
   Args:
     targets: list of lists of strings
@@ -160,22 +155,24 @@ def qa(targets, predictions):
   Returns:
     dict with score_key: squad score across all targets and predictions
   """
-  assert len(targets) == len(predictions)
-  targets = [[tf.compat.as_text(t) for t in u] for u in targets]
-  predictions = [tf.compat.as_text(p) for p in predictions]
-  em = np.mean([
-      squad_eval.metric_max_over_ground_truths(  # pylint:disable=g-complex-comprehension
-          squad_eval.exact_match_score, p, t)
-      for p, t in zip(predictions, targets)
-  ])
-  f1 = np.mean([
-      squad_eval.metric_max_over_ground_truths(squad_eval.f1_score, p, t)
-      for p, t in zip(predictions, targets)
-  ])
-  em *= 100
-  f1 *= 100
-  logging.info("EM = %.2f, F1 = %.2f", em, f1)
-  return {"em": em, "f1": f1}
+  targets = [[qa_utils.normalize_squad(t) for t in u] for u in targets]
+  predictions = [qa_utils.normalize_squad(p) for p in predictions]
+  return qa_utils.qa_metrics(targets, predictions)
+
+
+def trivia_qa(targets, predictions):
+  """Computes TriviaQA metrics, maximizing over answers per question.
+
+  Args:
+    targets: list of lists of strings
+    predictions: list of strings
+
+  Returns:
+    dict with score_key: squad score across all targets and predictions
+  """
+  targets = [[qa_utils.normalize_trivia_qa(t) for t in u] for u in targets]
+  predictions = [qa_utils.normalize_trivia_qa(p) for p in predictions]
+  return qa_utils.qa_metrics(targets, predictions)
 
 
 def accuracy(targets, predictions):
@@ -212,23 +209,13 @@ def spearman_corrcoef(targets, predictions):
               100 * scipy.stats.spearmanr(targets, predictions)[0]}
 
 
-def matthews_corrcoef(targets, predictions):
-  """Matthews correlation coefficient."""
-  return {
-      "matthews_corrcoef":
-          100 * sklearn.metrics.matthews_corrcoef(targets, predictions)
-  }
-
-
 def mean_multiclass_f1(num_classes):
   """Computes the unweighted average of the F1 per class."""
-  def my_metric(targets, predictions):
-    return {
-        "mean_%dclass_f1" % num_classes: 100 * sklearn.metrics.fbeta_score(
-            targets, predictions, beta=1, labels=range(num_classes),
-            average="macro")
-    }
-  return my_metric
+  return sklearn_metrics_wrapper(
+      "fbeta_score",
+      metric_dict_str="mean_%dclass_f1" % num_classes,
+      metric_post_process_fn=lambda x: 100 * x,
+      beta=1, labels=range(num_classes), average="macro")
 
 
 def exact_match(targets, predictions):
@@ -301,3 +288,52 @@ def multirc_f1_over_all_answers(targets, predictions):
   return f1_score_with_invalid(
       [t["value"] for t in targets], [p["value"] for p in predictions]
   )
+
+
+def auc(targets, predictions, targets_threshold=None):
+  """Compute Area Under the Receiver Operating Characteristic Curve (ROC AUC).
+
+  Args:
+    targets: np.ndarray of targets, either 0 or 1, or continuous values.
+    predictions: np.ndarray of predictions, any value.
+    targets_threshold: float, if target values are continuous values, this
+      threshold binarizes them.
+  Returns:
+    AUC ROC score.
+  """
+
+  if targets_threshold is not None:
+    targets = np.array(targets)
+    targets = np.where(targets < targets_threshold,
+                       np.zeros_like(targets, dtype=np.int32),
+                       np.ones_like(targets, dtype=np.int32))
+
+  return {"auc": sklearn.metrics.roc_auc_score(targets, predictions)}
+
+
+def sklearn_metrics_wrapper(metric_str,
+                            metric_dict_str=None,
+                            metric_post_process_fn=None,
+                            **metric_fn_kwargs):
+  """Wraps any sklearn.metric function and returns a t5 metric function.
+
+  Args:
+    metric_str: string, the function from `sklearn.metrics` to use.
+    metric_dict_str: optional string, if not specified `metric_str` is used as
+      the key in the returned dictionary.
+    metric_post_process_fn: callable, if specified the final computed metric
+      will be passed through this.
+    **metric_fn_kwargs: kwargs, passed to the metric function we are calling.
+  Returns:
+    the function that calculates the metric in a dict.
+  """
+  if not hasattr(sklearn.metrics, metric_str):
+    raise ValueError("sklearn.metrics does not have: %s" % metric_str)
+
+  def fn(targets, predictions):
+    metric_fn = getattr(sklearn.metrics, metric_str)
+    metric_val = metric_fn(targets, predictions, **metric_fn_kwargs)
+    if metric_post_process_fn is not None:
+      metric_val = metric_post_process_fn(metric_val)
+    return {metric_dict_str or metric_str: metric_val}
+  return fn

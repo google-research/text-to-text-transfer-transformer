@@ -14,7 +14,14 @@
 
 """Install T5."""
 
+import os
+import sys
 import setuptools
+
+# To enable importing version.py directly, we add its path to sys.path.
+version_path = os.path.join(os.path.dirname(__file__), 't5')
+sys.path.append(version_path)
+from version import __version__  # pylint: disable=g-import-not-at-top
 
 # Get the long description from the README file.
 with open('README.md') as fp:
@@ -22,7 +29,7 @@ with open('README.md') as fp:
 
 setuptools.setup(
     name='t5',
-    version='0.1.8',
+    version=__version__,
     description='Text-to-text transfer transformer',
     long_description=_LONG_DESCRIPTION,
     long_description_content_type='text/markdown',
@@ -37,11 +44,9 @@ setuptools.setup(
     scripts=[],
     install_requires=[
         'absl-py',
-        'allennlp',
         'babel',
-        'future',
         'gin-config',
-        'mesh-tensorflow[transformer]>=0.1.9',
+        'mesh-tensorflow[transformer]>=0.1.13',
         'nltk',
         'numpy',
         'pandas',
@@ -50,19 +55,26 @@ setuptools.setup(
         'scikit-learn',
         'scipy',
         'sentencepiece',
-        'six',
-        'tensorflow-text==1.15.0rc0',
+        'six>=1.14',  # TODO(adarob): Remove once rouge-score is updated.
+        'tensorflow-text',
         'tfds-nightly',
+        'torch',
+        'transformers>=2.7.0',
     ],
     extras_require={
-        'tensorflow': ['tensorflow==1.15'],
         'gcp': ['gevent', 'google-api-python-client', 'google-compute-engine',
                 'google-cloud-storage', 'oauth2client'],
+        'cache-tasks': [
+            # TODO(adarob): Remove next line once avro-python3 is fixed.
+            'avro-python3!=1.9.2',
+            'apache-beam',
+        ],
+        'test': ['pytest'],
     },
     entry_points={
         'console_scripts': [
-            't5_mesh_transformer = '
-            't5.models.mesh_transformer_main:console_entry_point',
+            't5_mesh_transformer = t5.models.mesh_transformer_main:console_entry_point',
+            't5_cache_tasks = t5.data.cache_tasks_main:console_entry_point'
         ],
     },
     classifiers=[

@@ -19,10 +19,6 @@ Note that `--summary_dir` *must* point directly to the directory with .events
 files (e.g. `/validation_eval/`), not a parent directory.
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 from absl import app
 from absl import flags
 from absl import logging

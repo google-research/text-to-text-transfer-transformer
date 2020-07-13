@@ -14,10 +14,6 @@
 
 """Tests for t5.data.postprocessors."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 from absl.testing import absltest
 
 from t5.data import postprocessors
@@ -32,7 +28,7 @@ class PostprocessorsTest(absltest.TestCase):
     self.assertEqual(postprocessors.string_to_float("asdf", -2.), -2.)
 
   def test_lower_text(self):
-    self.assertEqual(postprocessors.lower_text(b"TEST"), "test")
+    self.assertEqual(postprocessors.lower_text("TeST"), "test")
 
   def test_string_label_to_class_id(self):
     cls = ["one", "two"]
@@ -40,8 +36,6 @@ class PostprocessorsTest(absltest.TestCase):
     self.assertEqual(postprocessors.string_label_to_class_id("two", cls), 1)
     self.assertEqual(postprocessors.string_label_to_class_id("foo", cls), -1)
     self.assertEqual(postprocessors.string_label_to_class_id("foo", cls, 2), 2)
-    self.assertEqual(postprocessors.string_label_to_class_id(b"one", cls), 0)
-    self.assertEqual(postprocessors.string_label_to_class_id(b"foo", cls), -1)
 
   def test_multirc(self):
     self.assertDictEqual(
@@ -61,7 +55,7 @@ class PostprocessorsTest(absltest.TestCase):
   def test_qa(self):
     self.assertEqual(
         postprocessors.qa(
-            "answer", example={"answers": ["a1", "a2"]}, is_target=True),
+            "answer", example={"answers": [b"a1", b"a2"]}, is_target=True),
         ["a1", "a2"])
     self.assertEqual(postprocessors.qa("answer", is_target=False), "answer")
 
@@ -70,13 +64,15 @@ class PostprocessorsTest(absltest.TestCase):
         postprocessors.span_qa(
             "answer",
             example={
-                "answers": ["a1", "a2"],
-                "context": "Full context"
+                "answers": [b"a1", b"a2"],
+                "context": b"Full context"
             },
-            is_target=True), {
-                "answers": ["a1", "a2"],
-                "context": "Full context"
-            })
+            is_target=True
+        ),
+        {
+            "answers": ["a1", "a2"],
+            "context": "Full context"
+        })
 
     self.assertEqual(
         postprocessors.span_qa("answer", is_target=False), "answer")

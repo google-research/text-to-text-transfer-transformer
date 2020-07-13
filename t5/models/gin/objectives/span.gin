@@ -43,4 +43,9 @@ preprocessors.random_spans_helper.extra_tokens_per_span_targets = 1
 
 utils.run.sequence_length = {"inputs": %inputs_length, "targets": %targets_length}
 
-sentencepiece_vocabulary.SentencePieceVocabulary.extra_ids = 100
+num_sentinels = 100
+vocabularies.Vocabulary.extra_ids = %num_sentinels
+
+# TODO(noam): uncomment this once we are not worried that it will break
+#   external users who are synched to an earlier version of mesh_tensorflow.
+# transformer_layers.relative_position_spans.num_sentinels = %num_sentinels

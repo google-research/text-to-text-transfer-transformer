@@ -14,10 +14,6 @@
 
 r"""Main file for launching training/eval/predictions of mesh-transformer model."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import importlib
 import os
 import sys
@@ -73,16 +69,28 @@ flags.DEFINE_list(
     "Directories to search for Tasks in addition to defaults.")
 
 flags.DEFINE_boolean("use_model_api", False,
-                     "Use model API instead of utils.run.")
+                     "Use Model API instead of utils.run.")
 
 # Note: All the args from here on are only used when use_model_api is set
-flags.DEFINE_enum("mode", "train",
-                  ["train", "finetune", "eval", "predict", "export"],
+flags.DEFINE_enum("mode", None,
+                  ["train", "finetune", "eval", "predict", "export", "score"],
                   "Mode with which to run the model.")
+flags.DEFINE_integer("batch_size", 1,
+                     "Number of sequences per batch.")
+flags.DEFINE_integer("input_sequence_length", 512,
+                     "Number of tokens in input sequence.")
+flags.DEFINE_integer("target_sequence_length", 512,
+                     "Number of tokens in target sequence.")
+
+# TPU-specific args.
+flags.DEFINE_string("tpu_topology", "v2-8",
+                    "The TPU topology being used. Ignored if --tpu not set.")
+flags.DEFINE_integer("model_parallelism", 8,
+                     "The number of cores per model replica. Ignored if --tpu "
+                     "not set.")
 
 # Train mode args
 flags.DEFINE_integer("train_steps", 1000, "Number of training iterations.")
-
 flags.DEFINE_string("mixture_or_task", "wmt_t2t_ende_v003",
                     "Name of Mixture or Task to use for training/evaluation.")
 flags.DEFINE_string("pretrained_model_dir", "",
@@ -95,7 +103,6 @@ flags.DEFINE_enum(
     "'export' modes. Can specify a list of checkpoints or all or the latest "
     "checkpoint. 'finetune' and 'export' modes work with 'latest' or "
     "'specific' with a single checkpoint.")
-
 flags.DEFINE_list(
     "checkpoint_steps", [],
     "Checkpoint step numbers used for 'eval', 'predict', and 'finetune' modes. "
@@ -107,7 +114,9 @@ flags.DEFINE_string("eval_split", "validation",
                     "Dataset split to use for evaluation.")
 
 # Predict mode args
-flags.DEFINE_string("input_file", "", "Path to input file for decoding.")
+flags.DEFINE_string("input_file", "",
+                    "Path to input file for decoding or scoring.")
+flags.DEFINE_string("target_file", "", "Path to target file for scoring.")
 flags.DEFINE_string("output_file", "", "Path to output file to save decodes.")
 
 # Export mode args
@@ -152,7 +161,20 @@ def main(_):
         tpu=FLAGS.tpu,
         gcp_project=FLAGS.gcp_project,
         tpu_zone=FLAGS.tpu_zone,
-        model_dir=FLAGS.model_dir)
+        tpu_topology=FLAGS.tpu_topology,
+        model_parallelism=FLAGS.model_parallelism,
+        model_dir=FLAGS.model_dir,
+        batch_size=FLAGS.batch_size,
+        sequence_length={"inputs": FLAGS.input_sequence_length,
+                         "targets": FLAGS.target_sequence_length}
+    )
+
+    if FLAGS.checkpoint_mode != "specific" and FLAGS.checkpoint_steps:
+      raise ValueError("checkpoint_mode is set to %s and checkpoint_steps is "
+                       "also set. To use a particular checkpoint, please set "
+                       "checkpoint_mode to 'specific'. For other modes, please "
+                       "ensure that checkpoint_steps is not set."
+                       % FLAGS.checkpoint_mode)
 
     if FLAGS.checkpoint_mode == "latest":
       checkpoint_steps = -1
@@ -170,7 +192,6 @@ def main(_):
                  summary_dir=FLAGS.eval_summary_dir,
                  split=FLAGS.eval_split)
     elif FLAGS.mode == "finetune":
-
       if not (FLAGS.checkpoint_mode == "latest" or
               (FLAGS.checkpoint_mode == "specific" and
                len(FLAGS.checkpoint_steps) == 1)):
@@ -190,6 +211,12 @@ def main(_):
           checkpoint_steps=checkpoint_steps,
           input_file=FLAGS.input_file,
           output_file=FLAGS.output_file)
+    elif FLAGS.mode == "score":
+      model.score(
+          FLAGS.input_file,
+          FLAGS.target_file,
+          scores_file=FLAGS.output_file,
+          checkpoint_steps=checkpoint_steps)
     elif FLAGS.mode == "export":
       if not (FLAGS.checkpoint_mode == "latest" or
               (FLAGS.checkpoint_mode == "specific" and
@@ -203,7 +230,16 @@ def main(_):
       model.export(
           export_dir=FLAGS.export_dir,
           checkpoint_step=checkpoint_steps)
+    else:
+      raise ValueError("--mode flag must be set when using Model API.")
   else:
+    if FLAGS.mode:
+      raise ValueError("--mode flag should only be set when using Model API.")
+    if not FLAGS.tpu:
+      with gin.unlock_config():
+        gin.bind_parameter("utils.get_variable_dtype.slice_dtype", "float32")
+        gin.bind_parameter(
+            "utils.get_variable_dtype.activation_dtype", "float32")
     utils.run(
         tpu_job_name=FLAGS.tpu_job_name,
         tpu=FLAGS.tpu,

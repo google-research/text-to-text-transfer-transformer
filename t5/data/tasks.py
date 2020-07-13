@@ -13,16 +13,13 @@
 # limitations under the License.
 
 """Add Tasks to registry."""
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import collections
 import functools
 
 from t5.data import postprocessors
 from t5.data import preprocessors
-from t5.data.utils import DEFAULT_SPM_PATH
+from t5.data.utils import Feature
+from t5.data.utils import get_default_vocabulary
 from t5.data.utils import set_global_cache_dirs
 from t5.data.utils import TaskRegistry
 from t5.data.utils import TfdsTask
@@ -31,31 +28,109 @@ import tensorflow_datasets as tfds
 
 
 
+DEFAULT_OUTPUT_FEATURES = {
+    "inputs": Feature(vocabulary=get_default_vocabulary(), add_eos=True),
+    "targets": Feature(vocabulary=get_default_vocabulary(), add_eos=True)
+}
 
 # ==================================== C4 ======================================
+# Configurable tasks used for comparisons in Raffel et al., 2019.
 _c4_config_suffixes = ["", ".noclean", ".realnewslike", ".webtextlike"]
 for config_suffix in _c4_config_suffixes:
   TaskRegistry.add(
       "c4{name}_v020_unsupervised".format(
           name=config_suffix.replace(".", "_")),
       TfdsTask,
-      tfds_name="c4/en{config}:1.0.0".format(config=config_suffix),
+      tfds_name="c4/en{config}:2.2.0".format(config=config_suffix),
       text_preprocessor=functools.partial(
           preprocessors.rekey, key_map={"inputs": None, "targets": "text"}),
       token_preprocessor=preprocessors.unsupervised,
-      sentencepiece_model_path=DEFAULT_SPM_PATH,
+      output_features=DEFAULT_OUTPUT_FEATURES,
       metric_fns=[])
+
+# Final pretraining task used in Raffel et al., 2019.
+TaskRegistry.add(
+    "c4_v220_span_corruption",
+    TfdsTask,
+    tfds_name="c4/en:2.2.0".format(config=config_suffix),
+    text_preprocessor=functools.partial(
+        preprocessors.rekey, key_map={"inputs": None, "targets": "text"}),
+    token_preprocessor=[
+        functools.partial(
+            preprocessors.select_random_chunk,
+            feature_key="targets",
+            max_length=65536
+        ),
+        functools.partial(
+            preprocessors.reduce_concat_tokens,
+            feature_key="targets",
+            batch_size=128
+        ),
+        functools.partial(
+            preprocessors.split_tokens,
+            feature_key="targets",
+            min_tokens_per_segment=None,
+            max_tokens_per_segment=preprocessors.random_spans_helper(
+                extra_tokens_per_span_inputs=1,
+                extra_tokens_per_span_targets=1,
+                inputs_length=512,
+                mean_noise_span_length=3.0,
+                noise_density=0.15
+            )[0]
+        ),
+        functools.partial(
+            preprocessors.denoise,
+            inputs_fn=preprocessors.noise_span_to_unique_sentinel,
+            targets_fn=preprocessors.nonnoise_span_to_unique_sentinel,
+            noise_density=0.15,
+            noise_function=functools.partial(
+                preprocessors.random_spans_noise_mask,
+                mean_noise_span_length=3.0
+            )
+        )
+    ],
+    output_features=DEFAULT_OUTPUT_FEATURES,
+    metric_fns=[])
+
+# Baseline pretraining task used in Raffel et al., 2019.
+TaskRegistry.add(
+    "c4_v220_iid_denoising",
+    TfdsTask,
+    tfds_name="c4/en:2.2.0".format(config=config_suffix),
+    text_preprocessor=functools.partial(
+        preprocessors.rekey, key_map={"inputs": None, "targets": "text"}),
+    token_preprocessor=[
+        functools.partial(
+            preprocessors.select_random_chunk,
+            feature_key="targets",
+            max_length=65536
+        ),
+        functools.partial(
+            preprocessors.reduce_concat_tokens,
+            feature_key="targets",
+            batch_size=128
+        ),
+        preprocessors.split_tokens_to_inputs_length,
+        functools.partial(
+            preprocessors.denoise,
+            inputs_fn=preprocessors.noise_span_to_unique_sentinel,
+            targets_fn=preprocessors.nonnoise_span_to_unique_sentinel,
+            noise_density=0.15,
+            noise_function=preprocessors.iid_noise_mask
+        )
+    ],
+    output_features=DEFAULT_OUTPUT_FEATURES,
+    metric_fns=[])
 
 # ================================ Wikipedia ===================================
 TaskRegistry.add(
     "wikipedia_20190301.en_v003_unsupervised",
     TfdsTask,
-    # 0.0.4 is identical to 0.0.3 except empty records removed.
-    tfds_name="wikipedia/20190301.en:0.0.4",
+    tfds_name="wikipedia/20190301.en:1.0.0",
     text_preprocessor=functools.partial(
         preprocessors.rekey, key_map={"inputs": None, "targets": "text"}),
     token_preprocessor=preprocessors.unsupervised,
-    sentencepiece_model_path=DEFAULT_SPM_PATH,
+    output_features=DEFAULT_OUTPUT_FEATURES,
     metric_fns=[])
 
 
@@ -115,7 +190,8 @@ def _get_glue_postprocess_fn(builder_config):
 
 
 GLUE_METRICS = collections.OrderedDict([
-    ("cola", [metrics.matthews_corrcoef]),
+    ("cola", [metrics.sklearn_metrics_wrapper(
+        "matthews_corrcoef", metric_post_process_fn=lambda x: 100 * x)]),
     ("sst2", [metrics.accuracy]),
     ("mrpc", [metrics.f1_score_with_invalid, metrics.accuracy]),
     ("stsb", [metrics.pearson_corrcoef, metrics.spearman_corrcoef]),
@@ -133,10 +209,10 @@ for b in tfds.text.glue.Glue.builder_configs.values():
   TaskRegistry.add(
       "glue_%s_v002" % b.name,
       TfdsTask,
-      tfds_name="glue/%s:%s" % (b.name, "1.0.0" if b.name == "ax" else "0.0.2"),
+      tfds_name="glue/%s:1.0.0" % b.name,
       text_preprocessor=_get_glue_text_preprocessor(b),
       metric_fns=GLUE_METRICS[b.name],
-      sentencepiece_model_path=DEFAULT_SPM_PATH,
+      output_features=DEFAULT_OUTPUT_FEATURES,
       postprocess_fn=_get_glue_postprocess_fn(b),
       splits=["test"] if b.name == "ax" else None,
   )
@@ -145,25 +221,25 @@ for b in tfds.text.glue.Glue.builder_configs.values():
 TaskRegistry.add(
     "cnn_dailymail_v002",
     TfdsTask,
-    tfds_name="cnn_dailymail/plain_text:0.0.2",
+    tfds_name="cnn_dailymail/plain_text:1.0.0",
     text_preprocessor=functools.partial(preprocessors.summarize,
                                         article_key="article",
                                         summary_key="highlights"),
     metric_fns=[metrics.rouge],
-    sentencepiece_model_path=DEFAULT_SPM_PATH)
+    output_features=DEFAULT_OUTPUT_FEATURES)
 
 # ==================================== WMT =====================================
 # Format: year, tfds builder config, tfds version
 b_configs = [
-    ("14", tfds.translate.wmt14.Wmt14Translate.builder_configs["de-en"], "0.0.3"
+    ("14", tfds.translate.wmt14.Wmt14Translate.builder_configs["de-en"], "1.0.0"
     ),
-    ("14", tfds.translate.wmt14.Wmt14Translate.builder_configs["fr-en"], "0.0.3"
+    ("14", tfds.translate.wmt14.Wmt14Translate.builder_configs["fr-en"], "1.0.0"
     ),
-    ("16", tfds.translate.wmt16.Wmt16Translate.builder_configs["ro-en"], "0.0.3"
+    ("16", tfds.translate.wmt16.Wmt16Translate.builder_configs["ro-en"], "1.0.0"
     ),
-    ("15", tfds.translate.wmt15.Wmt15Translate.builder_configs["fr-en"], "0.0.4"
+    ("15", tfds.translate.wmt15.Wmt15Translate.builder_configs["fr-en"], "1.0.0"
     ),
-    ("19", tfds.translate.wmt19.Wmt19Translate.builder_configs["de-en"], "0.0.3"
+    ("19", tfds.translate.wmt19.Wmt19Translate.builder_configs["de-en"], "1.0.0"
     ),
 ]
 
@@ -178,21 +254,21 @@ for prefix, b, tfds_version in b_configs:
           target_language=b.language_pair[0],
           ),
       metric_fns=[metrics.bleu],
-      sentencepiece_model_path=DEFAULT_SPM_PATH)
+      output_features=DEFAULT_OUTPUT_FEATURES)
 
 # Special case for t2t ende.
 b = tfds.translate.wmt_t2t.WmtT2tTranslate.builder_configs["de-en"]
 TaskRegistry.add(
     "wmt_t2t_ende_v003",
     TfdsTask,
-    tfds_name="wmt_t2t_translate/de-en:0.0.1",
+    tfds_name="wmt_t2t_translate/de-en:1.0.0",
     text_preprocessor=functools.partial(
         preprocessors.translate,
         source_language=b.language_pair[1],
         target_language=b.language_pair[0],
         ),
     metric_fns=[metrics.bleu],
-    sentencepiece_model_path=DEFAULT_SPM_PATH)
+    output_features=DEFAULT_OUTPUT_FEATURES)
 
 # ================================= SuperGlue ==================================
 SUPERGLUE_METRICS = collections.OrderedDict([
@@ -206,7 +282,7 @@ SUPERGLUE_METRICS = collections.OrderedDict([
         metrics.multirc_f1_over_all_answers,
         metrics.mean_group_metric(metrics.exact_match)
     ]),
-    ("record", [metrics.qa]),
+    ("record", [metrics.squad]),
     ("rte", [metrics.accuracy]),
     ("wic", [metrics.accuracy]),
     ("axb", []),  # Only test set available.
@@ -237,7 +313,7 @@ for b in tfds.text.super_glue.SuperGlue.builder_configs.values():
       tfds_name="super_glue/%s:1.0.2" % b.name,
       text_preprocessor=text_preprocessor,
       metric_fns=SUPERGLUE_METRICS[b.name],
-      sentencepiece_model_path=DEFAULT_SPM_PATH,
+      output_features=DEFAULT_OUTPUT_FEATURES,
       postprocess_fn=_get_glue_postprocess_fn(b),
       splits=["test"] if b.name in ["axb", "axg"] else None)
 
@@ -245,10 +321,10 @@ for b in tfds.text.super_glue.SuperGlue.builder_configs.values():
 TaskRegistry.add(
     "dpr_v001_simple",
     TfdsTask,
-    tfds_name="definite_pronoun_resolution/plain_text:0.0.1",
+    tfds_name="definite_pronoun_resolution/plain_text:1.0.0",
     text_preprocessor=preprocessors.definite_pronoun_resolution_simple,
     metric_fns=[metrics.accuracy],
-    sentencepiece_model_path=DEFAULT_SPM_PATH)
+    output_features=DEFAULT_OUTPUT_FEATURES)
 
 # =================================== WSC ======================================
 TaskRegistry.add(
@@ -258,7 +334,7 @@ TaskRegistry.add(
     text_preprocessor=functools.partial(
         preprocessors.wsc_simple, correct_referent_only=True),
     metric_fns=[],
-    sentencepiece_model_path=DEFAULT_SPM_PATH,
+    output_features=DEFAULT_OUTPUT_FEATURES,
     splits=["train"])
 TaskRegistry.add(
     "super_glue_wsc_v102_simple_eval",
@@ -268,18 +344,18 @@ TaskRegistry.add(
         preprocessors.wsc_simple, correct_referent_only=False),
     postprocess_fn=postprocessors.wsc_simple,
     metric_fns=[metrics.accuracy],
-    sentencepiece_model_path=DEFAULT_SPM_PATH,
+    output_features=DEFAULT_OUTPUT_FEATURES,
     splits=["validation", "test"])
 
 # =================================== WNLI =====================================
 TaskRegistry.add(
     "glue_wnli_v002_simple_eval",
     TfdsTask,
-    tfds_name="glue/wnli:0.0.2",
+    tfds_name="glue/wnli:1.0.0",
     text_preprocessor=preprocessors.wnli_simple,
     postprocess_fn=postprocessors.wsc_simple,
     metric_fns=[metrics.accuracy],
-    sentencepiece_model_path=DEFAULT_SPM_PATH,
+    output_features=DEFAULT_OUTPUT_FEATURES,
     splits=["validation", "test"])
 
 # =================================== Squad ====================================
@@ -287,41 +363,41 @@ TaskRegistry.add(
 TaskRegistry.add(
     "squad_v010_allanswers",
     TfdsTask,
-    tfds_name="squad/plain_text:0.1.0",
+    tfds_name="squad/plain_text:1.0.0",
     text_preprocessor=preprocessors.squad,
     postprocess_fn=postprocessors.qa,
-    metric_fns=[metrics.qa],
-    sentencepiece_model_path=DEFAULT_SPM_PATH)
+    metric_fns=[metrics.squad],
+    output_features=DEFAULT_OUTPUT_FEATURES)
 
 # Maximized evaluation metrics over all answers.
 TaskRegistry.add(
     "squad_v010_context_free",
     TfdsTask,
-    tfds_name="squad/plain_text:0.1.0",
+    tfds_name="squad/plain_text:1.0.0",
     text_preprocessor=functools.partial(
         preprocessors.squad, include_context=False),
     postprocess_fn=postprocessors.qa,
-    metric_fns=[metrics.qa],
-    sentencepiece_model_path=DEFAULT_SPM_PATH)
+    metric_fns=[metrics.squad],
+    output_features=DEFAULT_OUTPUT_FEATURES)
 
 # Squad span prediction task instead of text.
 TaskRegistry.add(
     "squad_v010_allanswers_span",
     TfdsTask,
-    tfds_name="squad/plain_text:0.1.0",
+    tfds_name="squad/plain_text:1.0.0",
     text_preprocessor=preprocessors.squad_span_space_tokenized,
     postprocess_fn=postprocessors.span_qa,
-    metric_fns=[metrics.span_qa],
-    sentencepiece_model_path=DEFAULT_SPM_PATH)
+    metric_fns=[metrics.span_squad],
+    output_features=DEFAULT_OUTPUT_FEATURES)
 
 # Deprecated: Use `squad_v010_allanswers` instead.
 TaskRegistry.add(
     "squad_v010",
     TfdsTask,
-    tfds_name="squad/plain_text:0.1.0",
+    tfds_name="squad/plain_text:1.0.0",
     text_preprocessor=preprocessors.squad,
-    metric_fns=[metrics.qa],
-    sentencepiece_model_path=DEFAULT_SPM_PATH)
+    metric_fns=[metrics.squad],
+    output_features=DEFAULT_OUTPUT_FEATURES)
 
 # ================================= TriviaQA ===================================
 TaskRegistry.add(
@@ -331,4 +407,4 @@ TaskRegistry.add(
     text_preprocessor=preprocessors.trivia_qa,
     metric_fns=[],
     token_preprocessor=preprocessors.trivia_qa_truncate_inputs,
-    sentencepiece_model_path=DEFAULT_SPM_PATH)
+    output_features=DEFAULT_OUTPUT_FEATURES)

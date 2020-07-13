@@ -12,14 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Lint as: python3
 """Utilities for data loading and processing.
 
 Defines Tasks, TaskRegistry, Mixture, and MixtureRegistry
 """
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import abc
 import collections
@@ -48,6 +45,12 @@ _TFDS_DATA_DIR_OVERRIDE = None
 _GLOBAL_CACHE_DIRECTORIES = []
 
 DEFAULT_SPM_PATH = "gs://t5-data/vocabs/cc_all.32000/sentencepiece.model"  # GCS
+DEFAULT_EXTRA_IDS = 100
+
+
+def get_default_vocabulary():
+  return sentencepiece_vocabulary.SentencePieceVocabulary(
+      DEFAULT_SPM_PATH, DEFAULT_EXTRA_IDS)
 
 
 def set_tfds_data_dir_override(tfds_data_dir):
@@ -69,10 +72,6 @@ class DatasetProviderBase(object):
   """Abstract base for classes that provide a tf.data.Dataset."""
 
   __metaclass__ = abc.ABCMeta
-
-  @abc.abstractproperty
-  def sentencepiece_model_path(self):
-    raise NotImplementedError
 
   @abc.abstractproperty
   def output_features(self):
@@ -147,34 +146,21 @@ class LazyTfdsLoader(object):
   file operations. Also provides additional utility methods.
   """
 
-  _MEMOIZED_INSTANCES = {}
+  _MEMOIZED_BUILDERS = {}
 
-  def __new__(cls, name, data_dir=None):
-    """Either creates a new dataset or returns it if it already exists."""
-    key = (name, data_dir)
-    if key not in cls._MEMOIZED_INSTANCES:
-      cls._MEMOIZED_INSTANCES[key] = object.__new__(cls)
-    return cls._MEMOIZED_INSTANCES[key]
-
-  def __init__(self, name, data_dir=None):
+  def __init__(self, name, data_dir=None, split_map=None):
     """LazyTfdsLoader constructor.
 
     Args:
       name: str, the name of the TFDS dataset.
       data_dir: str (optional), directory to read/write TFDS data.
+      split_map: dict (optional), mapping from canonical splits
+        (e.g., 'validation') to TFDS splits or slices
+        (e.g., 'train[':1%']).
     """
     self._name = name
     self._data_dir = data_dir
-    self._builder = None
-
-  def __getstate__(self):
-    """Remove un-pickle-able attributes and return the state."""
-    state = self.__dict__.copy()
-    del state["_builder"]
-    return state
-
-  def __getnewargs__(self):
-    return self._name, self._data_dir
+    self._split_map = split_map
 
   @property
   def name(self):
@@ -192,41 +178,30 @@ class LazyTfdsLoader(object):
 
   @property
   def builder(self):
-    if not self._builder:
-      self._builder = tfds.builder(self.name, data_dir=self.data_dir)
-    return self._builder
+    builder_key = (self.name, self.data_dir)
+    if builder_key not in LazyTfdsLoader._MEMOIZED_BUILDERS:
+      LazyTfdsLoader._MEMOIZED_BUILDERS[builder_key] = tfds.builder(
+          self.name, data_dir=self.data_dir)
+    return LazyTfdsLoader._MEMOIZED_BUILDERS[builder_key]
 
   @property
   def info(self):
     return self.builder.info
 
+  def _map_split(self, split):
+    return self._split_map[split] if self._split_map else split
+
   def files(self, split):
-    """Returns set containing paths to TFDS TFRecord files for the dataset."""
-    self.verify_split(split)
-    files = set()
+    """Returns set of instructions for reading TFDS files for the dataset."""
+    split = self._map_split(split)
 
-    def _get_builder_files(builder):
-      split_info = builder.info.splits[split]
-      if builder.version.implements(tfds.core.Experiment.S3):
-        num_shards = len(split_info.shard_lengths)
-      else:
-        num_shards = split_info.num_shards
-      return tfds.core.naming.filepaths_for_dataset_split(
-          dataset_name=builder.name,
-          split=split_info.name,
-          num_shards=num_shards,
-          data_dir=builder._data_dir,  # pylint:disable=protected-access
-          filetype_suffix="tfrecord",
-      )
-
-    if self.builder.BUILDER_CONFIGS and "/" not in self.name:
+    if "/" not in self.name and self.builder.BUILDER_CONFIGS:
       # If builder has multiple configs, and no particular config was
-      # requested, then compute all.
-      for config in self.builder.BUILDER_CONFIGS:
-        builder_for_config = tfds.builder(self.builder.name, config=config)
-        files.update(_get_builder_files(builder_for_config))
-    else:
-      files.update(_get_builder_files(self.builder))
+      # requested, raise an error.
+      raise ValueError("Dataset '%s' has multiple configs." % self.name)
+
+    split_info = self.builder.info.splits[split]
+    files = split_info.file_instructions
 
     if not files:
       logging.fatal("No TFRecord files found for dataset: %s", self.name)
@@ -234,7 +209,7 @@ class LazyTfdsLoader(object):
 
   def load(self, split, shuffle_files):
     """Returns a tf.data.Dataset for the given split."""
-    self.verify_split(split)
+    split = self._map_split(split)
     return tfds.load(
         self._name,
         split=split,
@@ -243,22 +218,17 @@ class LazyTfdsLoader(object):
         download=True,
         try_gcs=True)
 
-  def load_shard(self, shard_path):
+  def load_shard(self, file_instruction):
     """Returns a dataset for a single shard of the TFDS TFRecord files."""
-    ds = tfds.core.file_format_adapter.TFRecordExampleAdapter(
-        self.info.features.get_serialized_info()).dataset_from_filename(
-            shard_path)
-    ds = ds.map(self.info.features.decode_example)
+    ds = self.builder._tfrecords_reader.read_files(  # pylint:disable=protected-access
+        [file_instruction],
+        read_config=tfds.ReadConfig(),
+        shuffle_files=False)
     return ds
-
-  def verify_split(self, split):
-    """Verify that `split` is a valid split."""
-    if split not in self.info.splits.keys():
-      raise ValueError("{} has no '{}' split".format(self.name, split))
 
   def size(self, split):
     """Returns the number of examples in the split."""
-    self.verify_split(split)
+    split = self._map_split(split)
     ds_splits = self.info.splits
     dataset_size = ds_splits[split].num_examples
     # Very large datasets have num_examples = 0; default instead to np.inf
@@ -267,7 +237,7 @@ class LazyTfdsLoader(object):
 
 
 def encode_string_features(
-    dataset, vocabulary, keys, copy_plaintext=False):
+    dataset, output_features, keys, copy_plaintext=False):
   """Encode specified string features.
 
   Passes through non-string features unchanged. Optionally passes through copy
@@ -275,7 +245,8 @@ def encode_string_features(
 
   Args:
     dataset: a tf.data.Dataset
-    vocabulary: a vocabulary.Vocabulary
+    output_features: a dict of Feature objects; their vocabulary attribute will
+      be used to tokenize the specified features.
     keys: list of strings, keys of features to encode.
     copy_plaintext: bool, whether to pass through copies of plaintext strings
       with a "_plaintext" suffix added to the key.
@@ -293,10 +264,10 @@ def encode_string_features(
     """
     ret = {}
     for k, v in features.items():
-      if v.dtype == tf.string and k in keys:
+      if k in keys and v.dtype == tf.string:
         if copy_plaintext:
           ret["%s_plaintext" % k] = v
-        v = tf.cast(vocabulary.encode_tf(v), tf.int64)
+        v = tf.cast(output_features[k].vocabulary.encode_tf(v), tf.int64)
       ret[k] = v
     return ret
   return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
@@ -331,24 +302,6 @@ def dict_to_tfexample(ex):
   return tf.train.Example(features=tf.train.Features(feature=feature_dict))
 
 
-def inverse_dataset(dataset, label):
-  """Invert examples and prepend the given label to the new inputs.
-
-  Args:
-    dataset: tf.data.Dataset, contains "inputs" and "targets" keys
-    label: str, the label to prepend to the inputs.
-  Returns:
-    a tf.data.Dataset
-  """
-  def map_fn(x):
-    return {
-        "inputs": tf.strings.join([label, x["targets"]]),
-        "targets": x["inputs"],
-    }
-  return dataset.map(
-      map_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
-
 # ================================ Tasks =======================================
 def get_info_path(data_dir, split):
   return os.path.join(data_dir, _INFO_FILENAME.format(split=split))
@@ -365,13 +318,35 @@ def get_stats_path(data_dir, split):
 class Feature(object):
   """A container for attributes of output features of data providers."""
 
-  def __init__(self, add_eos=True):
+  def __init__(self, vocabulary, add_eos=True):
     """Create a Feature instance.
 
     Args:
-      add_eos: bool, whether an EOS token should be added to this feature.
+      vocabulary: vocabularies.Vocabulary object to use for tokenization,
+        or a callable function returning a vocabulary
+      add_eos: bool, whether an EOS token should be added to this Feature.
     """
+    self._vocabulary = vocabulary
     self.add_eos = add_eos
+
+  @property
+  def vocabulary(self):
+    if callable(self._vocabulary):
+      self._vocabulary = self._vocabulary()
+    return self._vocabulary
+
+
+def print_dataset(dataset):
+  """tf.Print dataset fields for debugging purposes."""
+  def my_fn(x):
+    return {k: tf.Print(v, [v], k + ": ") for k, v in x.items()}
+  return dataset.map(my_fn)
+
+
+@gin.configurable
+def maybe_print_dataset(dataset, should_print=False):
+  """tf.Print dataset for debugging purposes."""
+  return print_dataset(dataset) if should_print else dataset
 
 
 class Task(DatasetProviderBase):
@@ -387,13 +362,18 @@ class Task(DatasetProviderBase):
                dataset_fn,
                splits,
                text_preprocessor,
-               sentencepiece_model_path,
-               metric_fns,
+               metric_fns=None,
                postprocess_fn=None,
                token_preprocessor=None,
                output_features=None,
-               num_input_examples=None):
+               num_input_examples=None,
+               supports_caching=True,
+               sentencepiece_model_path=None,
+               shuffle_buffer_size=_SHUFFLE_BUFFER_SIZE):
     """Task constructor.
+
+    Attributes of output features, including the vocabulary used for
+    tokenization, should be provided via the `output_features` argument.
 
     Args:
       name: string, a unique name for the Task. A ValueError will be raised if
@@ -406,13 +386,15 @@ class Task(DatasetProviderBase):
         a tf.data.Dataset of string features and returns a tf.data.Dataset of
         string features. Can be set to None as a no-op. If a list is given,
         they will be executed sequentially.
-      sentencepiece_model_path: string, path to a SentencePiece model file to
-        use for tokenization.
       metric_fns: list(callable), list of metric functions with the signature
-        `metric_fn(targets, predictions)` to use during evaluation.
-      postprocess_fn: function, a function that takes in decoded model outputs
-        (strings) and returns a string which is ready for evaluation using the
-        metric functions in `metric_fns`. Can be set to None as a no-op.
+        `metric_fn(targets, predictions)` to use during evaluation. By default
+        (None), an empty list will be used, resulting in no evaluation on this
+        task.
+      postprocess_fn: function (or list of functions) that (each) takes in
+        decoded model outputs (strings) and returns a string which is ready
+        for evaluation using the metric functions in `metric_fns`. Can be
+        set to None as a no-op. If a list is given, functions will be executed
+        sequentially.
       token_preprocessor: an optional function (or list of functions) that
         (each) takes in a tf.data.Dataset of token features and returns a
         tf.data.Dataset of token features.
@@ -420,22 +402,26 @@ class Task(DatasetProviderBase):
         executed sequentially.
         The functions are also passed `sequence_length` and `vocabulary`
         keyword arguments.
-      output_features: list(str) or dict. Output features of the Task. If
-        list(str) is provided, a `Feature` class instance will be created for
-        each provided feature name using the default values. If a dict is
-        provided, it should map feature names to `Feature` class instances. When
-        `output_features` is None (default), two output features for "inputs"
-        and "targets" will be constructed using the default values for the
-        `Feature` class.
+      output_features: dict(str, Feature), list(str), Feature, or None. Output
+        features of the Task. If list(str) is provided, a default `Feature` will
+        be constructed for each provided feature name. If a `Feature` is
+        provided, it will be used for the default feature names ('inputs' and
+        'targets'). When None (default), a default `Feature` will be constructed
+        for the default feature names.
       num_input_examples: dict(string: int) or None, a dictionary mapping split
         to its size in number of input examples (before preprocessing). The
         `num_input_examples` method will return None if not provided.
+      supports_caching: bool, whether or not this task supports offline caching.
+      sentencepiece_model_path: DEPRECATED use `output_features` to specify a
+        non-default vocabulary.
+      shuffle_buffer_size: an optional integer
     """
     if not _VALID_TASK_NAME_REGEX.match(name):
       raise ValueError(
           "Task name '%s' contains invalid characters. Must match regex: %s" % (
               name, _VALID_TASK_NAME_REGEX.pattern))
     _validate_args(dataset_fn, ["split", "shuffle_files"])
+    metric_fns = metric_fns or []
     for metric_fn in metric_fns:
       _validate_args(metric_fn, ["targets", "predictions"])
 
@@ -445,43 +431,56 @@ class Task(DatasetProviderBase):
         [] if text_preprocessor is None else text_preprocessor)
     self._token_preprocessor = (
         [] if token_preprocessor is None else token_preprocessor)
-    self._sentencepiece_model_path = sentencepiece_model_path
     self._metric_fns = metric_fns
     # Use a pass-through if postprocess_fn is not provided
-    self._postprocess_fn = postprocess_fn or (lambda x, **unused_kwargs: x)
+    self._postprocess_fn = (
+        [(lambda x, **unused_kwargs: x)]
+        if postprocess_fn is None else postprocess_fn)
+
     self._cache_dir = None
     self._stats = {}
+    self._shuffle_buffer_size = shuffle_buffer_size
 
+    if sentencepiece_model_path == DEFAULT_SPM_PATH:
+      logging.warn(
+          "`sentencepiece_model_path` is deprecated and is ignored. Please "
+          "update your code as this will cause a failure in future versions.")
+    elif sentencepiece_model_path:
+      raise ValueError(
+          "`sentencepiece_model_path` is deprecated. Please use "
+          "`output_features` to specify a non-default vocabulary.")
+
+    if hasattr(output_features, "__len__") and not output_features:
+      raise ValueError("output_features must be non-empty.")
+    if output_features is None:
+      output_features = Feature(get_default_vocabulary())
     if isinstance(output_features, dict):
-      self._output_features = output_features
-    elif output_features is None or isinstance(output_features, list):
-      self._output_features = {
-          f: Feature() for f in output_features or _DEFAULT_FEATURE_KEYS
+      pass
+    elif isinstance(output_features, Feature):
+      output_features = {k: output_features for k in _DEFAULT_FEATURE_KEYS}
+    elif isinstance(output_features, list) and all(
+        isinstance(f, str) for f in output_features):
+      output_features = {
+          k: Feature(get_default_vocabulary()) for k in output_features
       }
     else:
-      raise ValueError("output_features must be a dict, list of str, or None")
+      raise ValueError(
+          "output_features must be a dict, Feature, list of str, or None")
     self._output_features = collections.OrderedDict(
-        sorted(list(self._output_features.items()))
+        sorted(list(output_features.items()))
     )
 
     self._splits = splits
     self._num_input_examples = num_input_examples
+    self._supports_caching = supports_caching
 
   @property
   def name(self):
     return self._name
 
   @property
-  def postprocess_fn(self):
-    return self._postprocess_fn
-
-  @property
   def metric_fns(self):
     return self._metric_fns
-
-  @property
-  def sentencepiece_model_path(self):
-    return self._sentencepiece_model_path
 
   @property
   def output_features(self):
@@ -584,7 +583,7 @@ class Task(DatasetProviderBase):
     dataset = self._preprocess_dataset(
         dataset, self._token_preprocessor,
         sequence_length=sequence_length,
-        vocabulary=self.get_vocabulary())
+        output_features=self.output_features)
     dataset = self._validate_dataset(
         dataset,
         expected_output_type=tf.int64,
@@ -627,8 +626,8 @@ class Task(DatasetProviderBase):
 
   @property
   def supports_caching(self):
-    """Wether or not this type of tasks supports offline caching."""
-    return False
+    """Wether or not this task supports offline caching."""
+    return self._supports_caching
 
   def assert_cached(self):
     """Raises an assertion error if cached dataset does not exist."""
@@ -647,10 +646,27 @@ class Task(DatasetProviderBase):
         self._stats[split] = json.load(f)
     return self._stats[split]
 
-  def get_vocabulary(self):
-    """Returns a SentencePieceVocabulary object using the Task's model."""
-    return sentencepiece_vocabulary.SentencePieceVocabulary(
-        self.sentencepiece_model_path)
+  def get_vocabulary(self, feature_name=None):
+    """Returns a Vocabulary object for the provided feature.
+
+    Args:
+      feature_name: str or None, the name of the output feature to get the
+        Vocabulary for. If None is provided, then this function will first check
+        that all features have the same Vocabulary and then return that
+        Vocabulary.
+    Returns: a Vocabulary object.
+    """
+    if feature_name is None:
+      vocabulary = list(self.output_features.values())[0].vocabulary
+      for feature in self.output_features.values():
+        if feature.vocabulary != vocabulary:
+          raise ValueError(
+              "No feature_name was provided to get_vocabulary, but "
+              "output_features have different vocabularies."
+          )
+    else:
+      vocabulary = self.output_features[feature_name].vocabulary
+    return vocabulary
 
   def get_dataset(
       self,
@@ -672,20 +688,21 @@ class Task(DatasetProviderBase):
         on the fly (use_cached=False).
       shuffle_buffer_size: an integer
       copy_plaintext: bool, whether to pass through copies of plaintext strings
-      with a "_plaintext" suffix added to the key.
+        with a "_plaintext" suffix added to the key.
     Returns:
       A mixed tf.data.Dataset.
     """
     if use_cached and not self.supports_caching:
       logging.warning(
           "Task '%s' does not support caching. Switching to on-the-fly "
-          "preprocessing.")
+          "preprocessing.", self.name)
       use_cached = False
     if use_cached:
       ds = self._get_cached_dataset(split, shuffle)
     else:
       ds = self._dataset_fn(split=split, shuffle_files=shuffle)
       ds = self.preprocess_text(ds)
+      ds = maybe_print_dataset(ds)
       # Tokenize
       ds = encode_string_features(
           ds, self.get_vocabulary(), keys=self.output_features,
@@ -697,11 +714,12 @@ class Task(DatasetProviderBase):
 
     # Post tokenization processing.
     ds = self.preprocess_tokens(ds, sequence_length)
+    ds = maybe_print_dataset(ds)
 
     if shuffle:
       # Shuffle before mixing since preprocessor can output multiple
       # (correlated) examples per input.
-      ds = ds.shuffle(shuffle_buffer_size)
+      ds = ds.shuffle(shuffle_buffer_size or self._shuffle_buffer_size)
 
     return ds
 
@@ -736,6 +754,15 @@ class Task(DatasetProviderBase):
       ds = ds.cache()
     return ds
 
+  def postprocess_fn(self, string, **postprocess_kwargs):
+    """Returns the processed string after applying postprocess function(s)."""
+    postprocessors = self._postprocess_fn
+    if not hasattr(postprocessors, "__iter__"):
+      postprocessors = [self._postprocess_fn]
+    for post_fn in postprocessors:
+      string = post_fn(string, **postprocess_kwargs)
+    return string
+
 
 class TfdsTask(Task):
   """A `Task` that uses TensorFlow Datasets to provide the input dataset."""
@@ -745,7 +772,6 @@ class TfdsTask(Task):
       name,
       tfds_name,
       text_preprocessor,
-      sentencepiece_model_path,
       metric_fns,
       tfds_data_dir=None,
       splits=None,
@@ -761,14 +787,14 @@ class TfdsTask(Task):
         a tf.data.Dataset of string features and returns a tf.data.Dataset of
         string features. Can be set to None as a no-op. If a list is given,
         they will be executed sequentially.
-      sentencepiece_model_path: string, path to a SentencePiece model file to
-        use for tokenization.
       metric_fns: list(callable), list of metric functions with the signature
         metric_fn(targets, predictions) to use during evaluation.
       tfds_data_dir: string, an optional path to a specific TFDS data directory
         to use.
-      splits: list(string) or None, a list of allowable splits to load. The
-        default, None, uses all available splits from the TFDS dataset info.
+      splits: a list(string) of allowable splits to load, a dict mapping
+        allowable canonical splits (e.g., 'validation') to TFDS splits or slices
+        (e.g., 'train[':1%']), or None. The default, None, uses all available
+        splits from the TFDS dataset info.
       **task_kwargs: dict, additional keyword arguments for the parent `Task`
         class.
     """
@@ -776,22 +802,21 @@ class TfdsTask(Task):
       raise ValueError(
           "TFDS name must contain a version number, got: %s" % tfds_name)
 
-    self._tfds_dataset = LazyTfdsLoader(tfds_name, tfds_data_dir)
+    self._tfds_dataset = LazyTfdsLoader(
+        tfds_name,
+        data_dir=tfds_data_dir,
+        split_map=splits if isinstance(splits, dict) else None)
 
     def dataset_fn(split, shuffle_files):
       return self._tfds_dataset.load(split, shuffle_files)
 
-    super(TfdsTask, self).__init__(
+    super().__init__(
         name,
         dataset_fn=dataset_fn,
-        splits=splits,
+        splits=list(splits) if splits else None,
         text_preprocessor=text_preprocessor,
-        sentencepiece_model_path=sentencepiece_model_path,
         metric_fns=metric_fns,
         **task_kwargs)
-
-  def supports_caching(self):
-    return True
 
   @property
   def splits(self):
@@ -804,71 +829,6 @@ class TfdsTask(Task):
 
   def num_input_examples(self, split):
     return self.tfds_dataset.size(split)
-
-
-# TODO(adarob): Merge into TfdsTask once we can support caching with slices.
-class SlicedTfdsTask(Task):
-  """A `Task` that uses sliced TensorFlow Datasets to provide the input.
-
-  Supports TFDS S3 slicing
-  (https://www.tensorflow.org/datasets/splits#s3_slicing_api).
-  Unlike `TfdsTask`, `SlicedTfdsTask` does not support caching.
-  """
-
-  def __init__(
-      self,
-      name,
-      tfds_name,
-      split_map,
-      text_preprocessor,
-      sentencepiece_model_path,
-      metric_fns,
-      tfds_data_dir=None,
-      **task_kwargs):
-    """SlicedTfdsTask constructor.
-
-    Args:
-      name: string, a unique name for the Task. A ValueError will be raised if
-        another task with this name is already registered.
-      tfds_name: string, the name and version number of a TFDS dataset,
-        optionally with a config.
-      split_map: dict, a mapping from a canonical split (e.g.,
-        `tfds.split.VALIDATION`) to an (optionally) sliced split name
-        (eg., 'train[0:5%]').
-      text_preprocessor: a function (or list of functions) that (each) takes in
-        a tf.data.Dataset of string features and returns a tf.data.Dataset of
-        string features. Can be set to None as a no-op. If a list is given,
-        they will be executed sequentially.
-      sentencepiece_model_path: string, path to a SentencePiece model file to
-        use for tokenization.
-      metric_fns: list(callable), list of metric functions with the signature
-        metric_fn(targets, predictions) to use during evaluation.
-      tfds_data_dir: string, an optional path to a specific TFDS data directory
-        to use.
-      **task_kwargs: dict, additional keyword arguments for the parent `Task`
-        class.
-    """
-    if ":" not in tfds_name:
-      raise ValueError(
-          "TFDS name must contain a version number, got: %s" % tfds_name)
-
-    def dataset_fn(split, shuffle_files):
-      return tfds.load(
-          tfds_name,
-          split=split_map[split],
-          data_dir=tfds_data_dir,
-          shuffle_files=shuffle_files,
-          download=True,
-          try_gcs=True)
-
-    super(SlicedTfdsTask, self).__init__(
-        name,
-        dataset_fn=dataset_fn,
-        splits=list(split_map.keys()),
-        text_preprocessor=text_preprocessor,
-        sentencepiece_model_path=sentencepiece_model_path,
-        metric_fns=metric_fns,
-        **task_kwargs)
 
 
 class TextLineTask(Task):
@@ -884,7 +844,6 @@ class TextLineTask(Task):
       name,
       split_to_filepattern,
       text_preprocessor,
-      sentencepiece_model_path,
       metric_fns,
       skip_header_lines=0,
       **task_kwargs):
@@ -899,8 +858,6 @@ class TextLineTask(Task):
         a tf.data.Dataset of string features and returns a tf.data.Dataset of
         string features. Can be set to None as a no-op. If a list is given,
         they will be executed sequentially.
-      sentencepiece_model_path: string, path to a SentencePiece model file to
-        use for tokenization.
       metric_fns: list(callable), list of metric functions with the signature
         metric_fn(targets, predictions) to use during evaluation.
       skip_header_lines: int, number of header lines to skip in each source
@@ -908,6 +865,9 @@ class TextLineTask(Task):
       **task_kwargs: dict, additional keyword arguments for the parent `Task`
         class.
     """
+    self._split_to_filepattern = split_to_filepattern
+    self._skip_header_lines = skip_header_lines
+
     def dataset_fn(split, shuffle_files):
       filepattern = split_to_filepattern[split]
 
@@ -920,12 +880,11 @@ class TextLineTask(Task):
           cycle_length=16, block_length=16,
           num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-    super(TextLineTask, self).__init__(
+    super().__init__(
         name,
         dataset_fn=dataset_fn,
-        splits=split_to_filepattern.keys(),
+        splits=list(split_to_filepattern.keys()),
         text_preprocessor=text_preprocessor,
-        sentencepiece_model_path=sentencepiece_model_path,
         metric_fns=metric_fns,
         **task_kwargs)
 
@@ -982,10 +941,6 @@ class Mixture(DatasetProviderBase):
       raise ValueError(
           "All Tasks in a Mixture must have the same output features."
       )
-    if len(set(t.sentencepiece_model_path for t in self._tasks)) != 1:
-      raise ValueError(
-          "All Tasks in a Mixture must have the same sentencepiece_model_path."
-      )
 
   @property
   def tasks(self):
@@ -1004,15 +959,27 @@ class Mixture(DatasetProviderBase):
     # so we can just get the output_features for the 0th task
     return self._tasks[0].output_features
 
-  @property
-  def sentencepiece_model_path(self):
-    # We require all tasks to have the same sentencepiece_model_path in __init__
-    # so we can just get the sentencepiece_model_path for the first task
-    return self._tasks[0].sentencepiece_model_path
+  def _check_same_vocabularies(self):
+    """Throw an Exception if features across tasks have different vocabs."""
+    for name, feature in self._tasks[0].output_features.items():
+      for task in self._tasks[1:]:
+        if task.output_features[name].vocabulary != feature.vocabulary:
+          raise ValueError(
+              "Features across tasks in a mixture must use the same vocabulary."
+          )
 
-  def get_vocabulary(self):
-    """Returns a SentencePieceVocabulary object using the Tasks' model."""
-    return self._tasks[0].get_vocabulary()
+  def get_vocabulary(self, feature_name=None):
+    """Returns a Vocabulary object using the Tasks' model.
+
+    Args:
+      feature_name: str or None, the name of the output feature to get the
+        Vocabulary for. If None is provided, then this function will first check
+        that all features have the same Vocabulary and then return that
+        Vocabulary.
+    Returns: a Vocabulary object.
+    """
+    self._check_same_vocabularies()
+    return self._tasks[0].get_vocabulary(feature_name=feature_name)
 
   def get_dataset(
       self,
@@ -1033,6 +1000,7 @@ class Mixture(DatasetProviderBase):
         on the fly (use_cached=False).
       compute_stats_empirically: a boolean - does not work on TPU
     """
+    self._check_same_vocabularies()
     tasks = []
     for task in self.tasks:
       if split not in task.splits:
@@ -1052,7 +1020,8 @@ class Mixture(DatasetProviderBase):
         for task in tasks]
     rates = [self.get_rate(task) for task in tasks]
     # Sample from the dataset with the rates rates
-    dataset = tf.data.experimental.sample_from_datasets(datasets, rates)
+    seed = None if shuffle else 42
+    dataset = tf.data.experimental.sample_from_datasets(datasets, rates, seed)
     if (split == "train" and use_cached and
         all(t.supports_caching for t in tasks)):
       _log_mixing_proportions(tasks, datasets, rates, dataset, sequence_length,
@@ -1196,7 +1165,7 @@ def get_subtasks(task_or_mixture):
 
 def _validate_args(fn, expected_pos_args):
   """Ensure function has exactly expected positional args."""
-  argspec = inspect.getargspec(fn)
+  argspec = inspect.getfullargspec(fn)
   expected_pos_args = tuple(expected_pos_args)
   actual_args = tuple(argspec.args)
   if actual_args[:len(expected_pos_args)] != expected_pos_args:

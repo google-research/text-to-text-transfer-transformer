@@ -12,21 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Lint as: python3
 """T5 test utilities."""
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import collections
 import copy
 import os
 import shutil
+import sys
 
+from absl import flags
 from absl import logging
 from absl.testing import absltest
 import numpy as np
-import six
 from t5.data import sentencepiece_vocabulary
 from t5.data import utils as dataset_utils
 import tensorflow.compat.v1 as tf
@@ -159,10 +157,10 @@ def _get_comparable_examples_from_ds(ds):
   """Puts dataset into format that allows examples to be compared in Py2/3."""
   examples = []
   def _clean_value(v):
-    if isinstance(v, six.binary_type):
+    if isinstance(v, bytes):
       return tf.compat.as_text(v)
     if isinstance(v, np.ndarray):
-      if isinstance(v[0], six.binary_type):
+      if isinstance(v[0], bytes):
         return tuple(tf.compat.as_text(s) for s in v)
       return tuple(v)
     return v
@@ -246,7 +244,7 @@ def verify_task_matches_fake_datasets(
 def _maybe_as_bytes(v):
   if isinstance(v, list):
     return [_maybe_as_bytes(x) for x in v]
-  if isinstance(v, six.string_types):
+  if isinstance(v, str):
     return tf.compat.as_bytes(v)
   return v
 
@@ -254,7 +252,7 @@ def _maybe_as_bytes(v):
 def _maybe_as_text(v):
   if isinstance(v, list):
     return [_maybe_as_text(x) for x in v]
-  if isinstance(v, six.binary_type):
+  if isinstance(v, bytes):
     return tf.compat.as_text(v)
   return v
 
@@ -270,11 +268,21 @@ def assert_dataset(dataset, expected):
     expected = [expected]
   dataset = list(tfds.as_numpy(dataset))
   _pyunit_proxy.assertEqual(len(dataset), len(expected))
-  for data, expected_item in zip(dataset, expected):
-    _pyunit_proxy.assertEqual(set(data.keys()), set(expected_item.keys()))
-    for key, value in data.items():
+
+  def _compare_dict(actual_dict, expected_dict):
+    _pyunit_proxy.assertEqual(
+        set(actual_dict.keys()), set(expected_dict.keys()))
+    for key, actual_value in actual_dict.items():
+      if isinstance(actual_value, dict):
+        _compare_dict(actual_value, expected_dict[key])
+        continue
+      if isinstance(actual_value, tf.RaggedTensor):
+        actual_value = actual_value.to_list()
       np.testing.assert_array_equal(
-          value, _maybe_as_bytes(expected_item[key]), key)
+          actual_value, _maybe_as_bytes(expected_dict[key]), key)
+
+  for actual_ex, expected_ex in zip(dataset, expected):
+    _compare_dict(actual_ex, expected_ex)
 
 
 def get_fake_dataset(split, shuffle_files=False):
@@ -322,9 +330,9 @@ def _split_tsv_preprocessor(dataset, field_names=("prefix", "suffix")):
   return dataset.map(parse_line)
 
 
-def test_token_preprocessor(dataset, vocabulary, **unused_kwargs):
+def test_token_preprocessor(dataset, output_features, **unused_kwargs):
   """Change all occurrences of non-zero even numbered tokens in inputs to 50."""
-  del vocabulary
+  del output_features
 
   def my_fn(ex):
     inputs = ex["inputs"]
@@ -365,8 +373,7 @@ def add_tfds_task(
       tfds_name=tfds_name,
       text_preprocessor=text_preprocessor,
       token_preprocessor=token_preprocessor,
-      sentencepiece_model_path=os.path.join(TEST_DATA_DIR, "sentencepiece",
-                                            "sentencepiece.model"),
+      output_features=dataset_utils.Feature(sentencepiece_vocab()),
       metric_fns=[],
       splits=splits)
 
@@ -378,14 +385,14 @@ def add_task(
     token_preprocessor=None,
     splits=("train", "validation"),
     **kwargs):
+  if "output_features" not in kwargs:
+    kwargs["output_features"] = dataset_utils.Feature(sentencepiece_vocab())
   TaskRegistry.add(
       name,
       dataset_fn=dataset_fn,
       splits=splits,
       text_preprocessor=text_preprocessor,
       token_preprocessor=token_preprocessor,
-      sentencepiece_model_path=os.path.join(
-          TEST_DATA_DIR, "sentencepiece", "sentencepiece.model"),
       metric_fns=[],
       **kwargs)
 
@@ -409,32 +416,47 @@ def mark_completed(cache_dir, task_name):
 # pylint:disable=invalid-name
 FakeLazyTfds = collections.namedtuple(
     "FakeLazyTfds",
-    ["name", "load", "load_shard", "info", "files", "verify_split", "size"])
+    ["name", "load", "load_shard", "info", "files", "size"])
 FakeTfdsInfo = collections.namedtuple("FakeTfdsInfo", ["splits"])
 # pylint:enable=invalid-name
-
-
-def add_fake_tfds(fake_tfds):
-  dataset_utils.LazyTfdsLoader._MEMOIZED_INSTANCES[  # pylint:disable=protected-access
-      (fake_tfds.name, None)] = fake_tfds
 
 
 class FakeTaskTest(absltest.TestCase):
   """TestCase that sets up fake cached and uncached tasks."""
 
+  def get_tempdir(self):
+    try:
+      flags.FLAGS.test_tmpdir
+    except flags.UnparsedFlagAccessError:
+      # Need to initialize flags when running `pytest`.
+      flags.FLAGS(sys.argv)
+    return self.create_tempdir().full_path
+
   def setUp(self):
-    super(FakeTaskTest, self).setUp()
+    super().setUp()
     self.maxDiff = None  # pylint:disable=invalid-name
 
     # Mock TFDS
     # Note we don't use mock.Mock since they fail to pickle.
     fake_tfds_paths = {
-        "train": ["train.tfrecord-%05d-of-00002" % i for i in range(2)],
-        "validation": ["validation.tfrecord-00000-of-00001"],
+        "train": [
+            {  # pylint:disable=g-complex-comprehension
+                "filename": "train.tfrecord-%05d-of-00002" % i,
+                "skip": 0,
+                "take": -1
+            }
+            for i in range(2)],
+        "validation": [
+            {
+                "filename": "validation.tfrecord-00000-of-00001",
+                "skip": 0,
+                "take": -1
+            }],
     }
-    def _load_shard(shard_path):
-      if "train" in shard_path:
-        if shard_path.endswith("00000-of-00002"):
+    def _load_shard(shard_instruction):
+      fname = shard_instruction["filename"]
+      if "train" in fname:
+        if fname.endswith("00000-of-00002"):
           return get_fake_dataset("train").take(2)
         else:
           return get_fake_dataset("train").skip(2)
@@ -447,12 +469,13 @@ class FakeTaskTest(absltest.TestCase):
         load_shard=_load_shard,
         info=FakeTfdsInfo(splits={"train": None, "validation": None}),
         files=fake_tfds_paths.get,
-        verify_split=lambda x: x,
         size=lambda x: 30 if x == "train" else 10)
-    add_fake_tfds(fake_tfds)
+    self._tfds_patcher = mock.patch(
+        "t5.data.utils.LazyTfdsLoader", new=mock.Mock(return_value=fake_tfds))
+    self._tfds_patcher.start()
 
     # Set up data directory.
-    self.test_tmpdir = self.create_tempdir().full_path
+    self.test_tmpdir = self.get_tempdir()
     self.test_data_dir = os.path.join(self.test_tmpdir, "test_data")
     shutil.copytree(TEST_DATA_DIR, self.test_data_dir)
     for root, dirs, _ in os.walk(self.test_data_dir):
@@ -490,22 +513,36 @@ class FakeTaskTest(absltest.TestCase):
         },
         skip_header_lines=1,
         text_preprocessor=[_split_tsv_preprocessor, test_text_preprocessor],
-        sentencepiece_model_path=os.path.join(
-            TEST_DATA_DIR, "sentencepiece", "sentencepiece.model"),
+        output_features=dataset_utils.Feature(sentencepiece_vocab()),
         metric_fns=[])
     self.text_line_task = TaskRegistry.get("text_line_task")
 
-    # Auto-verify any split by just retuning the split name
-    dataset_utils.verify_tfds_split = absltest.mock.Mock(
-        side_effect=lambda x, y: y
-    )
+    # Prepare uncached Task.
+    def _dataset_fn(split, shuffle_files):
+      del split
+      del shuffle_files
+      filepattern = os.path.join(self.test_data_dir, "train.tsv*")
+      return tf.data.TextLineDataset(filepattern)
+    TaskRegistry.add(
+        "general_task",
+        dataset_utils.Task,
+        dataset_fn=_dataset_fn,
+        splits=["train"],
+        text_preprocessor=[_split_tsv_preprocessor, test_text_preprocessor],
+        output_features=dataset_utils.Feature(sentencepiece_vocab()),
+        metric_fns=[])
+    self.general_task = TaskRegistry.get("general_task")
+
+  def tearDown(self):
+    super().tearDown()
+    self._tfds_patcher.stop()
 
 
 class FakeMixtureTest(FakeTaskTest):
   """TestCase that sets up fake cached and uncached tasks."""
 
   def setUp(self):
-    super(FakeMixtureTest, self).setUp()
+    super().setUp()
     clear_mixtures()
     MixtureRegistry.add(
         "uncached_mixture",
