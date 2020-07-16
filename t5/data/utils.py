@@ -682,7 +682,7 @@ class Task(DatasetProviderBase):
       sequence_length: dict mapping feature key to int length for that feature
       split: string, the split to return.
       use_cached: bool, whether to use the cached dataset instead of processing
-        it on the fly. Defaults to True.
+        it on the fly. Defaults to False.
       shuffle: bool, whether to shuffle the dataset.  Only used when generating
         on the fly (use_cached=False).
       shuffle_buffer_size: an integer
@@ -992,7 +992,7 @@ class Mixture(DatasetProviderBase):
       sequence_length: dict mapping feature key to int length for that feature
       split: string, the split to return for all tasks.
       use_cached: bool, whether to use the cached dataset instead of processing
-        it on the fly. Defaults to True.
+        it on the fly. Defaults to False.
       shuffle: bool, whether to shuffle the dataset.  Only used when generating
         on the fly (use_cached=False).
       compute_stats_empirically: a boolean - does not work on TPU
