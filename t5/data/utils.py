@@ -675,6 +675,7 @@ class Task(DatasetProviderBase):
       use_cached=False,
       shuffle=True,
       shuffle_buffer_size=None,
+      copy_plaintext=True,
   ):
     """Returns a tf.data.Dataset from cache or generated on the fly.
 
@@ -685,7 +686,9 @@ class Task(DatasetProviderBase):
         it on the fly. Defaults to False.
       shuffle: bool, whether to shuffle the dataset.  Only used when generating
         on the fly (use_cached=False).
-      shuffle_buffer_size: an integer
+      shuffle_buffer_size: an integer or None to use task-specific buffer size.
+      copy_plaintext: bool, whether to pass through copies of plaintext strings
+        with a "_plaintext" suffix added to the key.
     Returns:
       A mixed tf.data.Dataset.
     """
@@ -703,7 +706,7 @@ class Task(DatasetProviderBase):
       # Tokenize
       ds = encode_string_features(
           ds, self.output_features, keys=self.output_features,
-          copy_plaintext=True)
+          copy_plaintext=copy_plaintext)
 
     if (not use_cached and self.num_input_examples(split) and
         self.num_input_examples(split) < _MAX_EXAMPLES_TO_MEM_CACHE):
