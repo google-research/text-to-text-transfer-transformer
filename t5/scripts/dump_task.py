@@ -98,7 +98,7 @@ def main(_):
             " ".join(str(i) for i in v) if FLAGS.tokenize
             else v.decode("utf-8"))
       else:
-        v[k] = ""
+        key_to_string[k] = ""
     return FLAGS.format_string.format(**key_to_string)
 
   for shard_path in files:
