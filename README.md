@@ -163,6 +163,7 @@ export PROJECT=your_project_name
 export ZONE=your_project_zone
 export BUCKET=gs://yourbucket/
 export TPU_NAME=t5-tpu
+export TPU_SIZE=v3-8
 export DATA_DIR="${BUCKET}/your_data_dir"
 export MODEL_DIR="${BUCKET}/your_model_dir"
 ```
@@ -170,7 +171,7 @@ export MODEL_DIR="${BUCKET}/your_model_dir"
 Please use the following command to create a TPU device in the Cloud VM.
 
 ```sh
-ctpu up --name=$TPU_NAME --project=$PROJECT --zone=$ZONE --tpu-size=v3-8  \
+ctpu up --name=$TPU_NAME --project=$PROJECT --zone=$ZONE --tpu-size=$TPU_SIZE \
         --tpu-only   --tf-version=2.1 --noconf
 ```
 
@@ -189,7 +190,7 @@ t5_mesh_transformer  \
   --gin_file="dataset.gin" \
   --gin_file="models/bi_v1.gin" \
   --gin_param="utils.tpu_mesh_shape.model_parallelism = 1" \
-  --gin_param="utils.tpu_mesh_shape.tpu_topology = 'v2-8'" \
+  --gin_param="utils.tpu_mesh_shape.tpu_topology = '${TPU_SIZE}'" \
   --gin_param="MIXTURE_NAME = 'glue_mrpc_v002'"
 ```
 
@@ -216,7 +217,7 @@ t5_mesh_transformer  \
   --t5_tfds_data_dir="${DATA_DIR}" \
   --gin_file="dataset.gin" \
   --gin_param="utils.tpu_mesh_shape.model_parallelism = 1" \
-  --gin_param="utils.tpu_mesh_shape.tpu_topology = 'v2-8'" \
+  --gin_param="utils.tpu_mesh_shape.tpu_topology = '${TPU_SIZE}'" \
   --gin_param="MIXTURE_NAME = 'glue_mrpc_v002'" \
   --gin_file="gs://t5-data/pretrained_models/small/operative_config.gin"
 ```
@@ -266,7 +267,7 @@ t5_mesh_transformer \
   --gin_file="eval.gin" \
   --gin_file="beam_search.gin" \
   --gin_param="run.dataset_split = 'validation'" \
-  --gin_param="utils.tpu_mesh_shape.tpu_topology = 'v2-8'" \
+  --gin_param="utils.tpu_mesh_shape.tpu_topology = '${TPU_SIZE}'" \
   --gin_param="MIXTURE_NAME = 'glue_mrpc_v002'" \
   --gin_param="eval_checkpoint_step = 'all'"
 ```
@@ -295,7 +296,7 @@ t5_mesh_transformer \
   --gin_file="sample_decode.gin" \
   --gin_param="input_filename = '/path/to/inputs.txt'"\
   --gin_param="output_filename = '/tmp/outputs.txt'"\
-  --gin_param="utils.tpu_mesh_shape.tpu_topology = 'v2-8'"\
+  --gin_param="utils.tpu_mesh_shape.tpu_topology = '${TPU_SIZE}'"\
   --gin_param="infer_checkpoint_step = 'all'"
 ```
 
@@ -383,7 +384,7 @@ t5_mesh_transformer  \
   --model_dir="${PRETRAIN_MODEL_DIR}" \
   --gin_file="gs://t5-data/experiments/objectives/obj-prefix_lm/operative_config.gin" \
   --gin_param="utils.tpu_mesh_shape.model_parallelism = 1" \
-  --gin_param="utils.tpu_mesh_shape.tpu_topology = 'v2-8'"
+  --gin_param="utils.tpu_mesh_shape.tpu_topology = '${TPU_SIZE}'"
 ```
 
 Then, you can fine-tune the pre-trained model on CNN/Daily Mail like so:
@@ -398,7 +399,7 @@ t5_mesh_transformer  \
   --gin_file="gs://t5-data/experiments/objectives/obj-prefix_lm/cnn_dailymail_v002/operative_config.gin" \
   --gin_param="init_checkpoint = '${PRETRAIN_MODEL_DIR}/model.ckpt-524288'" \
   --gin_param="utils.tpu_mesh_shape.model_parallelism = 1" \
-  --gin_param="utils.tpu_mesh_shape.tpu_topology = 'v2-8'"
+  --gin_param="utils.tpu_mesh_shape.tpu_topology = '${TPU_SIZE}'"
 ```
 
 ## Released Model Checkpoints
