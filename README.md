@@ -110,17 +110,17 @@ Most of our predefined `Task`s use [TensorFlow Datasets (TFDS)][tfds] as their d
 
 #### C4
 
-The [C4][c4] dataset we created for unsupervised pre-training is available in TensorFlow Datasets, but it requires a significant amount of bandwith for downloading the raw [Common Crawl][cc] scrapes (~7 TB) and compute for its preparation (~341 CPU-days). We suggest you take advantage of the [Apache Beam][beam] support in TFDS, which enables distributed preprocessing of the dataset and can be run on [Google Cloud Dataflow][gcd]. With 450 workers, the job should complete in ~18 hours.
+The [C4][c4] dataset we created for unsupervised pre-training is available in TensorFlow Datasets, but it requires a significant amount of bandwith for downloading the raw [Common Crawl][cc] scrapes (~7 TB) and compute for its preparation (~335 CPU-days). We suggest you take advantage of the [Apache Beam][beam] support in TFDS, which enables distributed preprocessing of the dataset and can be run on [Google Cloud Dataflow][gcd]. With 500 workers, the job should complete in ~16 hours.
 
 After defining `MY_PROJECT` and `MY_BUCKET` appropriately, you can build the datast in DataFlow from GCP using the following commands:
 
 ```sh
-pip install tfds-nightly[c4,gcp]
-echo 'tfds-nightly[c4]' > beam_requirements.txt
+pip install tfds-nightly[c4]
+echo 'tfds-nightly[c4]' > /tmp/beam_requirements.txt
 python -m tensorflow_datasets.scripts.download_and_prepare \
   --datasets=c4/en \
   --data_dir=gs://$MY_BUCKET/tensorflow_datasets \
-  --beam_pipeline_options="project=$MY_PROJECT,job_name=c4,staging_location=gs://$MY_BUCKET/binaries,temp_location=gs://$MY_BUCKET/temp,runner=DataflowRunner,requirements_file=/tmp/beam_requirements.txt,experiments=shuffle_mode=service"
+  --beam_pipeline_options="project=$MY_PROJECT,job_name=c4,staging_location=gs://$MY_BUCKET/binaries,temp_location=gs://$MY_BUCKET/temp,runner=DataflowRunner,requirements_file=/tmp/beam_requirements.txt,experiments=shuffle_mode=service,region=$MY_REGION"
 ```
 
 Read more in the [TFDS Beam instructions][tfds_beam].
