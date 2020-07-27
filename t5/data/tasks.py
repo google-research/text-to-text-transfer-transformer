@@ -369,6 +369,7 @@ TaskRegistry.add(
     metric_fns=[metrics.squad],
     output_features=DEFAULT_OUTPUT_FEATURES)
 
+
 # Maximized evaluation metrics over all answers.
 TaskRegistry.add(
     "squad_v010_context_free",
