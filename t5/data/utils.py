@@ -1032,10 +1032,20 @@ class Mixture(DatasetProviderBase):
 
 
 @gin.configurable
-def rate_num_examples(task, maximum=None, temperature=1.0, scale=1.0):
+def rate_num_examples(
+    task, maximum=None, temperature=1.0, scale=1.0,
+    fallback_to_num_input_examples=True):
   """Mixing rate equal to the number of examples for the task."""
-  # TODO(adarob): Support case when there are no cached stats.
-  ret = task.get_cached_stats("train")["examples"]
+
+  if task.cache_dir or not fallback_to_num_input_examples:
+    ret = task.get_cached_stats("train")["examples"]
+  else:
+    logging.warning(
+        "Task '%s' not cached so using number of input examples instead of "
+        "preprocessed examples to compute rate.",
+        task.name)
+    ret = task.num_input_examples("train")
+
   ret *= scale
   if maximum:
     ret = min(ret, maximum)
