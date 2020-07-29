@@ -56,7 +56,7 @@ setuptools.setup(
         'scipy',
         'sentencepiece',
         'six>=1.14',  # TODO(adarob): Remove once rouge-score is updated.
-        'tensorflow-text',
+        'tensorflow-text<2.3',  # TODO(adarob): Unpin once #320 is resolved.
         'tfds-nightly',
         'torch',
         'transformers>=2.7.0',
@@ -64,11 +64,7 @@ setuptools.setup(
     extras_require={
         'gcp': ['gevent', 'google-api-python-client', 'google-compute-engine',
                 'google-cloud-storage', 'oauth2client'],
-        'cache-tasks': [
-            # TODO(adarob): Remove next line once avro-python3 is fixed.
-            'avro-python3!=1.9.2',
-            'apache-beam',
-        ],
+        'cache-tasks': ['apache-beam'],
         'test': ['pytest'],
     },
     entry_points={
