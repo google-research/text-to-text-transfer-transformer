@@ -56,7 +56,7 @@ setuptools.setup(
         'scipy',
         'sentencepiece',
         'six>=1.14',  # TODO(adarob): Remove once rouge-score is updated.
-        'tensorflow-text<2.3',  # TODO(adarob): Unpin once #320 is resolved.
+        'tensorflow-text',
         'tfds-nightly',
         'torch',
         'transformers>=2.7.0',
