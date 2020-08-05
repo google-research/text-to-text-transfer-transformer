@@ -123,6 +123,9 @@ flags.DEFINE_string("output_file", "", "Path to output file to save decodes.")
 flags.DEFINE_string(
     "export_dir", "",
     "Directory to export SavedModels to. Will use `model_dir` if unspecified.")
+flags.DEFINE_integer("export_beam_size", 1, "Beam size in export mode.")
+flags.DEFINE_float("export_temperature", 0.0,
+                   "Sampling emperature in export mode.")
 
 FLAGS = flags.FLAGS
 
@@ -229,7 +232,9 @@ def main(_):
 
       model.export(
           export_dir=FLAGS.export_dir,
-          checkpoint_step=checkpoint_steps)
+          checkpoint_step=checkpoint_steps,
+          beam_size=FLAGS.export_beam_size,
+          temperature=FLAGS.export_temperature)
     else:
       raise ValueError("--mode flag must be set when using Model API.")
   else:
