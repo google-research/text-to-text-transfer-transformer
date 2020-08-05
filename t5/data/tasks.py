@@ -221,7 +221,7 @@ for b in tfds.text.glue.Glue.builder_configs.values():
 TaskRegistry.add(
     "cnn_dailymail_v002",
     TfdsTask,
-    tfds_name="cnn_dailymail/plain_text:1.0.0",
+    tfds_name="cnn_dailymail:1.0.0",
     text_preprocessor=functools.partial(preprocessors.summarize,
                                         article_key="article",
                                         summary_key="highlights"),
@@ -321,7 +321,7 @@ for b in tfds.text.super_glue.SuperGlue.builder_configs.values():
 TaskRegistry.add(
     "dpr_v001_simple",
     TfdsTask,
-    tfds_name="definite_pronoun_resolution/plain_text:1.0.0",
+    tfds_name="definite_pronoun_resolution:1.0.0",
     text_preprocessor=preprocessors.definite_pronoun_resolution_simple,
     metric_fns=[metrics.accuracy],
     output_features=DEFAULT_OUTPUT_FEATURES)
@@ -363,7 +363,7 @@ TaskRegistry.add(
 TaskRegistry.add(
     "squad_v010_allanswers",
     TfdsTask,
-    tfds_name="squad/plain_text:1.0.0",
+    tfds_name="squad:1.0.0",
     text_preprocessor=preprocessors.squad,
     postprocess_fn=postprocessors.qa,
     metric_fns=[metrics.squad],
@@ -374,7 +374,7 @@ TaskRegistry.add(
 TaskRegistry.add(
     "squad_v010_context_free",
     TfdsTask,
-    tfds_name="squad/plain_text:1.0.0",
+    tfds_name="squad:1.0.0",
     text_preprocessor=functools.partial(
         preprocessors.squad, include_context=False),
     postprocess_fn=postprocessors.qa,
@@ -385,7 +385,7 @@ TaskRegistry.add(
 TaskRegistry.add(
     "squad_v010_allanswers_span",
     TfdsTask,
-    tfds_name="squad/plain_text:1.0.0",
+    tfds_name="squad:1.0.0",
     text_preprocessor=preprocessors.squad_span_space_tokenized,
     postprocess_fn=postprocessors.span_qa,
     metric_fns=[metrics.span_squad],
@@ -395,7 +395,7 @@ TaskRegistry.add(
 TaskRegistry.add(
     "squad_v010",
     TfdsTask,
-    tfds_name="squad/plain_text:1.0.0",
+    tfds_name="squad:1.0.0",
     text_preprocessor=preprocessors.squad,
     metric_fns=[metrics.squad],
     output_features=DEFAULT_OUTPUT_FEATURES)
