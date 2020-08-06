@@ -318,16 +318,19 @@ def get_stats_path(data_dir, split):
 class Feature(object):
   """A container for attributes of output features of data providers."""
 
-  def __init__(self, vocabulary, add_eos=True):
+  def __init__(self, vocabulary, add_eos=True, required=True):
     """Create a Feature instance.
 
     Args:
       vocabulary: vocabularies.Vocabulary object to use for tokenization,
         or a callable function returning a vocabulary
       add_eos: bool, whether an EOS token should be added to this Feature.
+      required: Whether or not this feature must exist in the final outputs
+        of the Task.
     """
     self._vocabulary = vocabulary
     self.add_eos = add_eos
+    self.required = required
 
   @property
   def vocabulary(self):
@@ -531,9 +534,13 @@ class Task(DatasetProviderBase):
     shapes = tf.data.get_output_shapes(dataset)
     for feat in self.output_features:
       if feat not in types:
-        raise ValueError(
-            "Task dataset is missing expected output feature after {label}: "
-            "{feat}".format(label=error_label, feat=feat))
+        if self.output_features[feat].required:
+          raise ValueError(
+              "Task dataset is missing expected output feature after {label}: "
+              "{feat}".format(label=error_label, feat=feat))
+        else:
+          # It's ok that this feature does not exist.
+          continue
       if expected_output_type != types[feat]:
         raise ValueError(
             "Task dataset has incorrect type for feature '{feat}' after "

@@ -29,7 +29,8 @@ import tensorflow_datasets as tfds
 
 
 DEFAULT_OUTPUT_FEATURES = {
-    "inputs": Feature(vocabulary=get_default_vocabulary(), add_eos=True),
+    "inputs": Feature(
+        vocabulary=get_default_vocabulary(), add_eos=True, required=False),
     "targets": Feature(vocabulary=get_default_vocabulary(), add_eos=True)
 }
 

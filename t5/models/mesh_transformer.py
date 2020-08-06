@@ -72,9 +72,13 @@ def mesh_train_dataset_fn(
         "pack_or_pad is being called with ensure_eos=True, but EOS is not "
         "being added to all features."
     )
+
+  # Select just the output features which are present in the dataset.
+  feature_keys = tuple(k for k in mixture_or_task.output_features
+                       if k in tf.data.get_output_shapes(ds))
   ds = transformer_dataset.pack_or_pad(
       ds, sequence_length, pack=True,
-      feature_keys=tuple(mixture_or_task.output_features), ensure_eos=True)
+      feature_keys=feature_keys, ensure_eos=True)
   return ds
 
 

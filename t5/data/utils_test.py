@@ -256,6 +256,38 @@ class TasksTest(test_utils.FakeTaskTest):
     self._tfds_patcher.new.return_value = (
         self._tfds_patcher.new.return_value._replace(load=fake_load))
 
+  def test_optional_features(self):
+    def _dummy_preprocessor(output):
+      return lambda _: tf.data.Dataset.from_tensors(output)
+
+    default_vocab = test_utils.sentencepiece_vocab()
+    features = {
+        "inputs": utils.Feature(vocabulary=default_vocab, required=False),
+        "targets": utils.Feature(vocabulary=default_vocab, required=True),
+    }
+
+    test_utils.add_task(
+        "text_missing_optional_feature",
+        test_utils.get_fake_dataset,
+        output_features=features,
+        text_preprocessor=_dummy_preprocessor({"targets": "a"}))
+    TaskRegistry.get_dataset(
+        "text_missing_optional_feature", {"targets": 13},
+        "train", use_cached=False)
+
+    test_utils.add_task(
+        "text_missing_required_feature",
+        test_utils.get_fake_dataset,
+        output_features=features,
+        text_preprocessor=_dummy_preprocessor({"inputs": "a"}))
+    with self.assertRaisesRegex(
+        ValueError,
+        "Task dataset is missing expected output feature after text "
+        "preprocessing: targets"):
+      TaskRegistry.get_dataset(
+          "text_missing_required_feature", {"inputs": 13},
+          "train", use_cached=False)
+
   def test_invalid_text_preprocessors(self):
     def _dummy_preprocessor(output):
       return lambda _: tf.data.Dataset.from_tensors(output)
