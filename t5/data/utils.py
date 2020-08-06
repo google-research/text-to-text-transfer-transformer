@@ -1012,7 +1012,8 @@ class Mixture(DatasetProviderBase):
     if not tasks:
       raise ValueError("No datasets have a '{}' split".format(split))
     def filter_features(ex):
-      return {k: v for k, v in ex.items() if k in self.output_features}
+      return {k: v for k, v in ex.items()
+              if k in self.output_features or re.sub(r"_position$", "", k) in self.output_features}
     datasets = [
         task.get_dataset(sequence_length, split, use_cached, shuffle=shuffle)  # pylint:disable=g-complex-comprehension
         .repeat()
