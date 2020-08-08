@@ -107,7 +107,8 @@ def mesh_eval_dataset_fn(
     use_cached=False,
     pack=False,
     shuffle_eval_examples=False,
-    shuffle_buffer_size=t5.data.utils.SHUFFLE_BUFFER_SIZE):
+    shuffle_buffer_size=t5.data.utils.SHUFFLE_BUFFER_SIZE,
+    tasks_to_skip_eval=None):
   """Returns all tf.data.Datasets for evaluation on a given mixture.
 
   This uses the format required for utils.run's `eval_dataset_fn` argument in
@@ -131,6 +132,7 @@ def mesh_eval_dataset_fn(
     shuffle_buffer_size: integer - the shuffle buffer size if we shuffle
       eval examples, ideally this should be some large multiple of
       `num_eval_examples` to ensure good mixing and random batches.
+    tasks_to_skip_eval: list of task names for which to skip evaluation.
 
   Returns:
     A list of mesh_tensorflow.transformer.dataset.EvalDataset tuples.
@@ -167,6 +169,10 @@ def mesh_eval_dataset_fn(
       logging.info(
           "Task %s has no '%s' split, skipping eval.", task.name, dataset_split
       )
+      continue
+
+    if tasks_to_skip_eval and (task.name in tasks_to_skip_eval):
+      logging.info("Asked to skip evaluation for [%s].", task.name)
       continue
 
     outputs.append(

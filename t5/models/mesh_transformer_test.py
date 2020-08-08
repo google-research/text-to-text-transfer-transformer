@@ -88,6 +88,32 @@ class MeshDatasetFnsTest(test_utils.FakeMixtureTest):
         mixture_name="uncached_mixture", train=False, use_cached=False,
     )
 
+  def test_mesh_eval_dataset_fn_filtering(self):
+    mixture_name = "cached_mixture"
+    vocabulary = t5.data.MixtureRegistry.get(mixture_name).get_vocabulary()
+    sequence_length = {"inputs": 13, "targets": 13}
+    split = tfds.Split.VALIDATION
+    use_cached = True
+
+    output = mesh_transformer.mesh_eval_dataset_fn(
+        mixture_name,
+        sequence_length=sequence_length,
+        vocabulary=vocabulary,
+        dataset_split=split,
+        use_cached=use_cached)
+
+    self.assertLen(output, 1)
+
+    output = mesh_transformer.mesh_eval_dataset_fn(
+        mixture_name,
+        sequence_length=sequence_length,
+        vocabulary=vocabulary,
+        dataset_split=split,
+        use_cached=use_cached,
+        tasks_to_skip_eval=["cached_task"])
+
+    self.assertLen(output, 0)
+
   def test_maybe_shuffle_and_subsample_dataset_no_shuffle(self):
     ds = tf.data.Dataset.range(100)
 
