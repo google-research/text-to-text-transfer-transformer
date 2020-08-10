@@ -195,7 +195,7 @@ class MtfModel(T5Model):
         vocabulary=vocabulary,
         layout_rules=self._layout_rules,
         mesh_shape=mtf.Shape([]) if disable_tpu else self._mesh_shape,
-        mesh_devices=self._mesh_devices,
+        mesh_devices=None if disable_tpu else self._mesh_devices,
         model_dir=self._model_dir,
         batch_size=self.batch_size,
         sequence_length=self._sequence_length,
