@@ -58,7 +58,7 @@ to the form
 {'inputs': 'translate German to English: Das ist gut.', 'targets': 'That is good.'}
 ```
 
-In additon to text preprocessing, you can also use one or more **token preprocessors** to modify the inputs post-tokenization. We implemented our unsupervised pre-training objectives using these token preprocessors.
+In addition to text preprocessing, you can also use one or more **token preprocessors** to modify the inputs post-tokenization. We implemented our unsupervised pre-training objectives using these token preprocessors.
 
 We provide many predefined preprocessors in `t5.data.preprocessors`, but you may also define your own.
 
@@ -110,9 +110,9 @@ Most of our predefined `Task`s use [TensorFlow Datasets (TFDS)][tfds] as their d
 
 #### C4
 
-The [C4][c4] dataset we created for unsupervised pre-training is available in TensorFlow Datasets, but it requires a significant amount of bandwith for downloading the raw [Common Crawl][cc] scrapes (~7 TB) and compute for its preparation (~335 CPU-days). We suggest you take advantage of the [Apache Beam][beam] support in TFDS, which enables distributed preprocessing of the dataset and can be run on [Google Cloud Dataflow][gcd]. With 500 workers, the job should complete in ~16 hours.
+The [C4][c4] dataset we created for unsupervised pre-training is available in TensorFlow Datasets, but it requires a significant amount of bandwidth for downloading the raw [Common Crawl][cc] scrapes (~7 TB) and compute for its preparation (~335 CPU-days). We suggest you take advantage of the [Apache Beam][beam] support in TFDS, which enables distributed preprocessing of the dataset and can be run on [Google Cloud Dataflow][gcd]. With 500 workers, the job should complete in ~16 hours.
 
-After defining `MY_PROJECT` and `MY_BUCKET` appropriately, you can build the datast in DataFlow from GCP using the following commands:
+After defining `MY_PROJECT` and `MY_BUCKET` appropriately, you can build the dataset in DataFlow from GCP using the following commands:
 
 ```sh
 pip install tfds-nightly[c4]
