@@ -262,14 +262,13 @@ def encode_string_features(
     Returns:
       a dictionary
     """
-    ret = {}
     for k, v in features.items():
       if k in keys and v.dtype == tf.string:
         if copy_plaintext:
-          ret["%s_plaintext" % k] = v
+          features["%s_plaintext" % k] = v
         v = tf.cast(output_features[k].vocabulary.encode_tf(v), tf.int64)
-      ret[k] = v
-    return ret
+      features[k] = v
+    return features
   return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 
