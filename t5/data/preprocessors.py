@@ -2413,18 +2413,20 @@ def take(dataset, num_examples=-1, **unused_kwargs):
 
 
 def parse_tsv(dataset,
-              field_names,
+              field_names=None,
               field_delim='\t'):
   """Splits TSV lines into dict examples mapping field name to string value.
 
   Args:
     dataset: a `tf.data.Dataset` containing comma/tab-delimited strings.
     field_names: a list of strings, the ordered names of the TSV fields.
+      Defaults to "inputs" and "targets".
     field_delim: a string, the delimiter to split on e.g. ',' for csv.
   Returns:
     A `tf.data.Dataset` containing dict examples mapping field name to string
     value.
   """
+  field_names = field_names or ['inputs', 'targets']
   def parse_line(line):
     return dict(zip(
         field_names,
