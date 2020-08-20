@@ -2082,7 +2082,8 @@ def random_spans_helper(inputs_length=gin.REQUIRED,
                         noise_density=gin.REQUIRED,
                         mean_noise_span_length=gin.REQUIRED,
                         extra_tokens_per_span_inputs=gin.REQUIRED,
-                        extra_tokens_per_span_targets=gin.REQUIRED):
+                        extra_tokens_per_span_targets=gin.REQUIRED,
+                        verbose=False):
   """Training parameters to avoid padding with random_spans_noise_mask.
 
   When training a model with random_spans_noise_mask, we would like to set the
@@ -2102,6 +2103,7 @@ def random_spans_helper(inputs_length=gin.REQUIRED,
     mean_noise_span_length: a float
     extra_tokens_per_span_inputs: an integer
     extra_tokens_per_span_targets: an integer
+    verbose: a bool indicating whether to log sequence lengths
   Returns:
     tokens_length: length of original text in tokens
     targets_length: an integer - length in tokens of encoded targets sequence
@@ -2129,11 +2131,12 @@ def random_spans_helper(inputs_length=gin.REQUIRED,
   if noise_density == 0.5 and targets_length > inputs_length:
     tokens_length -= 1
     targets_length -= 1
-  tf.logging.info(
-      'tokens_length=%s inputs_length=%s targets_length=%s '
-      'noise_density=%s mean_noise_span_length=%s ' %
-      (tokens_length, inputs_length, targets_length,
-       noise_density, mean_noise_span_length))
+  if verbose:
+    tf.logging.info(
+        'tokens_length=%s inputs_length=%s targets_length=%s '
+        'noise_density=%s mean_noise_span_length=%s ' %
+        (tokens_length, inputs_length, targets_length,
+         noise_density, mean_noise_span_length))
   return tokens_length, targets_length
 
 
