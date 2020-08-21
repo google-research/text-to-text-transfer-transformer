@@ -1,0 +1,26 @@
+# -*-Python-*-
+
+# About 44B params
+
+include 'models/t5.1.1.xxl.gin'
+
+d_model = 4096
+num_layers = 48  # 24 * 2
+d_ff = 20480  # 10240 * 2 ( should we do 2^15 instead? - 32768)
+num_heads = 128  # 64 * 2
+
+# MP 32 is already what Noam suggested.
+# utils.tpu_mesh_shape.model_parallelism = 32
+
+# Colin suggested tiling spec and other stuff.
+run.layout_rules = 'batch:dp,d_ff:mp1,heads:mp1,vocab:mp1,d_model:mp2'
+run.batch_size = ('tokens_per_batch', 262144)
+
+tiling_spec = [('dp', None), ('mp1', [1, 32, 1]), ('mp2', [1, 1, 2])]
+tpu_estimator_model_fn.hierarchical_tiling_spec = %tiling_spec
+
+# Parameters for tpu_mesh_shape:
+# ==============================================================================
+tpu_mesh_shape.ensemble_parallelism = None
+tpu_mesh_shape.model_parallelism = %tiling_spec
+tpu_mesh_shape.tpu_topology = '32x32'
