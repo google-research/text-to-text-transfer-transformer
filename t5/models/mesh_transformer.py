@@ -67,18 +67,15 @@ def mesh_train_dataset_fn(
 
   ds = mixture_or_task.get_dataset(
       sequence_length, split=dataset_split, use_cached=use_cached, shuffle=True)
-  if any(not f.add_eos for f in mixture_or_task.output_features.values()):
-    warnings.warn(
-        "pack_or_pad is being called with ensure_eos=True, but EOS is not "
-        "being added to all features."
-    )
 
   # Select just the output features which are present in the dataset.
   feature_keys = tuple(k for k in mixture_or_task.output_features
                        if k in tf.data.get_output_shapes(ds))
+  eos_keys = set(
+      k for k, f in mixture_or_task.output_features.items() if f.add_eos)
   ds = transformer_dataset.pack_or_pad(
       ds, sequence_length, pack=True,
-      feature_keys=feature_keys, ensure_eos=True)
+      feature_keys=feature_keys, ensure_eos=eos_keys)
   return ds
 
 
@@ -145,17 +142,14 @@ def mesh_eval_dataset_fn(
         sequence_length, split=dataset_split,
         use_cached=use_cached, shuffle=False
     )
-    if any(not f.add_eos for f in task.output_features.values()):
-      warnings.warn(
-          "pack_or_pad is being called with ensure_eos=True, but EOS is not "
-          "being added to all features."
-      )
+    eos_keys = set(
+        k for k, f in mixture_or_task.output_features.items() if f.add_eos)
     ds = transformer_dataset.pack_or_pad(
         ds,
         sequence_length,
         pack=pack,
         feature_keys=tuple(task.output_features),
-        ensure_eos=True)
+        ensure_eos=eos_keys)
     ds = maybe_shuffle_and_subsample_dataset(
         ds, num_eval_examples, shuffle_eval_examples, shuffle_buffer_size)
     return ds
