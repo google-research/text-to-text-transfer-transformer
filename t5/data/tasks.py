@@ -364,7 +364,7 @@ TaskRegistry.add(
 TaskRegistry.add(
     "squad_v010_allanswers",
     TfdsTask,
-    tfds_name="squad:1.0.0",
+    tfds_name="squad/v1.1:2.0.0",
     text_preprocessor=preprocessors.squad,
     postprocess_fn=postprocessors.qa,
     metric_fns=[metrics.squad],
@@ -375,7 +375,7 @@ TaskRegistry.add(
 TaskRegistry.add(
     "squad_v010_context_free",
     TfdsTask,
-    tfds_name="squad:1.0.0",
+    tfds_name="squad/v1.1:2.0.0",
     text_preprocessor=functools.partial(
         preprocessors.squad, include_context=False),
     postprocess_fn=postprocessors.qa,
@@ -386,7 +386,7 @@ TaskRegistry.add(
 TaskRegistry.add(
     "squad_v010_allanswers_span",
     TfdsTask,
-    tfds_name="squad:1.0.0",
+    tfds_name="squad/v1.1:2.0.0",
     text_preprocessor=preprocessors.squad_span_space_tokenized,
     postprocess_fn=postprocessors.span_qa,
     metric_fns=[metrics.span_squad],
@@ -396,7 +396,7 @@ TaskRegistry.add(
 TaskRegistry.add(
     "squad_v010",
     TfdsTask,
-    tfds_name="squad:1.0.0",
+    tfds_name="squad/v1.1:2.0.0",
     text_preprocessor=preprocessors.squad,
     metric_fns=[metrics.squad],
     output_features=DEFAULT_OUTPUT_FEATURES)
