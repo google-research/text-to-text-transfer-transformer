@@ -35,7 +35,12 @@ class SentencePieceVocabulary(vocabularies.Vocabulary):
   EOS, and ID=2 for UNK.
   """
 
-  def __init__(self, sentencepiece_model_file, extra_ids=None):
+  def __init__(self,
+               sentencepiece_model_file,
+               extra_ids=None,
+               nbest_size=0,
+               alpha=1.0,
+               reverse=False):
     """Create a SentencePieceVocabulary.
 
     Optionally, specify a number of extra ids to add to the end of the
@@ -48,6 +53,9 @@ class SentencePieceVocabulary(vocabularies.Vocabulary):
     self._sentencepiece_model_file = sentencepiece_model_file
     self._tokenizer = None
     self._sp_model = None
+    self._nbest_size = nbest_size
+    self._alpha = alpha
+    self._reverse = reverse
     # Pass extra_ids if it is specified, otherwise, allow it to be
     # gin-configured through the base class
     kwargs = {"extra_ids": extra_ids} if extra_ids is not None else {}
@@ -80,6 +88,18 @@ class SentencePieceVocabulary(vocabularies.Vocabulary):
     return self._sp_model
 
   @property
+  def alpha(self):
+    return self._alpha
+
+  @property
+  def nbest_size(self):
+    return self._nbest_size
+
+  @property
+  def reverse(self):
+    return self._reverse
+
+  @property
   def sentencepiece_model_file(self):
     return self._sentencepiece_model_file
 
@@ -93,7 +113,11 @@ class SentencePieceVocabulary(vocabularies.Vocabulary):
   @property
   def tf_tokenizer(self):
     """Instantiate and return a TF tokenizer."""
-    return tf_text.SentencepieceTokenizer(model=self.sp_model)
+    return tf_text.SentencepieceTokenizer(
+        model=self.sp_model,
+        nbest_size=self.nbest_size,
+        alpha=self.alpha,
+        reverse=self.reverse)
 
   @property
   def vocab_size(self):
