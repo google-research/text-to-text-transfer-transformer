@@ -1933,6 +1933,47 @@ def trivia_qa_truncate_inputs(dataset, output_features, sequence_length):
 
 
 @gin.configurable()
+def seq_crop_augmentation(
+    dataset, max_target_seq_length=2048, num_augmentation=100):
+  """Token preprocessor to apply augmentation by randomly cropping the sequence.
+  E.g.
+  Input dataset
+  {
+    "targets": [1, 2, 3, 4, 5, 6, 7]
+  }
+
+  Output dataset (when max_target_seq_length=4 and num_agumentation=2)
+  {
+    "targets": [2, 3, 4, 5]
+    "targets": [4, 5, 6, 7]
+  }
+
+  Args:
+    dataset: input tf.data.Dataset with tokens that will be augmented.
+    max_target_seq_length: the target sequence length after cropping.
+    num_augmentation: number of augmentation times.
+
+  Returns:
+    a tf.data.Dataset
+  """
+  def my_fn(x):
+    # Take a random crop of the training example.
+    max_offset = tf.maximum(
+        tf.shape(x['targets'])[0] - max_target_seq_length, 0)
+    offset = tf.cond(
+        max_offset > 0,
+        lambda: tf.random_uniform([], maxval=max_offset, dtype=tf.int32),
+        lambda: 0
+    )
+    x['targets'] = (
+        x['targets'][offset:offset + max_target_seq_length])
+    return x
+
+  dataset = dataset.repeat(num_augmentation)
+  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+
+@gin.configurable()
 def unsupervised(dataset, preprocessors=None, **kwargs):
   """Configure this to point at unsupervised preprocessors.
 

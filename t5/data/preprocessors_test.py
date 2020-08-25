@@ -982,6 +982,20 @@ class PreprocessorsTest(tf.test.TestCase):
         self.assertContainsSubset(data['targets'], data['inputs'])
         self.assertLen(data['inputs'], 10)
 
+  def test_seq_crop_augmentation(self):
+    tf.set_random_seed(5)
+    dataset = tf.data.Dataset.from_tensors({
+        'targets': tf.range(0, 10)
+    })
+    dataset = prep.seq_crop_augmentation(
+        dataset, max_target_seq_length=4, num_augmentation=2)
+    assert_dataset(
+        dataset,
+        [
+            {'targets': tf.constant([1, 2, 3, 4])},
+            {'targets': tf.constant([0, 1, 2, 3])}
+        ])
+
   def test_record(self):
     og_dataset = tf.data.Dataset.from_tensors({
         'query': 'It was @placeholder.',
