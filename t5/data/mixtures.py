@@ -17,13 +17,10 @@
 This module contains different mixtures for training T5 models.
 """
 
-import functools
-
 import t5.data.tasks  # pylint: disable=unused-import
 from t5.data.utils import MixtureRegistry
 from t5.data.utils import rate_num_examples
 from t5.data.utils import rate_unsupervised
-import tensorflow_datasets as tfds
 
 # These weights are based on the number of examples in each dataset.
 _SUPER_GLUE_WEIGHT_MAPPING = {
@@ -44,17 +41,17 @@ _SUPER_GLUE_WEIGHT_MAPPING = {
 # These weights are based on the number of examples in each dataset.
 # We omit WNLI because we train on WSC/DPR simple instead
 _GLUE_WEIGHT_MAPPING = {
-    'glue_cola_v002': 8_551.,
-    'glue_sst2_v002': 67_349.,
-    'glue_mrpc_v002': 3_668.,
-    'glue_qqp_v002': 363_849.,
-    'glue_stsb_v002': 5_749.,
-    'glue_mnli_v002': 392_702.,
-    'glue_qnli_v002': 104_743.,
-    'glue_rte_v002': 2_490.,
-    'glue_mnli_mismatched_v002': 0.,
-    'glue_mnli_matched_v002': 0.,
-    'glue_ax_v002': 0.,
+    "glue_cola_v002": 8_551.,
+    "glue_sst2_v002": 67_349.,
+    "glue_mrpc_v002": 3_668.,
+    "glue_qqp_v002": 363_849.,
+    "glue_stsb_v002": 5_749.,
+    "glue_mnli_v002": 392_702.,
+    "glue_qnli_v002": 104_743.,
+    "glue_rte_v002": 2_490.,
+    "glue_mnli_mismatched_v002": 0.,
+    "glue_mnli_matched_v002": 0.,
+    "glue_ax_v002": 0.,
 }
 
 _glue_tasks = list(_GLUE_WEIGHT_MAPPING.keys())
@@ -101,6 +98,7 @@ MixtureRegistry.add(
 MixtureRegistry.add(
     "super_glue_v102_proportional",
     _super_glue_tasks_with_weight)
+
 
 
 # mnli and its associated dev sets: mnli_matched and mnli_mismatched

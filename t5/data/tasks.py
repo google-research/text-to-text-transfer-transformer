@@ -34,6 +34,7 @@ DEFAULT_OUTPUT_FEATURES = {
     "targets": Feature(vocabulary=get_default_vocabulary, add_eos=True)
 }
 
+
 # ==================================== C4 ======================================
 # Configurable tasks used for comparisons in Raffel et al., 2019.
 _c4_config_suffixes = ["", ".noclean", ".realnewslike", ".webtextlike"]
@@ -347,6 +348,7 @@ TaskRegistry.add(
     metric_fns=[metrics.accuracy],
     output_features=DEFAULT_OUTPUT_FEATURES,
     splits=["validation", "test"])
+
 
 # =================================== WNLI =====================================
 TaskRegistry.add(
