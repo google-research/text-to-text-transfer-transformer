@@ -323,7 +323,7 @@ for b in tfds.text.super_glue.SuperGlue.builder_configs.values():
 TaskRegistry.add(
     "dpr_v001_simple",
     TfdsTask,
-    tfds_name="definite_pronoun_resolution:1.0.0",
+    tfds_name="definite_pronoun_resolution:1.1.0",
     text_preprocessor=preprocessors.definite_pronoun_resolution_simple,
     metric_fns=[metrics.accuracy],
     output_features=DEFAULT_OUTPUT_FEATURES)
