@@ -88,6 +88,8 @@ def main(_):
   total_examples = 0
   tf.enable_eager_execution()
   task = t5.data.TaskRegistry.get(FLAGS.task)
+  # Do a load to make sure the files exist before grabbing file path
+  task.tfds_dataset.load(FLAGS.split, shuffle_files=False)
   files = task.tfds_dataset.files(FLAGS.split)
   def _example_to_string(ex):
     key_to_string = {}
