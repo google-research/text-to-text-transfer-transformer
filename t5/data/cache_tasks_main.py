@@ -168,8 +168,8 @@ class PreprocessAndTokenizeTfdsTask(BasePreprocessAndTokenizeTask):
     return self._task.tfds_dataset.load_shard(shard)
 
 
-class PreprocessAndTokenizeTextLineTask(BasePreprocessAndTokenizeTask):
-  """Preprocesses and tokenizes a TextLineTask.
+class PreprocessAndTokenizeFileTask(BasePreprocessAndTokenizeTask):
+  """Preprocesses and tokenizes a FileTask.
 
   Returns a PCollection of tokenized example dicts containing Tensors.
   """
@@ -178,7 +178,7 @@ class PreprocessAndTokenizeTextLineTask(BasePreprocessAndTokenizeTask):
     return tf.io.gfile.glob(self._task._split_to_filepattern[self._split])  # pylint:disable=protected-access
 
   def _load_shard(self, shard):
-    return tf.data.TextLineDataset(shard).skip(self._task._skip_header_lines)  # pylint:disable=protected-access
+    return self._task._reader(shard)  # pylint:disable=protected-access
 
 
 class PreprocessAndTokenizeGenericTask(BasePreprocessAndTokenizeTask):
@@ -382,8 +382,8 @@ def run_pipeline(
 
     if isinstance(task, t5.data.TfdsTask):
       pat_cls = PreprocessAndTokenizeTfdsTask
-    elif isinstance(task, t5.data.TextLineTask):
-      pat_cls = PreprocessAndTokenizeTextLineTask
+    elif isinstance(task, t5.data.FileTask):
+      pat_cls = PreprocessAndTokenizeFileTask
     else:
       logging.warning(
           "Generic Task '%s' cannot be distributed. To speed up preprocessing, "

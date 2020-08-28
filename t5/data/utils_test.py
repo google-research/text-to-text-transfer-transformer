@@ -179,6 +179,10 @@ class TasksTest(test_utils.FakeTaskTest):
     test_utils.verify_task_matches_fake_datasets(
         self.text_line_task, use_cached=False, splits=["train"])
 
+  def test_tf_example_task(self):
+    test_utils.verify_task_matches_fake_datasets(
+        self.tf_example_task, use_cached=False, splits=["train"])
+
   def test_no_tfds_version(self):
     with self.assertRaisesRegex(
         ValueError, "TFDS name must contain a version number, got: fake"):

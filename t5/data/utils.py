@@ -840,7 +840,58 @@ class TfdsTask(Task):
     return self.tfds_dataset.size(split)
 
 
-class TextLineTask(Task):
+class FileTask(Task):
+  """A `Task` that reads a file as input."""
+
+  def __init__(
+      self,
+      name,
+      reader,
+      split_to_filepattern,
+      text_preprocessor,
+      metric_fns,
+      **task_kwargs):
+    """FileTask constructor.
+
+    Args:
+      name: string, a unique name for the Task. A ValueError will be raised if
+        another task with this name is already registered.
+      reader: `tf.data.Dataset`, a dataset class to read the input files.
+      split_to_filepattern: dict of string (split name) to string (filename or
+        filepattern).
+      text_preprocessor: a function (or list of functions) that (each) takes in
+        a tf.data.Dataset of string features and returns a tf.data.Dataset of
+        string features. Can be set to None as a no-op. If a list is given,
+        they will be executed sequentially.
+      metric_fns: list(callable), list of metric functions with the signature
+        metric_fn(targets, predictions) to use during evaluation.
+      **task_kwargs: dict, additional keyword arguments for the parent `Task`
+        class.
+    """
+    # Used during caching.
+    self._split_to_filepattern = split_to_filepattern
+    self._reader = reader
+
+    def dataset_fn(split, shuffle_files):
+      filepattern = split_to_filepattern[split]
+
+      files = tf.data.Dataset.list_files(filepattern, shuffle=shuffle_files)
+
+      return files.interleave(
+          reader,
+          cycle_length=16, block_length=16,
+          num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+    super().__init__(
+        name,
+        dataset_fn=dataset_fn,
+        splits=list(split_to_filepattern.keys()),
+        text_preprocessor=text_preprocessor,
+        metric_fns=metric_fns,
+        **task_kwargs)
+
+
+class TextLineTask(FileTask):
   """A `Task` that reads text lines as input.
 
   Requires a text_processor to be passed that takes a tf.data.Dataset of
@@ -874,25 +925,66 @@ class TextLineTask(Task):
       **task_kwargs: dict, additional keyword arguments for the parent `Task`
         class.
     """
-    self._split_to_filepattern = split_to_filepattern
+    # Used during caching.
     self._skip_header_lines = skip_header_lines
 
-    def dataset_fn(split, shuffle_files):
-      filepattern = split_to_filepattern[split]
-
-      def _read_file(fname):
-        return tf.data.TextLineDataset(fname).skip(skip_header_lines)
-
-      files = tf.data.Dataset.list_files(filepattern, shuffle=shuffle_files)
-      return files.interleave(
-          _read_file,
-          cycle_length=16, block_length=16,
-          num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    def reader(filepattern):
+      return tf.data.TextLineDataset(filepattern).skip(skip_header_lines)
 
     super().__init__(
         name,
-        dataset_fn=dataset_fn,
-        splits=list(split_to_filepattern.keys()),
+        reader=reader,
+        split_to_filepattern=split_to_filepattern,
+        text_preprocessor=text_preprocessor,
+        metric_fns=metric_fns,
+        **task_kwargs)
+
+
+class TFExampleTask(FileTask):
+  """A `Task` that reads a file of tf.train.Example protos as input."""
+
+  def __init__(
+      self,
+      name,
+      split_to_filepattern,
+      feature_description,
+      text_preprocessor,
+      metric_fns,
+      reader=tf.data.TFRecordDataset,
+      **task_kwargs):
+    """TextLineTask constructor.
+
+    Args:
+      name: string, a unique name for the Task. A ValueError will be raised if
+        another task with this name is already registered.
+      split_to_filepattern: dict of string (split name) to string (filename or
+        filepattern).
+      feature_description: dict, a mapping of string feature keys to
+        `tf.io.FixedLenFeature` or `tf.io.VarLenFeature` values.
+      text_preprocessor: a function (or list of functions) that (each) takes in
+        a tf.data.Dataset of string features and returns a tf.data.Dataset of
+        string features. Can be set to None as a no-op. If a list is given,
+        they will be executed sequentially.
+      metric_fns: list(callable), list of metric functions with the signature
+        metric_fn(targets, predictions) to use during evaluation.
+      reader: `tf.data.Dataset`, a dataset class to read the input files.
+      **task_kwargs: dict, additional keyword arguments for the parent `Task`
+        class.
+    """
+
+    def parse_proto(ds):
+      return ds.map(
+          lambda pb: tf.io.parse_single_example(pb, feature_description),
+          num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+    if not isinstance(text_preprocessor, list):
+      text_preprocessor = [text_preprocessor]
+    text_preprocessor.insert(0, parse_proto)
+
+    super().__init__(
+        name,
+        reader=reader,
+        split_to_filepattern=split_to_filepattern,
         text_preprocessor=text_preprocessor,
         metric_fns=metric_fns,
         **task_kwargs)

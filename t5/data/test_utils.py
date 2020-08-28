@@ -517,6 +517,25 @@ class FakeTaskTest(absltest.TestCase):
         metric_fns=[])
     self.text_line_task = TaskRegistry.get("text_line_task")
 
+    # Prepare uncached TFExampleTask
+    _dump_fake_dataset(
+        os.path.join(self.test_data_dir, "train.tfrecord"),
+        _FAKE_DATASET["train"], [2, 1], _dump_examples_to_tfrecord)
+    TaskRegistry.add(
+        "tf_example_task",
+        dataset_utils.TFExampleTask,
+        split_to_filepattern={
+            "train": os.path.join(self.test_data_dir, "train.tfrecord*"),
+        },
+        feature_description={
+            "prefix": tf.io.FixedLenFeature([], tf.string),
+            "suffix": tf.io.FixedLenFeature([], tf.string),
+        },
+        text_preprocessor=[test_text_preprocessor],
+        output_features=dataset_utils.Feature(sentencepiece_vocab()),
+        metric_fns=[])
+    self.tf_example_task = TaskRegistry.get("tf_example_task")
+
     # Prepare uncached Task.
     def _dataset_fn(split, shuffle_files):
       del split
