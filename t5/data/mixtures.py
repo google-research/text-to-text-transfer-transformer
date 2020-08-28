@@ -17,42 +17,16 @@
 This module contains different mixtures for training T5 models.
 """
 
+from t5.data.glue_utils import get_glue_weight_mapping
+from t5.data.glue_utils import get_super_glue_weight_mapping
+
 import t5.data.tasks  # pylint: disable=unused-import
 from t5.data.utils import MixtureRegistry
 from t5.data.utils import rate_num_examples
 from t5.data.utils import rate_unsupervised
 
-# These weights are based on the number of examples in each dataset.
-_SUPER_GLUE_WEIGHT_MAPPING = {
-    "dpr_v001_simple": 1_322.,
-    "super_glue_wsc_v102_simple_train": 259.,
-    "super_glue_wsc_v102_simple_eval": 0.,
-    "super_glue_boolq_v102": 9_427.,
-    "super_glue_cb_v102": 250.,
-    "super_glue_copa_v102": 400.,
-    "super_glue_multirc_v102": 27_243.,
-    "super_glue_record_v102": 138_854.,
-    "super_glue_rte_v102": 2_490.,
-    "super_glue_wic_v102": 5_428.,
-    "super_glue_axb_v102": 0.,
-    "super_glue_axg_v102": 0.,
-}
-
-# These weights are based on the number of examples in each dataset.
-# We omit WNLI because we train on WSC/DPR simple instead
-_GLUE_WEIGHT_MAPPING = {
-    "glue_cola_v002": 8_551.,
-    "glue_sst2_v002": 67_349.,
-    "glue_mrpc_v002": 3_668.,
-    "glue_qqp_v002": 363_849.,
-    "glue_stsb_v002": 5_749.,
-    "glue_mnli_v002": 392_702.,
-    "glue_qnli_v002": 104_743.,
-    "glue_rte_v002": 2_490.,
-    "glue_mnli_mismatched_v002": 0.,
-    "glue_mnli_matched_v002": 0.,
-    "glue_ax_v002": 0.,
-}
+_GLUE_WEIGHT_MAPPING = get_glue_weight_mapping()
+_SUPER_GLUE_WEIGHT_MAPPING = get_super_glue_weight_mapping()
 
 _glue_tasks = list(_GLUE_WEIGHT_MAPPING.keys())
 _glue_tasks_with_weight = list(_GLUE_WEIGHT_MAPPING.items())
@@ -98,7 +72,6 @@ MixtureRegistry.add(
 MixtureRegistry.add(
     "super_glue_v102_proportional",
     _super_glue_tasks_with_weight)
-
 
 
 # mnli and its associated dev sets: mnli_matched and mnli_mismatched

@@ -13,11 +13,14 @@
 # limitations under the License.
 
 """Add Tasks to registry."""
-import collections
 import functools
 
 from t5.data import postprocessors
 from t5.data import preprocessors
+from t5.data.glue_utils import get_glue_metric
+from t5.data.glue_utils import get_glue_postprocess_fn
+from t5.data.glue_utils import get_glue_text_preprocessor
+from t5.data.glue_utils import get_super_glue_metric
 from t5.data.utils import Feature
 from t5.data.utils import get_default_vocabulary
 from t5.data.utils import set_global_cache_dirs
@@ -33,7 +36,6 @@ DEFAULT_OUTPUT_FEATURES = {
         vocabulary=get_default_vocabulary, add_eos=True, required=False),
     "targets": Feature(vocabulary=get_default_vocabulary, add_eos=True)
 }
-
 
 # ==================================== C4 ======================================
 # Configurable tasks used for comparisons in Raffel et al., 2019.
@@ -137,85 +139,15 @@ TaskRegistry.add(
 
 
 # =================================== GLUE =====================================
-def _get_glue_text_preprocessor(builder_config):
-  """Return the glue preprocessor.
-
-  Args:
-    builder_config: a BuilderConfig
-  Returns:
-    a preprocessor function
-  """
-  # stsb uses a floating point target, so use special preprocessor
-  if builder_config.name == "stsb":
-    return preprocessors.stsb
-  elif builder_config.name == "wsc.fixed":
-    return preprocessors.wsc
-  elif builder_config.name == "record":
-    return preprocessors.record
-  else:
-    if "mnli" in builder_config.name or builder_config.name == "ax":
-      # Cast the GLUE diagnostic task as MNLI.
-      benchmark_name = "mnli"
-    elif builder_config.name in ["axb", "axg"]:
-      # Cast the SuperGLUE diagnostic tasks as RTE.
-      benchmark_name = "rte"
-    else:
-      benchmark_name = builder_config.name
-    if builder_config.name == "multirc":
-      feature_names = ("question", "answer", "paragraph")
-    elif builder_config.name == "wic":
-      # This ignores the start/end indices which show where in each sentence the
-      # word appears.
-      # TODO(craffel): Investigate using those indices.
-      feature_names = ("sentence1", "sentence2", "word")
-    else:
-      feature_names = None
-    return functools.partial(
-        preprocessors.glue,
-        benchmark_name=benchmark_name,
-        label_names=builder_config.label_classes,
-        feature_names=feature_names)
-
-
-def _get_glue_postprocess_fn(builder_config):
-  if builder_config.name == "stsb":
-    return postprocessors.string_to_float
-  elif builder_config.name == "multirc":
-    return postprocessors.multirc
-  elif builder_config.name == "record":
-    return postprocessors.qa
-  else:
-    return functools.partial(
-        postprocessors.string_label_to_class_id,
-        label_classes=builder_config.label_classes,
-    )
-
-
-GLUE_METRICS = collections.OrderedDict([
-    ("cola", [metrics.sklearn_metrics_wrapper(
-        "matthews_corrcoef", metric_post_process_fn=lambda x: 100 * x)]),
-    ("sst2", [metrics.accuracy]),
-    ("mrpc", [metrics.f1_score_with_invalid, metrics.accuracy]),
-    ("stsb", [metrics.pearson_corrcoef, metrics.spearman_corrcoef]),
-    ("qqp", [metrics.f1_score_with_invalid, metrics.accuracy]),
-    ("mnli", [metrics.accuracy]),
-    ("mnli_matched", [metrics.accuracy]),
-    ("mnli_mismatched", [metrics.accuracy]),
-    ("qnli", [metrics.accuracy]),
-    ("rte", [metrics.accuracy]),
-    ("wnli", [metrics.accuracy]),
-    ("ax", []),  # Only test set available.
-])
-
 for b in tfds.text.glue.Glue.builder_configs.values():
   TaskRegistry.add(
       "glue_%s_v002" % b.name,
       TfdsTask,
       tfds_name="glue/%s:1.0.0" % b.name,
-      text_preprocessor=_get_glue_text_preprocessor(b),
-      metric_fns=GLUE_METRICS[b.name],
+      text_preprocessor=get_glue_text_preprocessor(b),
+      metric_fns=get_glue_metric(b.name),
       output_features=DEFAULT_OUTPUT_FEATURES,
-      postprocess_fn=_get_glue_postprocess_fn(b),
+      postprocess_fn=get_glue_postprocess_fn(b),
       splits=["test"] if b.name == "ax" else None,
   )
 
@@ -273,24 +205,6 @@ TaskRegistry.add(
     output_features=DEFAULT_OUTPUT_FEATURES)
 
 # ================================= SuperGlue ==================================
-SUPERGLUE_METRICS = collections.OrderedDict([
-    ("boolq", [metrics.accuracy]),
-    ("cb", [
-        metrics.mean_multiclass_f1(num_classes=3),
-        metrics.accuracy
-    ]),
-    ("copa", [metrics.accuracy]),
-    ("multirc", [
-        metrics.multirc_f1_over_all_answers,
-        metrics.mean_group_metric(metrics.exact_match)
-    ]),
-    ("record", [metrics.squad]),
-    ("rte", [metrics.accuracy]),
-    ("wic", [metrics.accuracy]),
-    ("axb", []),  # Only test set available.
-    ("axg", []),  # Only test set available.
-])
-
 for b in tfds.text.super_glue.SuperGlue.builder_configs.values():
   # We use a simplified version of WSC, defined below
   if "wsc" in b.name:
@@ -305,18 +219,18 @@ for b in tfds.text.super_glue.SuperGlue.builder_configs.values():
                 "label": "label",
                 "idx": "idx",
             }),
-        _get_glue_text_preprocessor(b)
+        get_glue_text_preprocessor(b)
     ]
   else:
-    text_preprocessor = _get_glue_text_preprocessor(b)
+    text_preprocessor = get_glue_text_preprocessor(b)
   TaskRegistry.add(
       "super_glue_%s_v102" % b.name,
       TfdsTask,
       tfds_name="super_glue/%s:1.0.2" % b.name,
       text_preprocessor=text_preprocessor,
-      metric_fns=SUPERGLUE_METRICS[b.name],
+      metric_fns=get_super_glue_metric(b.name),
       output_features=DEFAULT_OUTPUT_FEATURES,
-      postprocess_fn=_get_glue_postprocess_fn(b),
+      postprocess_fn=get_glue_postprocess_fn(b),
       splits=["test"] if b.name in ["axb", "axg"] else None)
 
 # ======================== Definite Pronoun Resolution =========================
@@ -348,7 +262,6 @@ TaskRegistry.add(
     metric_fns=[metrics.accuracy],
     output_features=DEFAULT_OUTPUT_FEATURES,
     splits=["validation", "test"])
-
 
 # =================================== WNLI =====================================
 TaskRegistry.add(
