@@ -85,7 +85,7 @@ TaskRegistry.add(
             inputs_fn=preprocessors.noise_span_to_unique_sentinel,
             targets_fn=preprocessors.nonnoise_span_to_unique_sentinel,
             noise_density=0.15,
-            noise_function=functools.partial(
+            noise_mask_fn=functools.partial(
                 preprocessors.random_spans_noise_mask,
                 mean_noise_span_length=3.0
             )
@@ -118,7 +118,7 @@ TaskRegistry.add(
             inputs_fn=preprocessors.noise_span_to_unique_sentinel,
             targets_fn=preprocessors.nonnoise_span_to_unique_sentinel,
             noise_density=0.15,
-            noise_function=preprocessors.iid_noise_mask
+            noise_mask_fn=preprocessors.iid_noise_mask
         )
     ],
     output_features=DEFAULT_OUTPUT_FEATURES,
