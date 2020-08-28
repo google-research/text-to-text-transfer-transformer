@@ -143,8 +143,8 @@ class BasePreprocessAndTokenizeTask(beam.PTransform):
     for i, ex in enumerate(tfds.as_numpy(ds)):
       self._increment_counter("examples")
       # Log every power of two.
-      if i & (i - 1):
-        logging.info(ex)
+      if i & (i - 1) == 0:
+        logging.info("Example [%d] = %s", i, ex)
       yield ex
 
   def expand(self, pipeline):
