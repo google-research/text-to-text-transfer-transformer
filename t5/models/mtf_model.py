@@ -84,7 +84,8 @@ class MtfModel(T5Model):
       predict_fn=None,
       variable_filter=None,
       ensemble_inputs=None,
-      iterations_per_loop=100):
+      iterations_per_loop=100,
+      extra_gin_bindings=None):
     """Constructor for MtfModel class.
 
     Args:
@@ -127,6 +128,8 @@ class MtfModel(T5Model):
         matches this regex. If None (default), train all trainable variables.
       ensemble_inputs: an integer, see `train_model` docstring for details.
       iterations_per_loop: integer, steps per train loop
+      extra_gin_bindings: an optional list of strings, extra gin bindings to
+        pass to `gin.parse_config` after loading the operative config.
     """
     mesh_shape = mesh_shape or (
         utils.tpu_mesh_shape(tpu_topology, model_parallelism) if tpu else "")
@@ -168,6 +171,8 @@ class MtfModel(T5Model):
     # Must be called after _sequence_length, _mesh_shape, and _layout_rules are
     # set.
     self.batch_size = batch_size
+
+    self._gin_bindings = extra_gin_bindings
 
   @property
   def batch_size(self):
@@ -262,6 +267,7 @@ class MtfModel(T5Model):
     )
     with gin.unlock_config():
       gin.parse_config_file(_operative_config_path(self._model_dir))
+      gin.parse_config(self._gin_bindings)
     utils.eval_model(self.estimator(vocabulary), vocabulary,
                      self._sequence_length, self.batch_size, split,
                      self._model_dir, dataset_fn, summary_dir, checkpoint_steps)
@@ -327,6 +333,7 @@ class MtfModel(T5Model):
       gin.parse_config_file(_operative_config_path(self._model_dir))
       gin.bind_parameter("Bitransformer.decode.beam_size", beam_size)
       gin.bind_parameter("Bitransformer.decode.temperature", temperature)
+      gin.parse_config(self._gin_bindings)
 
     if vocabulary is None:
       vocabulary = t5.data.get_default_vocabulary()
@@ -396,6 +403,7 @@ class MtfModel(T5Model):
       gin.parse_config_file(_operative_config_path(self._model_dir))
       gin.bind_parameter("Bitransformer.decode.beam_size", beam_size)
       gin.bind_parameter("Bitransformer.decode.temperature", temperature)
+      gin.parse_config(self._gin_bindings)
 
     if vocabulary is None:
       vocabulary = t5.data.get_default_vocabulary()
