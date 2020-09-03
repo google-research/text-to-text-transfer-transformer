@@ -17,3 +17,5 @@ utils.run.mode = "eval"
 Bitransformer.decode.max_decode_length = 128
 
 utils.run.eval_checkpoint_step = %eval_checkpoint_step
+
+SimdMeshImpl.allreduce_in_bfloat16_max_group_size = 32
