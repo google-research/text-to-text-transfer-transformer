@@ -22,6 +22,7 @@ import re
 import gin
 import gin.tf
 
+from absl import logging
 import mesh_tensorflow as mtf
 
 from mesh_tensorflow import optimize
@@ -55,6 +56,13 @@ def _get_latest_checkpoint_from_dir(model_dir):
 
 def _operative_config_path(model_dir):
   return os.path.join(model_dir, "operative_config.gin")
+
+
+def _get_vocabulary(mixture_or_task_name=None):
+  if mixture_or_task_name:
+    return t5.models.mesh_transformer.get_vocabulary(mixture_or_task_name)
+  logging.warning("Using default vocabulary.")
+  return t5.data.get_default_vocabulary()
 
 
 @gin.configurable
@@ -260,7 +268,7 @@ class MtfModel(T5Model):
     """
     if checkpoint_steps == -1:
       checkpoint_steps = _get_latest_checkpoint_from_dir(self._model_dir)
-    vocabulary = t5.models.mesh_transformer.get_vocabulary(mixture_or_task_name)
+    vocabulary = _get_vocabulary(mixture_or_task_name)
     dataset_fn = functools.partial(
         t5.models.mesh_transformer.mesh_eval_dataset_fn,
         mixture_or_task_name=mixture_or_task_name,
@@ -343,8 +351,10 @@ class MtfModel(T5Model):
         input_file, output_file)
 
   def score(self,
-            inputs,
-            targets,
+            inputs=None,
+            targets=None,
+            mixture_or_task_name=None,
+            mixture_or_task_split=None,
             scores_file=None,
             checkpoint_steps=-1,
             vocabulary=None):
@@ -352,8 +362,15 @@ class MtfModel(T5Model):
 
     Args:
       inputs: optional - a string (filename), or a list of strings (inputs)
-      targets: a string (filename), or a list of strings (targets)
-      scores_file: str, path to write example scores to, one per line.
+      targets: optional - a string (filename), or a list of strings (targets)
+      mixture_or_task_name: optional - a string, the name of the Mixture or Task
+        to score on. Must be pre-registered in the global `TaskRegistry` or
+        `MixtureRegistry.` Cannot be supplied in addition to `inputs` and
+        `targets`.
+      mixture_or_task_split: optional - a string, the split of the Mixture or
+        Task to score on. Must be provided if scoring on a Mixture or Task.
+      scores_file: optional - a string (filename), to write example scores to,
+        one per line.
       checkpoint_steps: int, list of ints, or None. If an int or list of ints,
         inference will be run on the checkpoint files in `model_dir` whose
         global steps are closest to the global steps provided. If None, run
@@ -361,7 +378,18 @@ class MtfModel(T5Model):
         latest checkpoint from the model directory.
       vocabulary: vocabularies.Vocabulary object to use for tokenization, or
         None to use the default SentencePieceVocabulary.
+
+    Returns:
+      scores: a list of floating point scores matching the dataset order.
+      targets: a list of scored strings matching the dataset order.
     """
+    if bool(inputs or targets) == bool(
+        mixture_or_task_name or mixture_or_task_split):
+      raise ValueError(
+          "Either 'inputs' and 'targets' or "
+          "'mixture_or_task_name' and 'mixture_or_task_split' must be "
+          "specified, but not both.")
+
     if checkpoint_steps == -1:
       checkpoint_steps = _get_latest_checkpoint_from_dir(self._model_dir)
 
@@ -369,14 +397,28 @@ class MtfModel(T5Model):
       gin.parse_config_file(_operative_config_path(self._model_dir))
       # The following config setting ensures we do scoring instead of inference.
       gin.bind_parameter("tpu_estimator_model_fn.score_in_predict_mode", True)
+      gin.parse_config(self._gin_bindings)
 
     if vocabulary is None:
-      vocabulary = t5.data.get_default_vocabulary()
-
-    utils.score_from_strings(self.estimator(vocabulary), vocabulary,
-                             self._model_type, self.batch_size,
-                             self._sequence_length, self._model_dir,
-                             checkpoint_steps, inputs, targets, scores_file)
+      vocabulary = _get_vocabulary(mixture_or_task_name)
+    if mixture_or_task_name:
+      score_dataset_fn = functools.partial(
+          t5.models.mesh_transformer.mesh_eval_dataset_fn,
+          mixture_or_task_name=mixture_or_task_name,
+      )
+      return utils.score_from_dataset(
+          estimator=self.estimator(vocabulary), vocabulary=vocabulary,
+          batch_size=self.batch_size, sequence_length=self._sequence_length,
+          model_dir=self._model_dir, eval_checkpoint_step=checkpoint_steps,
+          dataset_split=mixture_or_task_split,
+          score_dataset_fn=score_dataset_fn, scores_filename=scores_file)
+    else:
+      return utils.score_from_strings(
+          estimator=self.estimator(vocabulary), vocabulary=vocabulary,
+          model_type=self._model_type, batch_size=self.batch_size,
+          sequence_length=self._sequence_length, model_dir=self._model_dir,
+          eval_checkpoint_step=checkpoint_steps, inputs=inputs, targets=targets,
+          scores_filename=scores_file)
 
   def export(self, export_dir=None, checkpoint_step=-1, beam_size=1,
              temperature=1.0, vocabulary=None):
@@ -406,7 +448,7 @@ class MtfModel(T5Model):
       gin.parse_config(self._gin_bindings)
 
     if vocabulary is None:
-      vocabulary = t5.data.get_default_vocabulary()
+      vocabulary = _get_vocabulary()
     model_ckpt = "model.ckpt-" + str(checkpoint_step)
     export_dir = export_dir or self._model_dir
     return utils.export_model(
