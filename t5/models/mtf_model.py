@@ -195,13 +195,16 @@ class MtfModel(T5Model):
     else:
       self._batch_size = batch_size
 
-  def estimator(self, vocabulary, init_checkpoint=None, disable_tpu=False):
+  def estimator(self, vocabulary, init_checkpoint=None, disable_tpu=False,
+                score_in_predict_mode=False):
 
     if not self._tpu or disable_tpu:
       with gin.unlock_config():
         gin.bind_parameter("utils.get_variable_dtype.slice_dtype", "float32")
         gin.bind_parameter(
             "utils.get_variable_dtype.activation_dtype", "float32")
+    with gin.unlock_config():
+      gin.parse_config(self._gin_bindings)
 
     return utils.get_estimator(
         model_type=self._model_type,
@@ -224,7 +227,8 @@ class MtfModel(T5Model):
         tpu_job_name=self._tpu_job_name,
         iterations_per_loop=self._iterations_per_loop,
         cluster=self._cluster,
-        init_checkpoint=init_checkpoint)
+        init_checkpoint=init_checkpoint,
+        score_in_predict_mode=score_in_predict_mode)
 
   def train(self, mixture_or_task_name, steps, init_checkpoint=None,
             split="train"):
@@ -250,7 +254,7 @@ class MtfModel(T5Model):
                       steps, self._ensemble_inputs, dataset_split=split)
 
   def eval(self, mixture_or_task_name, checkpoint_steps=None, summary_dir=None,
-           split="validation"):
+           split="validation", eval_with_score=False):
     """Evaluate the model on the given Mixture or Task.
 
     Args:
@@ -275,10 +279,14 @@ class MtfModel(T5Model):
     )
     with gin.unlock_config():
       gin.parse_config_file(_operative_config_path(self._model_dir))
-      gin.parse_config(self._gin_bindings)
-    utils.eval_model(self.estimator(vocabulary), vocabulary,
-                     self._sequence_length, self.batch_size, split,
-                     self._model_dir, dataset_fn, summary_dir, checkpoint_steps)
+    estimator = self.estimator(
+        vocabulary, score_in_predict_mode=eval_with_score)
+    utils.eval_model(
+        estimator=estimator, vocabulary=vocabulary,
+        sequence_length=self._sequence_length, batch_size=self.batch_size,
+        dataset_split=split, model_dir=self._model_dir,
+        eval_dataset_fn=dataset_fn, eval_summary_dir=summary_dir,
+        eval_checkpoint_step=checkpoint_steps, eval_with_score=eval_with_score)
 
   def finetune(self, mixture_or_task_name, finetune_steps, pretrained_model_dir,
                pretrained_checkpoint_step=-1, split="train"):
@@ -341,7 +349,6 @@ class MtfModel(T5Model):
       gin.parse_config_file(_operative_config_path(self._model_dir))
       gin.bind_parameter("Bitransformer.decode.beam_size", beam_size)
       gin.bind_parameter("Bitransformer.decode.temperature", temperature)
-      gin.parse_config(self._gin_bindings)
 
     if vocabulary is None:
       vocabulary = t5.data.get_default_vocabulary()
@@ -395,26 +402,26 @@ class MtfModel(T5Model):
 
     with gin.unlock_config():
       gin.parse_config_file(_operative_config_path(self._model_dir))
-      # The following config setting ensures we do scoring instead of inference.
-      gin.bind_parameter("tpu_estimator_model_fn.score_in_predict_mode", True)
       gin.parse_config(self._gin_bindings)
 
     if vocabulary is None:
       vocabulary = _get_vocabulary(mixture_or_task_name)
+
+    estimator = self.estimator(vocabulary, score_in_predict_mode=True)
     if mixture_or_task_name:
       score_dataset_fn = functools.partial(
           t5.models.mesh_transformer.mesh_eval_dataset_fn,
           mixture_or_task_name=mixture_or_task_name,
       )
       return utils.score_from_dataset(
-          estimator=self.estimator(vocabulary), vocabulary=vocabulary,
+          estimator=estimator, vocabulary=vocabulary,
           batch_size=self.batch_size, sequence_length=self._sequence_length,
           model_dir=self._model_dir, eval_checkpoint_step=checkpoint_steps,
           dataset_split=mixture_or_task_split,
           score_dataset_fn=score_dataset_fn, scores_filename=scores_file)
     else:
       return utils.score_from_strings(
-          estimator=self.estimator(vocabulary), vocabulary=vocabulary,
+          estimator=estimator, vocabulary=vocabulary,
           model_type=self._model_type, batch_size=self.batch_size,
           sequence_length=self._sequence_length, model_dir=self._model_dir,
           eval_checkpoint_step=checkpoint_steps, inputs=inputs, targets=targets,
@@ -445,7 +452,6 @@ class MtfModel(T5Model):
       gin.parse_config_file(_operative_config_path(self._model_dir))
       gin.bind_parameter("Bitransformer.decode.beam_size", beam_size)
       gin.bind_parameter("Bitransformer.decode.temperature", temperature)
-      gin.parse_config(self._gin_bindings)
 
     if vocabulary is None:
       vocabulary = _get_vocabulary()
