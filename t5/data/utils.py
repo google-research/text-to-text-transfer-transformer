@@ -287,7 +287,7 @@ def dict_to_tfexample(ex):
     else:
       raise ValueError(
           "Unsupported shape (%s) for '%s' value: %s" %
-          (tf.shape, k, v))
+          (t.shape, k, v))
 
     if t.dtype == tf.string and len(t.shape) <= 1:
       feature_dict[k] = tf.train.Feature(
@@ -296,10 +296,13 @@ def dict_to_tfexample(ex):
     elif t.dtype in (tf.int32, tf.int64) and len(t.shape) <= 1:
       feature_dict[k] = tf.train.Feature(
           int64_list=tf.train.Int64List(value=v))
+    elif t.dtype in (tf.float32, tf.float64) and len(t.shape) <= 1:
+      feature_dict[k] = tf.train.Feature(
+          float_list=tf.train.FloatList(value=v))
     else:
       raise ValueError(
           "Unsupported type (%s) and shape (%s) for '%s' value: %s" %
-          (tf.dtype, tf.shape, k, v))
+          (t.dtype, t.shape, k, v))
 
   return tf.train.Example(features=tf.train.Features(feature=feature_dict))
 

@@ -416,5 +416,22 @@ class TasksTest(test_utils.FakeTaskTest):
     test_utils.verify_task_matches_fake_datasets(fn_task, use_cached=False)
 
 
+class UtilsTest(absltest.TestCase):
+
+  def test_dict_to_tfexample(self):
+    tfe = utils.dict_to_tfexample({
+        "inputs": "this is an input",
+        "targets": "this is a target",
+        "weight": 5.0,
+    })
+
+    self.assertLen(tfe.features.feature, 3)
+    self.assertEqual(tfe.features.feature["inputs"].bytes_list.value,
+                     [b"this is an input"])
+    self.assertEqual(tfe.features.feature["targets"].bytes_list.value,
+                     [b"this is a target"])
+    self.assertEqual(tfe.features.feature["weight"].float_list.value, [5.0])
+
+
 if __name__ == "__main__":
   absltest.main()
