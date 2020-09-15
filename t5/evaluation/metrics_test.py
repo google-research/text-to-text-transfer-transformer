@@ -149,7 +149,6 @@ class MetricsTest(test_utils.BaseMetricsTest):
             "context": context
         }], [ans_span]), {"em": 0, "f1": 0})
 
-
   def test_sequence_accuracy(self):
     s1 = "this is a string."
     s2 = "this is a completely different string."
@@ -249,6 +248,36 @@ class MetricsTest(test_utils.BaseMetricsTest):
     self.assertDictClose(
         matthews_corrcoef_fn(y_true, y_pred),
         {"matthews_corrcoef": 70.})
+
+  def test_rank_classification(self):
+    self.assertDictClose(
+        metrics.rank_classification(
+            [0, 0,
+             1, 1,
+             0, 0,
+             0, 0],
+            [0.1, 0.5,
+             1.0, 1.1,
+             0.3, 0.1,
+             0.6, 0.5]),
+        {
+            "accuracy": 75.,
+            "f1": 66.6666667
+        })
+
+    self.assertDictClose(
+        metrics.rank_classification(
+            [1, 1, 1,
+             0, 0, 0,
+             2, 2, 2],
+            [0.1, 0.5, 0.0,
+             -2, -1, -3,
+             3.0, 3.1, 3.2],
+            num_classes=3),
+        {
+            "accuracy": 66.6666667,
+            "mean_3class_f1": 55.5555556,
+        })
 
 
 if __name__ == "__main__":

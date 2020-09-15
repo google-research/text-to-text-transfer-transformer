@@ -1589,6 +1589,113 @@ def wnli_simple(dataset, label='wsc:'):
   return dataset.map(map_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 
+def rank_classification(
+    ds,
+    inputs_formats,
+    targets_formats,
+    label_key='label',
+    repeat_correct_only=False):
+  """Create 'inputs' and 'targets' strings for ranking classification.
+
+  Intended to be used with `rank_classification` postprocessor and metric.
+
+  Inputs will be formatted the by filling in feature values in the
+  `inputs_formats` and `targets_formats` strings. A separate example will be
+  produced each of the format string pairs if `repeat_correct_only` is False.
+  If True, only the format string pair indexed by the label will be produced,
+  and it will be repeated to maintain the same cardinality. This is useful for
+  fewshot evaluation.
+
+  Each input example will also be given a unique, sequential index called 'idx'.
+
+  For example, with arguments:
+
+  ```
+  inputs_formats=[
+      '{premise} What is the {question}? X',
+      '{premise} What was the {question}? X'
+  ],
+  targets_formats=[
+    'I think {choice1}.',
+    'I think {choice2}.'
+  ],
+  repeat_correct_only=False
+  ```
+
+  given the input:
+
+  {
+    'premise': 'The farmland needed irrigation.',
+    'question': 'effect',
+    'choice1' : 'a canal was constructed',
+    'choice2': 'the crops grew tall',
+    'label': 0,
+  }
+
+  the preprocessor would return:
+  [{
+     'idx': 0,
+     'inputs': 'The farmland needed irrigation. What is the effect? X',
+     'targets': 'I think a canal was constructed.',
+     'label': 0
+   },
+   {
+     'idx': 0,
+     'inputs': 'The farmland needed irrigation. What was the effect? X',
+     'targets': 'I think the crops grew tall.',
+     'label': 0
+   }]
+
+  With `repeat_correct_only=True`, it would return the first example twice,
+  since it uses the correct label.
+
+  Args:
+    ds: a tf.data.Dataset to preprocess.
+    inputs_formats: A list of strings to format with feature values to produce
+      'inputs', one for each possible class value. Feature keys should be
+      surrounded by curly braces to be replaced.
+    targets_formats: A list of strings to format with feature values to produce
+      'targets', one for each possible class value. Feature keys should be
+      surrounded by curly braces to be replaced.
+    label_key: A string, the feature key for the integer label value.
+    repeat_correct_only: A boolean, if False, an example will be produced for
+      each input/target format string pair. If False, only the correct
+      example will be produced (indexing the format strings by the label value),
+      and it will be repeated to maintain cardinality.
+  Returns:
+    A tf.data.Dataset containing 'idx', inputs', 'targets', and 'label'.
+  """
+  if len(inputs_formats) != len(targets_formats):
+    raise ValueError(
+        'Inputs and targets format must be the same length, matching the '
+        'number of possible classes for the label.')
+  num_classes = len(inputs_formats)
+
+  def format_features(idx, ex):
+    def _format_str(fmt):
+      keys = set(re.findall(r'{(\w+)}', fmt))
+      s = fmt
+      for k in keys:
+        s = tf.strings.regex_replace(s, '{%s}' % k, ex[k])
+      return s
+
+    new_ex = {
+        'idx': tf.fill([num_classes], idx),
+        'inputs': tf.stack([_format_str(fmt) for fmt in inputs_formats]),
+        'targets': tf.stack([_format_str(fmt) for fmt in targets_formats]),
+        'label': tf.fill([num_classes], ex[label_key]),
+    }
+    if repeat_correct_only:
+      new_ex = {
+          k: tf.fill([num_classes], v[ex[label_key]]) for k, v in new_ex.items()
+      }
+    return new_ex
+
+  ds = ds.enumerate()
+  ds = ds.map(format_features, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  ds = ds.unbatch()
+  return ds
+
 # ======================Token Preprocessors=====================================
 
 

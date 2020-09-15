@@ -337,3 +337,35 @@ def sklearn_metrics_wrapper(metric_str,
       metric_val = metric_post_process_fn(metric_val)
     return {metric_dict_str or metric_str: metric_val}
   return fn
+
+
+def rank_classification(targets, predictions, num_classes=2):
+  """Computes standard metrics classification based on log likelihood ranking.
+
+  This metric is intended to be used along with the `rank_classification`
+  preprocessor and postprocessor. Each example is scored (by log likelihood)
+  for every possible label, and the label with the best score is selected as the
+  prediction.
+
+  Args:
+    targets: list of tuple(int, int), a tuple containing an index and true label
+      value for eached aligned prediction.
+    predictions: list of float, a flat list of log likelihood scores for each
+      possible label for each example.
+    num_classes: int, the number of possible classes for the label.
+  Returns:
+    Accuracy and f1 scores.
+  """
+  assert len(targets) == len(predictions)
+  assert len(targets) % num_classes == 0
+
+  targets = np.array(targets[::num_classes])
+  predictions = (
+      np.array(predictions, np.float32).reshape((-1, num_classes)).argmax(-1))
+
+  if num_classes > 2:
+    metrics = mean_multiclass_f1(num_classes)(targets, predictions)
+  else:
+    metrics = {"f1": 100 * sklearn.metrics.f1_score(targets, predictions)}
+  metrics["accuracy"] = 100*sklearn.metrics.accuracy_score(targets, predictions)
+  return metrics

@@ -1098,6 +1098,127 @@ class PreprocessorsTest(tf.test.TestCase):
         },
     ])
 
+  def test_rank_classification(self):
+    input_examples = [
+        {
+            'premise': 'The farmland needed irrigation.',
+            'question': 'effect',
+            'choice1': 'a canal was constructed',
+            'choice2': 'the crops grew tall',
+            'label': 0,
+        },
+        {
+            'premise': 'I decided to stay home last night.',
+            'question': 'cause',
+            'choice1': 'I wanted to see people',
+            'choice2': 'I was too tired',
+            'label': 1,
+        },
+    ]
+
+    input_ds = tf.data.Dataset.from_generator(
+        lambda: (x for x in input_examples),
+        output_types={
+            'premise': tf.string,
+            'question': tf.string,
+            'choice1': tf.string,
+            'choice2': tf.string,
+            'label': tf.int32,
+        },
+        output_shapes={
+            'premise': [],
+            'question': [],
+            'choice1': [],
+            'choice2': [],
+            'label': [],
+        })
+
+    # all options
+    dataset = prep.rank_classification(
+        input_ds,
+        inputs_formats=[
+            '{premise} What is the {question}? X',
+            '{premise} What was the {question}? X'
+        ],
+        targets_formats=['I think {choice1}.', 'I think {choice2}.'],
+        repeat_correct_only=False)
+
+    test_utils.assert_dataset(
+        dataset,
+        [
+            {
+                'idx': 0,
+                'inputs':
+                    'The farmland needed irrigation. What is the effect? X',
+                'targets': 'I think a canal was constructed.',
+                'label': 0
+            },
+            {
+                'idx': 0,
+                'inputs':
+                    'The farmland needed irrigation. What was the effect? X',
+                'targets': 'I think the crops grew tall.',
+                'label': 0
+            },
+            {
+                'idx': 1,
+                'inputs':
+                    'I decided to stay home last night. What is the cause? X',
+                'targets': 'I think I wanted to see people.',
+                'label': 1
+            },
+            {
+                'idx': 1,
+                'inputs':
+                    'I decided to stay home last night. What was the cause? X',
+                'targets': 'I think I was too tired.',
+                'label': 1
+            },
+        ])
+
+    # label option only
+    dataset = prep.rank_classification(
+        input_ds,
+        inputs_formats=[
+            '{premise} What is the {question}? X',
+            '{premise} What was the {question}? X'
+        ],
+        targets_formats=['I think {choice1}.', 'I think {choice2}.'],
+        repeat_correct_only=True)
+
+    test_utils.assert_dataset(
+        dataset,
+        [
+            {
+                'idx': 0,
+                'inputs':
+                    'The farmland needed irrigation. What is the effect? X',
+                'targets': 'I think a canal was constructed.',
+                'label': 0
+            },
+            {
+                'idx': 0,
+                'inputs':
+                    'The farmland needed irrigation. What is the effect? X',
+                'targets': 'I think a canal was constructed.',
+                'label': 0
+            },
+            {
+                'idx': 1,
+                'inputs':
+                    'I decided to stay home last night. What was the cause? X',
+                'targets': 'I think I was too tired.',
+                'label': 1
+            },
+            {
+                'idx': 1,
+                'inputs':
+                    'I decided to stay home last night. What was the cause? X',
+                'targets': 'I think I was too tired.',
+                'label': 1
+            },
+        ])
+
 
 if __name__ == '__main__':
   absltest.main()

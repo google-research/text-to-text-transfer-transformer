@@ -121,6 +121,14 @@ class PostprocessorsTest(absltest.TestCase):
             example={"targets_plaintext": b"fuzzy hungry bunny"},
             is_target=False), 1)
 
+  def test_rank_classification(self):
+    self.assertEqual(
+        postprocessors.rank_classification(
+            "blah", example={"label": 1}, is_target=True),
+        1)
+    self.assertEqual(
+        postprocessors.rank_classification(-13.4),
+        -13.4)
 
 if __name__ == "__main__":
   absltest.main()

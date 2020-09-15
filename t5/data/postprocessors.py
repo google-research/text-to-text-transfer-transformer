@@ -113,3 +113,12 @@ def wsc_simple(prediction, example=None, is_target=False):
         referent_words) or referent_words.issubset(prediction_words)
 
   return int(predicted_referent)
+
+
+def rank_classification(
+    score, example=None, is_target=False, label_key="label"):
+  """A postprocessor for the `rank_classification` preprocessor and metric."""
+  if is_target:
+    return example[label_key]
+  else:
+    return score
