@@ -24,10 +24,10 @@ python -m t5.scripts.dump_task \
 """
 
 import importlib
+import re
 
 from absl import app
 from absl import flags
-from absl import logging
 
 # from mesh_tensorflow.transformer import utils
 import gin
@@ -53,8 +53,8 @@ flags.DEFINE_multi_string(
     "of the T5 codebase so that it is registered.")
 flags.DEFINE_string(
     "split", "train", "which split of the dataset, e.g. train or validation")
-flags.DEFINE_bool(
-    "tokenize", False, "tokenize and print out token ids")
+
+flags.DEFINE_bool("detokenize", False, "If True, then decode ids to strings.")
 
 
 @gin.configurable
@@ -88,36 +88,36 @@ def main(_):
   total_examples = 0
   tf.enable_eager_execution()
   task = t5.data.TaskRegistry.get(FLAGS.task)
-  # Do a load to make sure the files exist before grabbing file path
-  task.tfds_dataset.load(FLAGS.split, shuffle_files=False)
-  files = task.tfds_dataset.files(FLAGS.split)
+
+  ds = task.get_dataset(sequence_length=sequence_length(),
+                        split=FLAGS.split,
+                        use_cached=False,
+                        shuffle=False)
+
+  keys = re.findall(r"{([\w+]+)}", FLAGS.format_string)
   def _example_to_string(ex):
     key_to_string = {}
-    for k in ("inputs", "targets"):
+    for k in keys:
       if k in ex:
-        v = ex[k].numpy()
-        key_to_string[k] = (
-            " ".join(str(i) for i in v) if FLAGS.tokenize
-            else v.decode("utf-8"))
+        v = ex[k].numpy().tolist()
+        if (FLAGS.detokenize
+            and v and isinstance(v, list)
+            and isinstance(v[0], int)):
+          s = task.output_features[k].vocabulary.decode([abs(i) for i in v])
+        elif isinstance(v, bytes):
+          s = v.decode("utf-8")
+        else:
+          s = " ".join(str(i) for i in v)
+        key_to_string[k] = s
       else:
         key_to_string[k] = ""
     return FLAGS.format_string.format(**key_to_string)
 
-  for shard_path in files:
-    logging.info("Processing shard: %s", shard_path)
-    ds = task.tfds_dataset.load_shard(shard_path)
-    ds = task.preprocess_text(ds)
-    if FLAGS.tokenize:
-      ds = t5.data.encode_string_features(
-          ds, task.output_features, keys=task.output_features,
-          copy_plaintext=True)
-      ds = task.preprocess_tokens(ds, sequence_length())
-
-    for ex in ds:
-      print(_example_to_string(ex))
-      total_examples += 1
-      if total_examples == FLAGS.max_examples:
-        return
+  for ex in ds:
+    print(_example_to_string(ex))
+    total_examples += 1
+    if total_examples == FLAGS.max_examples:
+      return
 
 
 if __name__ == "__main__":
