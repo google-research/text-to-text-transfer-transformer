@@ -16,13 +16,12 @@
 """Mesh Tensorflow T5 Model."""
 
 import functools
-
 import os
 import re
-import gin
-import gin.tf
 
 from absl import logging
+import gin
+import gin.tf
 import mesh_tensorflow as mtf
 
 from mesh_tensorflow import optimize
@@ -269,6 +268,8 @@ class MtfModel(T5Model):
       summary_dir: str, path to write TensorBoard events file summaries for
         eval. If None, use model_dir/eval_{split}.
       split: str, the mixture/task split to evaluate on.
+      eval_with_score: bool, whether to evaluate using log likelihood scores of
+        targets instead of decoded predictions.
     """
     if checkpoint_steps == -1:
       checkpoint_steps = _get_latest_checkpoint_from_dir(self._model_dir)
@@ -408,6 +409,9 @@ class MtfModel(T5Model):
       vocabulary = _get_vocabulary(mixture_or_task_name)
 
     estimator = self.estimator(vocabulary, score_in_predict_mode=True)
+    score_postprocess_fn = functools.partial(
+        utils.save_scores, scores_filename=scores_file)
+
     if mixture_or_task_name:
       score_dataset_fn = functools.partial(
           t5.models.mesh_transformer.mesh_eval_dataset_fn,
@@ -418,14 +422,15 @@ class MtfModel(T5Model):
           batch_size=self.batch_size, sequence_length=self._sequence_length,
           model_dir=self._model_dir, eval_checkpoint_step=checkpoint_steps,
           dataset_split=mixture_or_task_split,
-          score_dataset_fn=score_dataset_fn, scores_filename=scores_file)
+          score_dataset_fn=score_dataset_fn,
+          score_postprocess_fn=score_postprocess_fn)
     else:
       return utils.score_from_strings(
           estimator=estimator, vocabulary=vocabulary,
           model_type=self._model_type, batch_size=self.batch_size,
           sequence_length=self._sequence_length, model_dir=self._model_dir,
           eval_checkpoint_step=checkpoint_steps, inputs=inputs, targets=targets,
-          scores_filename=scores_file)
+          score_postprocess_fn=score_postprocess_fn)
 
   def export(self, export_dir=None, checkpoint_step=-1, beam_size=1,
              temperature=1.0, vocabulary=None):
