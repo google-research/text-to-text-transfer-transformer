@@ -38,6 +38,36 @@ class MeshDatasetFnsTest(test_utils.FakeMixtureTest):
         expected_shape = [None]
       self.assertEqual(expected_shape, v.as_list())
 
+  def get_some_train_output_batches(self, mixture_name, seed=None):
+    split = tfds.Split.TRAIN
+    use_cached = True
+
+    vocabulary = t5.data.MixtureRegistry.get(mixture_name).get_vocabulary()
+    sequence_length = {"inputs": 13, "targets": 13}
+    output = mesh_transformer.mesh_train_dataset_fn(
+        mixture_name,
+        sequence_length=sequence_length,
+        vocabulary=vocabulary,
+        dataset_split=split,
+        seed=seed,
+        use_cached=use_cached)
+    some_outputs = []
+    for _, out in zip(range(10), tfds.as_numpy(output)):
+      some_outputs.append(out["targets"].tolist())
+    return some_outputs
+
+  def test_deterministic_mesh_train_dataset_fn(self):
+    mixture_name = "cached_mixture"
+    b1 = self.get_some_train_output_batches(mixture_name, seed=42)
+    b2 = self.get_some_train_output_batches(mixture_name, seed=42)
+    self.assertSameElements(b1, b2)
+
+  def test_random_seed_mesh_train_dataset_fn(self):
+    mixture_name = "cached_mixture"
+    b1 = self.get_some_train_output_batches(mixture_name, seed=42)
+    b2 = self.get_some_train_output_batches(mixture_name, seed=0)
+    self.assertNotEqual(b1, b2)
+
   def verify_mesh_dataset_fn(self, mixture_name, train, use_cached):
     if train:
       dataset_fn = mesh_transformer.mesh_train_dataset_fn

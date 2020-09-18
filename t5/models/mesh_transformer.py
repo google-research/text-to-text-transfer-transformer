@@ -42,6 +42,7 @@ def mesh_train_dataset_fn(
     sequence_length,
     vocabulary,
     dataset_split=tfds.Split.TRAIN,
+    seed=None,
     use_cached=False):
   """Returns the tf.data.Dataset for training on a given mixture.
 
@@ -56,6 +57,7 @@ def mesh_train_dataset_fn(
     vocabulary: a t5.data.vocabularies.Vocabulary.
     dataset_split: string, which split of the dataset to load. In most cases
       this should be "train".
+    seed: tf.int64 scalar tf.Tensor for tf.data.
     use_cached: bool, whether to load the cached version of this dataset.
 
   Returns:
@@ -66,7 +68,8 @@ def mesh_train_dataset_fn(
   mixture_or_task = t5.data.get_mixture_or_task(mixture_or_task_name)
 
   ds = mixture_or_task.get_dataset(
-      sequence_length, split=dataset_split, use_cached=use_cached, shuffle=True)
+      sequence_length, split=dataset_split, use_cached=use_cached,
+      shuffle=True, seed=seed)
 
   # Select just the output features which are present in the dataset.
   feature_keys = tuple(k for k in mixture_or_task.output_features

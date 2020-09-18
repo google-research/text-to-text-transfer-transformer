@@ -285,9 +285,11 @@ def assert_dataset(dataset, expected):
     _compare_dict(actual_ex, expected_ex)
 
 
-def get_fake_dataset(split, shuffle_files=False):
+def get_fake_dataset(split, shuffle_files=False, seed=None):
   """Returns a tf.data.Dataset with fake data."""
   del shuffle_files  # Unused, to be compatible with TFDS API.
+  # TODO(katherinelee): add random seeds to TFDS.
+  del seed
   output_types = {"prefix": tf.string, "suffix": tf.string}
   if split == "validation":
     output_types.update(

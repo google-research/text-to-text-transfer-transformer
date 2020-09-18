@@ -85,7 +85,7 @@ class DatasetProviderBase(object):
 
   @abc.abstractmethod
   def get_dataset(
-      self, sequence_length, split, use_cached=False, shuffle=True):
+      self, sequence_length, split, use_cached=False, shuffle=True, seed=None):
     raise NotImplementedError
 
   @abc.abstractmethod
@@ -134,11 +134,11 @@ class DatasetProviderRegistry(object):
     return cls._REGISTRY.keys()
 
   @classmethod
-  def get_dataset(
-      cls, name, sequence_length, split, use_cached=False, shuffle=True):
+  def get_dataset(cls, name, sequence_length, split, use_cached=False,
+                  shuffle=True, seed=None):
     return cls.get(name).get_dataset(
         sequence_length=sequence_length, split=split, use_cached=use_cached,
-        shuffle=shuffle)
+        shuffle=shuffle, seed=seed)
 
 
 class LazyTfdsLoader(object):
@@ -209,7 +209,7 @@ class LazyTfdsLoader(object):
       logging.fatal("No TFRecord files found for dataset: %s", self.name)
     return files
 
-  def load(self, split, shuffle_files):
+  def load(self, split, shuffle_files, seed=None):
     """Returns a tf.data.Dataset for the given split."""
     split = self._map_split(split)
     return tfds.load(
@@ -218,13 +218,14 @@ class LazyTfdsLoader(object):
         data_dir=self.data_dir,
         shuffle_files=shuffle_files,
         download=True,
-        try_gcs=True)
+        try_gcs=True,
+        read_config=tfds.ReadConfig(shuffle_seed=seed))
 
-  def load_shard(self, file_instruction):
+  def load_shard(self, file_instruction, seed=None):
     """Returns a dataset for a single shard of the TFDS TFRecord files."""
     ds = self.builder._tfrecords_reader.read_files(  # pylint:disable=protected-access
         [file_instruction],
-        read_config=tfds.ReadConfig(),
+        read_config=tfds.ReadConfig(shuffle_seed=seed),
         shuffle_files=False)
     return ds
 
@@ -377,7 +378,8 @@ class Task(DatasetProviderBase):
                num_input_examples=None,
                supports_caching=True,
                sentencepiece_model_path=None,
-               shuffle_buffer_size=SHUFFLE_BUFFER_SIZE):
+               shuffle_buffer_size=SHUFFLE_BUFFER_SIZE,
+               global_seed=None):
     """Task constructor.
 
     Attributes of output features, including the vocabulary used for
@@ -387,7 +389,8 @@ class Task(DatasetProviderBase):
       name: string, a unique name for the Task. A ValueError will be raised if
         another task with this name is already registered.
       dataset_fn: callable, a function with the signature
-        `dataset_fn(split, shuffle_files)' that returns a `tf.data.Dataset`.
+        `dataset_fn(split, shuffle_files)' (and optionally the variable `seed`)
+        that returns a `tf.data.Dataset`.
       splits: list(string), a list of allowable splits to request from the
         `dataset_fn`.
       text_preprocessor: a function (or list of functions) that (each) takes in
@@ -423,6 +426,7 @@ class Task(DatasetProviderBase):
       sentencepiece_model_path: DEPRECATED use `output_features` to specify a
         non-default vocabulary.
       shuffle_buffer_size: an optional integer
+      global_seed: int or None, for setting the global random seed.
     """
     if not _VALID_TASK_NAME_REGEX.match(name):
       raise ValueError(
@@ -435,6 +439,7 @@ class Task(DatasetProviderBase):
 
     self._name = name
     self._dataset_fn = dataset_fn
+    tf.set_random_seed(global_seed)
     self._text_preprocessor = (
         [] if text_preprocessor is None else text_preprocessor)
     self._token_preprocessor = (
@@ -687,6 +692,7 @@ class Task(DatasetProviderBase):
       use_cached=False,
       shuffle=True,
       shuffle_buffer_size=None,
+      seed=None,
       copy_plaintext=True,
   ):
     """Returns a tf.data.Dataset from cache or generated on the fly.
@@ -699,6 +705,7 @@ class Task(DatasetProviderBase):
       shuffle: bool, whether to shuffle the dataset.  Only used when generating
         on the fly (use_cached=False).
       shuffle_buffer_size: an integer or None to use task-specific buffer size.
+      seed: tf.int64 scalar tf.Tensor.
       copy_plaintext: bool, whether to pass through copies of plaintext strings
         with a "_plaintext" suffix added to the key.
     Returns:
@@ -710,9 +717,10 @@ class Task(DatasetProviderBase):
           "preprocessing.", self.name)
       use_cached = False
     if use_cached:
-      ds = self._get_cached_dataset(split, shuffle)
+      ds = self._get_cached_dataset(split, shuffle, seed)
     else:
-      ds = self._dataset_fn(split=split, shuffle_files=shuffle)
+      ds = self._dataset_fn(split=split, shuffle_files=shuffle,
+                            seed=seed)
       ds = self.preprocess_text(ds)
       ds = maybe_print_dataset(ds)
       # Tokenize
@@ -731,11 +739,13 @@ class Task(DatasetProviderBase):
     if shuffle:
       # Shuffle before mixing since preprocessor can output multiple
       # (correlated) examples per input.
-      ds = ds.shuffle(shuffle_buffer_size or self._shuffle_buffer_size)
+      ds = ds.shuffle(shuffle_buffer_size or self._shuffle_buffer_size,
+                      seed=seed)
 
     return ds
 
-  def _get_cached_dataset(self, split=tfds.Split.TRAIN, shuffle=True):
+  def _get_cached_dataset(self, split=tfds.Split.TRAIN,
+                          shuffle=True, seed=None):
     """Returns a tf.data.Dataset read from cached files."""
     self.assert_cached()
     with tf.io.gfile.GFile(get_info_path(self.cache_dir, split)) as f:
@@ -755,7 +765,8 @@ class Task(DatasetProviderBase):
         "%s-*-of-*%d" % (
             get_tfrecord_prefix(self.cache_dir, split),
             split_info["num_shards"]),
-        shuffle=shuffle)
+        shuffle=shuffle,
+        seed=seed)
     ds = ds.interleave(
         tf.data.TFRecordDataset,
         cycle_length=16, block_length=16,
@@ -819,8 +830,9 @@ class TfdsTask(Task):
         data_dir=tfds_data_dir,
         split_map=splits if isinstance(splits, dict) else None)
 
-    def dataset_fn(split, shuffle_files):
-      return self._tfds_dataset.load(split, shuffle_files)
+    def dataset_fn(split, shuffle_files, seed=None):
+      return self._tfds_dataset.load(
+          split, shuffle_files, seed=seed)
 
     super().__init__(
         name,
@@ -877,10 +889,11 @@ class FileTask(Task):
     self._split_to_filepattern = split_to_filepattern
     self._reader = reader
 
-    def dataset_fn(split, shuffle_files):
+    def dataset_fn(split, shuffle_files, seed=None):
       filepattern = split_to_filepattern[split]
 
-      files = tf.data.Dataset.list_files(filepattern, shuffle=shuffle_files)
+      files = tf.data.Dataset.list_files(filepattern, shuffle=shuffle_files,
+                                         seed=seed)
 
       return files.interleave(
           reader,
@@ -1093,6 +1106,7 @@ class Mixture(DatasetProviderBase):
       split=tfds.Split.TRAIN,
       use_cached=False,
       shuffle=True,
+      seed=None,
       compute_stats_empirically=False,
   ):
     """Returns the dataset of mixed tasks using the object-specified rates.
@@ -1104,6 +1118,7 @@ class Mixture(DatasetProviderBase):
         it on the fly. Defaults to False.
       shuffle: bool, whether to shuffle the dataset.  Only used when generating
         on the fly (use_cached=False).
+      seed: tf.int64 scalar tf.Tensor.
       compute_stats_empirically: a boolean - does not work on TPU
     """
     self._check_same_vocabularies()
@@ -1120,13 +1135,13 @@ class Mixture(DatasetProviderBase):
     def filter_features(ex):
       return {k: v for k, v in ex.items() if k in self.output_features}
     datasets = [
-        task.get_dataset(sequence_length, split, use_cached, shuffle=shuffle)  # pylint:disable=g-complex-comprehension
+        task.get_dataset(sequence_length, split, use_cached, shuffle=shuffle,  # pylint:disable=g-complex-comprehension
+                         seed=seed)
         .repeat()
         .map(filter_features, num_parallel_calls=tf.data.experimental.AUTOTUNE)
         for task in tasks]
     rates = [self.get_rate(task) for task in tasks]
     # Sample from the dataset with the rates rates
-    seed = None if shuffle else 42
     dataset = tf.data.experimental.sample_from_datasets(datasets, rates, seed)
     if (split == "train" and use_cached and
         all(t.supports_caching for t in tasks)):

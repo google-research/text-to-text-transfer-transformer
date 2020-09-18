@@ -31,6 +31,12 @@ TaskRegistry = utils.TaskRegistry
 mock = absltest.mock
 
 
+class AnyArg(object):
+
+  def __eq__(self, var):
+    return True
+
+
 class LazyTfdsLoaderTest(absltest.TestCase):
 
   def setUp(self):
@@ -77,6 +83,7 @@ class LazyTfdsLoaderTest(absltest.TestCase):
 
   @mock.patch("tensorflow_datasets.load")
   def test_split_map(self, mock_tfds_load):
+    seed = 0
     utils.LazyTfdsLoader._MEMOIZED_BUILDERS[("ds/c1", None)] = mock.Mock(
         info=mock.Mock(splits={
             "validation": mock.Mock(
@@ -91,14 +98,15 @@ class LazyTfdsLoaderTest(absltest.TestCase):
         "ds/c1", split_map={"train": "validation", "validation": "test"})
 
     # test .load()
-    ds.load("train", shuffle_files=False)
+    ds.load("train", shuffle_files=False, seed=seed)
     mock_tfds_load.assert_called_once_with(
         "ds/c1",
         split="validation",
         data_dir=None,
         shuffle_files=False,
         download=True,
-        try_gcs=True)
+        try_gcs=True,
+        read_config=AnyArg())
 
     # test .size()
     self.assertEqual(420, ds.size(split="train"))
