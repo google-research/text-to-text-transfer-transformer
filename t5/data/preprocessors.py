@@ -1591,7 +1591,7 @@ def wnli_simple(dataset, label='wsc:'):
 
 def rank_classification(
     ds,
-    inputs_formats,
+    inputs_format,
     targets_formats,
     label_key='label',
     repeat_correct_only=False):
@@ -1600,9 +1600,9 @@ def rank_classification(
   Intended to be used with `rank_classification` postprocessor and metric.
 
   Inputs will be formatted the by filling in feature values in the
-  `inputs_formats` and `targets_formats` strings. A separate example will be
-  produced each of the format string pairs if `repeat_correct_only` is False.
-  If True, only the format string pair indexed by the label will be produced,
+  `inputs_format` and `targets_formats` strings. A separate example will be
+  produced each targets format string pairs if `repeat_correct_only` is False.
+  If True, only the targets format string indexed by the label will be produced,
   and it will be repeated to maintain the same cardinality. This is useful for
   fewshot evaluation.
 
@@ -1611,10 +1611,7 @@ def rank_classification(
   For example, with arguments:
 
   ```
-  inputs_formats=[
-      '{premise} What is the {question}? X',
-      '{premise} What was the {question}? X'
-  ],
+  inputs_formats='{premise} What is the {question}? X',
   targets_formats=[
     'I think {choice1}.',
     'I think {choice2}.'
@@ -1641,7 +1638,7 @@ def rank_classification(
    },
    {
      'idx': 0,
-     'inputs': 'The farmland needed irrigation. What was the effect? X',
+     'inputs': 'The farmland needed irrigation. What is the effect? X',
      'targets': 'I think the crops grew tall.',
      'label': 0
    }]
@@ -1651,9 +1648,9 @@ def rank_classification(
 
   Args:
     ds: a tf.data.Dataset to preprocess.
-    inputs_formats: A list of strings to format with feature values to produce
-      'inputs', one for each possible class value. Feature keys should be
-      surrounded by curly braces to be replaced.
+    inputs_formats: A string to format with feature values to produce
+      'inputs'. Feature keys should be surrounded by curly braces to be
+      replaced.
     targets_formats: A list of strings to format with feature values to produce
       'targets', one for each possible class value. Feature keys should be
       surrounded by curly braces to be replaced.
@@ -1665,11 +1662,7 @@ def rank_classification(
   Returns:
     A tf.data.Dataset containing 'idx', inputs', 'targets', and 'label'.
   """
-  if len(inputs_formats) != len(targets_formats):
-    raise ValueError(
-        'Inputs and targets format must be the same length, matching the '
-        'number of possible classes for the label.')
-  num_classes = len(inputs_formats)
+  num_classes = len(targets_formats)
 
   def format_features(idx, ex):
     def _format_str(fmt):
@@ -1681,7 +1674,7 @@ def rank_classification(
 
     new_ex = {
         'idx': tf.fill([num_classes], idx),
-        'inputs': tf.stack([_format_str(fmt) for fmt in inputs_formats]),
+        'inputs': tf.fill([num_classes], _format_str(inputs_format)),
         'targets': tf.stack([_format_str(fmt) for fmt in targets_formats]),
         'label': tf.fill([num_classes], ex[label_key]),
     }

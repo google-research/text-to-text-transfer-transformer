@@ -1136,10 +1136,7 @@ class PreprocessorsTest(tf.test.TestCase):
     # all options
     dataset = prep.rank_classification(
         input_ds,
-        inputs_formats=[
-            '{premise} What is the {question}? X',
-            '{premise} What was the {question}? X'
-        ],
+        inputs_format='{premise} What is the {question}? X',
         targets_formats=['I think {choice1}.', 'I think {choice2}.'],
         repeat_correct_only=False)
 
@@ -1156,7 +1153,7 @@ class PreprocessorsTest(tf.test.TestCase):
             {
                 'idx': 0,
                 'inputs':
-                    'The farmland needed irrigation. What was the effect? X',
+                    'The farmland needed irrigation. What is the effect? X',
                 'targets': 'I think the crops grew tall.',
                 'label': 0
             },
@@ -1170,7 +1167,7 @@ class PreprocessorsTest(tf.test.TestCase):
             {
                 'idx': 1,
                 'inputs':
-                    'I decided to stay home last night. What was the cause? X',
+                    'I decided to stay home last night. What is the cause? X',
                 'targets': 'I think I was too tired.',
                 'label': 1
             },
@@ -1179,10 +1176,7 @@ class PreprocessorsTest(tf.test.TestCase):
     # label option only
     dataset = prep.rank_classification(
         input_ds,
-        inputs_formats=[
-            '{premise} What is the {question}? X',
-            '{premise} What was the {question}? X'
-        ],
+        inputs_format='{premise} What is the {question}? X',
         targets_formats=['I think {choice1}.', 'I think {choice2}.'],
         repeat_correct_only=True)
 
@@ -1206,14 +1200,14 @@ class PreprocessorsTest(tf.test.TestCase):
             {
                 'idx': 1,
                 'inputs':
-                    'I decided to stay home last night. What was the cause? X',
+                    'I decided to stay home last night. What is the cause? X',
                 'targets': 'I think I was too tired.',
                 'label': 1
             },
             {
                 'idx': 1,
                 'inputs':
-                    'I decided to stay home last night. What was the cause? X',
+                    'I decided to stay home last night. What is the cause? X',
                 'targets': 'I think I was too tired.',
                 'label': 1
             },
