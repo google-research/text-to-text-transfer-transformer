@@ -250,6 +250,7 @@ class MetricsTest(test_utils.BaseMetricsTest):
         {"matthews_corrcoef": 70.})
 
   def test_rank_classification(self):
+
     self.assertDictClose(
         metrics.rank_classification(
             [0, 0,
@@ -262,7 +263,9 @@ class MetricsTest(test_utils.BaseMetricsTest):
              0.6, 0.5]),
         {
             "accuracy": 75.,
-            "f1": 66.6666667
+            "f1": 66.6666667,
+            "auc-roc": 66.6666667,
+            "auc-pr": 70.8333333
         })
 
     self.assertDictClose(
@@ -277,6 +280,8 @@ class MetricsTest(test_utils.BaseMetricsTest):
         {
             "accuracy": 66.6666667,
             "mean_3class_f1": 55.5555556,
+            "auc-roc": 50.0,
+            "auc-pr": 61.1111111
         })
 
 
