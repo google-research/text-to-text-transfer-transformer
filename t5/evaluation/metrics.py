@@ -363,9 +363,13 @@ def rank_classification(targets, predictions, num_classes=2):
   labels_onehot = np.eye(num_classes)[labels]
 
   log_likelihoods = np.array(predictions, np.float32).reshape((-1, num_classes))
-  likelihoods = np.exp(log_likelihoods)
-  probs = likelihoods / likelihoods.sum(-1)[:, np.newaxis]
   predictions = log_likelihoods.argmax(-1)
+
+  def exp_normalize(x):
+    b = x.max(-1)[:, np.newaxis]
+    y = np.exp(x - b)
+    return y / y.sum(-1)[:, np.newaxis]
+  probs = exp_normalize(log_likelihoods)
 
   if num_classes > 2:
     metrics = mean_multiclass_f1(num_classes)(labels, predictions)
