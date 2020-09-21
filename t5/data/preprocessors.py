@@ -1346,22 +1346,26 @@ def _wsc_inputs(x):
 
   # Handle some special cases.
   return tf.case(
-      {
-          # The issue here is that the pronoun is 'him,"' in the text.
-          tf.equal(
-              x['text'],
-              'The boy continued to whip the pony , and eventually the pony threw him over. John laughed out quite loud. \"Good for him,\" he said. '
-          ):
+      [
+          (
+              # The issue here is that the pronoun is 'him,"' in the text.
+              tf.equal(
+                  x['text'],
+                  'The boy continued to whip the pony , and eventually the pony threw him over. John laughed out quite loud. \"Good for him,\" he said. '
+              ),
               lambda:
               'The boy continued to whip the pony , and eventually the pony threw him over. John laughed out quite loud. "Good for X ," he said.',
-          # Using the span2_index, we get 'use' instead of 'it'.
-          tf.equal(
-              x['text'],
-              'When they had eventually calmed down a bit , and had gotten home, Mr. Farley put the magic pebble in an iron safe . Some day they might want to use it , but really for now, what more could they wish for?'
-          ):
+          ),
+          (
+              # Using the span2_index, we get 'use' instead of 'it'.
+              tf.equal(
+                  x['text'],
+                  'When they had eventually calmed down a bit , and had gotten home, Mr. Farley put the magic pebble in an iron safe . Some day they might want to use it , but really for now, what more could they wish for?'
+              ),
               lambda:
               'When they had eventually calmed down a bit , and had gotten home, Mr. Farley put the magic pebble in an iron safe . Some day they might want to use X , but really for now, what more could they wish for?'
-      },
+          )
+      ],
       default=create_input,
       exclusive=True)
 
