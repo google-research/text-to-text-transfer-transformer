@@ -1,0 +1,5 @@
+# -*-Python-*-
+include 'eval.gin'
+
+utils.run.mode = "score_eval"
+

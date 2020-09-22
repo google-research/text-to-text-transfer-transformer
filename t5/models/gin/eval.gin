@@ -1,6 +1,4 @@
 # -*-Python-*-
-# Mixed dataset using a Task object
-
 import t5.models.mesh_transformer
 
 eval_checkpoint_step = "all"

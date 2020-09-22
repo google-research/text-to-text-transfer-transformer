@@ -1,6 +1,4 @@
 # -*-Python-*-
-# Mixed dataset using a Task object
-
 import t5.models.mesh_transformer
 
 eval_checkpoint_step = "all"
@@ -11,4 +9,3 @@ utils.run.eval_dataset_fn = @t5.models.mesh_transformer.mesh_eval_dataset_fn
 utils.run.mode = "perplexity_eval"
 
 utils.run.eval_checkpoint_step = %eval_checkpoint_step
-preprocessors.num_parallel_calls.deterministic = True
