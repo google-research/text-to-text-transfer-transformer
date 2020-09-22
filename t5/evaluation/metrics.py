@@ -291,7 +291,10 @@ def multirc_f1_over_all_answers(targets, predictions):
 
 
 def auc(targets, predictions, targets_threshold=None):
-  """Compute Area Under the Receiver Operating Characteristic Curve (ROC AUC).
+  """Compute Area Under the ROC and PR curves.
+  
+  ROC - Receiver Operating Characteristic
+  PR  - Precision and Recall
 
   Args:
     targets: np.ndarray of targets, either 0 or 1, or continuous values.
@@ -299,7 +302,7 @@ def auc(targets, predictions, targets_threshold=None):
     targets_threshold: float, if target values are continuous values, this
       threshold binarizes them.
   Returns:
-    AUC ROC score.
+    A dictionary with AUC-ROC and AUC-PR scores.
   """
 
   if targets_threshold is not None:
@@ -308,7 +311,10 @@ def auc(targets, predictions, targets_threshold=None):
                        np.zeros_like(targets, dtype=np.int32),
                        np.ones_like(targets, dtype=np.int32))
 
-  return {"auc": sklearn.metrics.roc_auc_score(targets, predictions)}
+  return {
+      "auc-roc": sklearn.metrics.roc_auc_score(targets, predictions),
+      "auc-pr": sklearn.metrics.average_precision_score(targets, predictions),
+  }
 
 
 def sklearn_metrics_wrapper(metric_str,

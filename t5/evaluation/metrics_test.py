@@ -214,13 +214,19 @@ class MetricsTest(test_utils.BaseMetricsTest):
   def test_auc(self):
     self.assertDictClose(
         metrics.auc([0, 0, 1, 1], [0.1, 0.4, 0.35, 0.8]),
-        {"auc": 0.75})
+        {"auc-roc": 0.75,
+         "auc-pr": 0.8333},
+        places=4,
+    )
 
   def test_auc_non_binary(self):
     self.assertDictClose(
         metrics.auc([0.0, 0.2, 0.5, 0.7], [0.1, 0.4, 0.35, 0.8],
                     targets_threshold=0.5),
-        {"auc": 0.75})
+        {"auc-roc": 0.75,
+         "auc-pr": 0.8333},
+        places=4,
+    )
 
   def test_sklearn_wrapper(self):
     mae_fn = metrics.sklearn_metrics_wrapper("mean_absolute_error")
