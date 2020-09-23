@@ -1597,30 +1597,34 @@ def rank_classification(
     ds,
     inputs_format,
     targets_formats,
-    label_key='label',
-    repeat_correct_only=False):
+    mode='eval',
+    label_key='label'):
   """Create 'inputs' and 'targets' strings for ranking classification.
 
   Intended to be used with `rank_classification` postprocessor and metric.
 
   Inputs will be formatted the by filling in feature values in the
-  `inputs_format` and `targets_formats` strings. A separate example will be
-  produced each targets format string pairs if `repeat_correct_only` is False.
-  If True, only the targets format string indexed by the label will be produced,
-  and it will be repeated to maintain the same cardinality. This is useful for
-  fewshot evaluation.
+  `inputs_format` and `targets_formats` strings.
+
+  In 'eval' mode, a separate example will be produced for each targets format
+  string. These can then be scored to find the one with the highest likelihood.
+  The `rank_classification` postprocessor and metric allow you to evaluate with
+  this technique.
+
+  In 'train' mode, only the targets format string indexed by the label will be
+  produced.
 
   Each input example will also be given a unique, sequential index called 'idx'.
 
   For example, with arguments:
 
   ```
-  inputs_formats='{premise} What is the {question}? X',
+  inputs_format='{premise} What is the {question}? X',
   targets_formats=[
     'I think {choice1}.',
     'I think {choice2}.'
   ],
-  repeat_correct_only=False
+  mode='eval'
   ```
 
   given the input:
@@ -1647,25 +1651,33 @@ def rank_classification(
      'label': 0
    }]
 
-  With `repeat_correct_only=True`, it would return the first example twice,
+  With `mode='train'`, it would return only the first example,
+  since it uses the correct label.
+
+  With `mode='fewshot_train'`, it would return only the first example twice,
   since it uses the correct label.
 
   Args:
     ds: a tf.data.Dataset to preprocess.
-    inputs_formats: A string to format with feature values to produce
+    inputs_format: A string to format with feature values to produce
       'inputs'. Feature keys should be surrounded by curly braces to be
       replaced.
     targets_formats: A list of strings to format with feature values to produce
       'targets', one for each possible class value. Feature keys should be
       surrounded by curly braces to be replaced.
+    mode: A string, one of 'train', 'eval', or 'fewshot_train')
+      'train' produces only the correct example based on the label value.
+      'eval' produces an example for every possible label value, sequentially.
+      'fewshot_train' produces only the correct example, but repeats it to
+         match the number of classes.
     label_key: A string, the feature key for the integer label value.
-    repeat_correct_only: A boolean, if False, an example will be produced for
-      each input/target format string pair. If False, only the correct
-      example will be produced (indexing the format strings by the label value),
-      and it will be repeated to maintain cardinality.
   Returns:
     A tf.data.Dataset containing 'idx', inputs', 'targets', and 'label'.
   """
+  if mode not in ('train', 'eval', 'fewshot_train'):
+    raise ValueError(
+        "Mode must be one of 'train', 'eval', or 'fewshot_train'. "
+        f"Got '{mode}'.")
   num_classes = len(targets_formats)
 
   def format_features(idx, ex):
@@ -1682,9 +1694,11 @@ def rank_classification(
         'targets': tf.stack([_format_str(fmt) for fmt in targets_formats]),
         'label': tf.fill([num_classes], ex[label_key]),
     }
-    if repeat_correct_only:
+    if 'train' in mode:
       new_ex = {
-          k: tf.fill([num_classes], v[ex[label_key]]) for k, v in new_ex.items()
+          k: tf.fill(
+              [num_classes if mode == 'fewshot_train' else 1], v[ex[label_key]])
+          for k, v in new_ex.items()
       }
     return new_ex
 

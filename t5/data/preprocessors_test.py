@@ -1138,7 +1138,7 @@ class PreprocessorsTest(tf.test.TestCase):
         input_ds,
         inputs_format='{premise} What is the {question}? X',
         targets_formats=['I think {choice1}.', 'I think {choice2}.'],
-        repeat_correct_only=False)
+        mode='eval')
 
     test_utils.assert_dataset(
         dataset,
@@ -1178,7 +1178,33 @@ class PreprocessorsTest(tf.test.TestCase):
         input_ds,
         inputs_format='{premise} What is the {question}? X',
         targets_formats=['I think {choice1}.', 'I think {choice2}.'],
-        repeat_correct_only=True)
+        mode='train')
+
+    test_utils.assert_dataset(
+        dataset,
+        [
+            {
+                'idx': 0,
+                'inputs':
+                    'The farmland needed irrigation. What is the effect? X',
+                'targets': 'I think a canal was constructed.',
+                'label': 0
+            },
+            {
+                'idx': 1,
+                'inputs':
+                    'I decided to stay home last night. What is the cause? X',
+                'targets': 'I think I was too tired.',
+                'label': 1
+            },
+        ])
+
+    # label option only, repeated
+    dataset = prep.rank_classification(
+        input_ds,
+        inputs_format='{premise} What is the {question}? X',
+        targets_formats=['I think {choice1}.', 'I think {choice2}.'],
+        mode='fewshot_train')
 
     test_utils.assert_dataset(
         dataset,
