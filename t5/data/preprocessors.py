@@ -26,22 +26,6 @@ import tensorflow.compat.v1 as tf
 # pylint: disable=g-long-lambda
 
 
-@gin.configurable
-def num_parallel_calls(deterministic=False):
-  """Number of parallel calls to tf.data.Dataset.map of stateful function.
-
-  Intended usage: gin-config deterministic to True for evaluations, so as to
-  make evaluation deterministic. Set deterministic to False for training
-  to enable parallel execution (for a faster input pipeline).
-
-  Args:
-    deterministic: a boolean
-  Returns:
-    a value to be passed as num_parallel_calls to tf.data.Dataset.map
-  """
-  return None if deterministic else tf.data.experimental.AUTOTUNE
-
-
 def rekey(dataset, key_map=None):
   """Replace the feature keys according to the mapping in `key_map`.
 
@@ -495,7 +479,7 @@ def random_split_text(dataset,
     # spaces that get stripped out.
     words = tf.strings.reduce_join(words, axis=1, separator=' ')
     return {text_key: tf.strings.strip(words)}
-  dataset = dataset.map(my_fn, num_parallel_calls=num_parallel_calls())
+  dataset = dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
   return dataset.unbatch()
 
 
@@ -1274,7 +1258,7 @@ def next_sentence_prediction(dataset,
 
     return {'inputs': inputs, 'targets': targets}
 
-  dataset = dataset.map(my_fn, num_parallel_calls=num_parallel_calls())
+  dataset = dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
   dataset = dataset.unbatch()
 
   def example_len(x):
@@ -1750,7 +1734,7 @@ def select_random_chunk(dataset,
     return {feature_key: tokens[start:end]}
   # Filter empty examples.
   dataset = dataset.filter(lambda x: tf.not_equal(tf.size(x[feature_key]), 0))
-  return dataset.map(_my_fn, num_parallel_calls=num_parallel_calls())
+  return dataset.map(_my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 
 @gin.configurable
@@ -1838,7 +1822,7 @@ def split_tokens(dataset,
 
   # Filter empty examples.
   dataset = dataset.filter(lambda x: tf.not_equal(tf.size(x[feature_key]), 0))
-  dataset = dataset.map(_split_tokens, num_parallel_calls=num_parallel_calls())
+  dataset = dataset.map(_split_tokens, num_parallel_calls=tf.data.experimental.AUTOTUNE)
   dataset = dataset.unbatch()
   return dataset.map(
       _strip_padding, num_parallel_calls=tf.data.experimental.AUTOTUNE)
@@ -1930,7 +1914,7 @@ def denoise(dataset,
     else:
       targets = tokens
     return {'inputs': inputs, 'targets': targets}
-  return dataset.map(my_fn, num_parallel_calls=num_parallel_calls())
+  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 
 def trivia_qa_truncate_inputs(dataset, output_features, sequence_length):
@@ -2046,7 +2030,7 @@ def trivia_qa_truncate_inputs(dataset, output_features, sequence_length):
 
     return {'inputs': inputs, 'targets': features['targets']}
 
-  dataset = dataset.map(my_fn, num_parallel_calls=num_parallel_calls())
+  dataset = dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
   return dataset.filter(lambda x: tf.size(x['inputs']) > 0)
 
 
