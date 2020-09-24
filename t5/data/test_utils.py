@@ -263,7 +263,14 @@ def dataset_as_text(ds):
 
 
 def assert_dataset(dataset, expected):
-  """Tests whether the entire dataset == expected or [expected]."""
+  """Tests whether the entire dataset == expected or [expected].
+
+  Args:
+    dataset: a tfds dataset
+    expected: either a single example, or a list of examples. Each example is a
+      dictionary.
+  """
+
   if not isinstance(expected, list):
     expected = [expected]
   dataset = list(tfds.as_numpy(dataset))
@@ -285,9 +292,41 @@ def assert_dataset(dataset, expected):
     _compare_dict(actual_ex, expected_ex)
 
 
-def get_fake_dataset(split, shuffle_files=False):
+def assert_datasets_eq(dataset1, dataset2):
+  """Assert that two tfds datasets are equal."""
+
+  dataset1 = list(tfds.as_numpy(dataset1))
+  dataset2 = list(tfds.as_numpy(dataset2))
+  _pyunit_proxy.assertEqual(len(dataset1), len(dataset2))
+
+  def _compare_dict(dataset1, dataset2):
+    _pyunit_proxy.assertEqual(
+        set(dataset1.keys()), set(dataset2.keys()))
+    for key, value1 in dataset1.items():
+      if isinstance(value1, dict):
+        _compare_dict(value1, dataset2[key])
+        continue
+      if isinstance(value1, tf.RaggedTensor):
+        value1 = value1.to_list()
+      np.testing.assert_array_equal(
+          value1, _maybe_as_bytes(dataset2[key]), key)
+
+  for ex1, ex2 in zip(dataset1, dataset2):
+    _compare_dict(ex1, ex2)
+
+
+def assert_datasets_neq(dataset1, dataset2):
+  """Assert that two tfds datasets are unequal."""
+
+  _pyunit_proxy.assertRaises(AssertionError,
+                             assert_datasets_eq, dataset1, dataset2)
+
+
+def get_fake_dataset(split, shuffle_files=False, seed=None):
   """Returns a tf.data.Dataset with fake data."""
   del shuffle_files  # Unused, to be compatible with TFDS API.
+  del seed
+
   output_types = {"prefix": tf.string, "suffix": tf.string}
   if split == "validation":
     output_types.update(
@@ -341,6 +380,21 @@ def test_token_preprocessor(dataset, output_features, **unused_kwargs):
         tf.greater(inputs, 15),
         tf.constant(50, tf.int64),
         inputs)
+    return res
+
+  return dataset.map(my_fn)
+
+
+def random_token_preprocessor(dataset, output_features, **unused_kwargs):
+  """Randomly select a token from each example."""
+  del output_features
+
+  def my_fn(ex):
+    tokens = ex["inputs"]
+    res = ex.copy()
+    n_tokens = tf.size(tokens)
+    random_index = tf.random_uniform([], maxval=n_tokens, dtype=tf.int32)
+    res["inputs"] = [tokens[random_index]]
     return res
 
   return dataset.map(my_fn)
@@ -501,6 +555,11 @@ class FakeTaskTest(absltest.TestCase):
     add_tfds_task("uncached_task")
     self.uncached_task = TaskRegistry.get("uncached_task")
 
+    # Prepare uncached, random TfdsTask
+    add_tfds_task("uncached_random_task",
+                  token_preprocessor=random_token_preprocessor)
+    self.uncached_random_task = TaskRegistry.get("uncached_random_task")
+
     # Prepare uncached TextLineTask.
     _dump_fake_dataset(
         os.path.join(self.test_data_dir, "train.tsv"),
@@ -574,3 +633,9 @@ class FakeMixtureTest(FakeTaskTest):
         [("cached_task", 1.0)],
     )
     self.cached_mixture = MixtureRegistry.get("cached_mixture")
+    MixtureRegistry.add(
+        "uncached_random_mixture",
+        [("uncached_random_task", 1.0)],
+    )
+    self.uncached_mixture = MixtureRegistry.get(
+        "uncached_random_mixture")
