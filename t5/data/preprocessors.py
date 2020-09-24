@@ -2605,3 +2605,12 @@ def preprocess_tsv(dataset,
             'targets': _format(targets_format, field_values)}
   return dataset.map(
       _parse_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+
+# ==========================Deprecated=========================================
+
+
+@gin.configurable
+def num_parallel_calls(deterministic=False):
+  """DEPRECATED: Cannot be removed to preserve gin backward compatibility."""
+  raise AssertionError('`num_paralell_calls` is deprecated. Do not use.')
