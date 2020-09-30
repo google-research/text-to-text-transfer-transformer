@@ -72,9 +72,10 @@ flags.DEFINE_boolean("use_model_api", False,
                      "Use Model API instead of utils.run.")
 
 # Note: All the args from here on are only used when use_model_api is set
-flags.DEFINE_enum("mode", None,
-                  ["train", "finetune", "eval", "predict", "export", "score"],
-                  "Mode with which to run the model.")
+flags.DEFINE_enum(
+    "mode", None, ["train", "finetune", "eval", "predict",
+                   "export_predict", "export_score", "score"],
+    "Mode with which to run the model.")
 flags.DEFINE_integer("batch_size", 1,
                      "Number of sequences per batch.")
 flags.DEFINE_integer("input_sequence_length", 512,
@@ -220,7 +221,7 @@ def main(_):
           FLAGS.target_file,
           scores_file=FLAGS.output_file,
           checkpoint_steps=checkpoint_steps)
-    elif FLAGS.mode == "export":
+    elif FLAGS.mode in ("export_predict", "export_score"):
       if not (FLAGS.checkpoint_mode == "latest" or
               (FLAGS.checkpoint_mode == "specific" and
                len(FLAGS.checkpoint_steps) == 1)):
@@ -234,7 +235,8 @@ def main(_):
           export_dir=FLAGS.export_dir,
           checkpoint_step=checkpoint_steps,
           beam_size=FLAGS.export_beam_size,
-          temperature=FLAGS.export_temperature)
+          temperature=FLAGS.export_temperature,
+          score_mode=(FLAGS.mode == "export_score"))
     else:
       raise ValueError("--mode flag must be set when using Model API.")
   else:

@@ -15,6 +15,4 @@ save_scores.save_example_text = True
 mesh_eval_dataset_fn.mixture_or_task_name = %MIXTURE_NAME
 mesh_eval_dataset_fn.num_eval_examples = 1000
 
-tpu_estimator_model_fn.score_in_predict_mode = True
-
 utils.run.dataset_split = 'test'

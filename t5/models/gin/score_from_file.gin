@@ -8,9 +8,7 @@ utils.run.mode = "score_from_strings"
 
 score_from_strings.inputs = %inputs_filename
 score_from_strings.targets  = %targets_filename
-score_from_dataset.score_postprocess_fn = @save_scores
+score_from_strings.score_postprocess_fn = @save_scores
 
 save_scores.scores_filename = %scores_filename
 save_scores.save_example_text = True
-
-tpu_estimator_model_fn.score_in_predict_mode = True

@@ -433,7 +433,7 @@ class MtfModel(T5Model):
           score_postprocess_fn=score_postprocess_fn)
 
   def export(self, export_dir=None, checkpoint_step=-1, beam_size=1,
-             temperature=1.0, vocabulary=None):
+             temperature=1.0, vocabulary=None, score_mode=False):
     """Exports a TensorFlow SavedModel.
 
     Args:
@@ -447,6 +447,8 @@ class MtfModel(T5Model):
         0.0 means argmax, 1.0 means sample according to predicted distribution.
       vocabulary: vocabularies.Vocabulary object to use for tokenization, or
         None to use the default SentencePieceVocabulary.
+      score_mode: If True, compute log-likelihood scores of targets.
+        If False, do inference to generate outputs.
 
     Returns:
       The string path to the exported directory.
@@ -462,7 +464,10 @@ class MtfModel(T5Model):
       vocabulary = _get_vocabulary()
     model_ckpt = "model.ckpt-" + str(checkpoint_step)
     export_dir = export_dir or self._model_dir
+    estimator = self.estimator(
+        vocabulary, disable_tpu=True, score_in_predict_mode=score_mode)
     return utils.export_model(
-        self.estimator(vocabulary, disable_tpu=True), export_dir, vocabulary,
-        self._sequence_length, batch_size=self.batch_size,
-        checkpoint_path=os.path.join(self._model_dir, model_ckpt))
+        estimator, export_dir, vocabulary,
+        self._sequence_length, self._model_type, batch_size=self.batch_size,
+        checkpoint_path=os.path.join(self._model_dir, model_ckpt),
+        score_mode=score_mode)
