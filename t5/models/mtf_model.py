@@ -58,6 +58,12 @@ def _operative_config_path(model_dir):
 
 
 def _get_vocabulary(mixture_or_task_name=None):
+  if not mixture_or_task_name:
+    # Attempt to extract the mixture/task name from the gin config.
+    try:
+      mixture_or_task_name = gin.query_parameter("%MIXTURE_NAME")
+    except ValueError:
+      logging.warning("Could not extract mixture/task name from gin config.")
   if mixture_or_task_name:
     return t5.models.mesh_transformer.get_vocabulary(mixture_or_task_name)
   logging.warning("Using default vocabulary.")
@@ -352,7 +358,7 @@ class MtfModel(T5Model):
       gin.bind_parameter("Bitransformer.decode.temperature", temperature)
 
     if vocabulary is None:
-      vocabulary = t5.data.get_default_vocabulary()
+      vocabulary = _get_vocabulary()
     utils.infer_model(
         self.estimator(vocabulary), vocabulary, self._sequence_length,
         self.batch_size, self._model_type, self._model_dir, checkpoint_steps,
