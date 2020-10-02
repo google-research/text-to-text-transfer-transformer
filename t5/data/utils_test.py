@@ -221,7 +221,10 @@ class TasksTest(test_utils.FakeTaskTest):
 
   def test_get_cached_stats(self):
     expected_train_stats = {
-        "examples": 3, "inputs_tokens": 36, "targets_tokens": 18}
+        "examples": 3,
+        "inputs_tokens": 36, "inputs_max_tokens": 13,
+        "targets_tokens": 18, "targets_max_tokens": 6
+    }
     self.assertEqual(
         expected_train_stats,
         self.cached_task.get_cached_stats("train"))
@@ -230,7 +233,10 @@ class TasksTest(test_utils.FakeTaskTest):
         expected_train_stats,
         self.cached_task.get_cached_stats("train"))
     expected_validation_stats = {
-        "examples": 2, "inputs_tokens": 23, "targets_tokens": 36}
+        "examples": 2,
+        "inputs_tokens": 23, "inputs_max_tokens": 12,
+        "targets_tokens": 36, "targets_max_tokens": 21
+    }
     self.assertEqual(
         expected_validation_stats,
         self.cached_task.get_cached_stats("validation"))

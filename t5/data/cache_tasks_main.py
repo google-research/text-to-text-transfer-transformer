@@ -313,9 +313,17 @@ class GetStats(beam.PTransform):
     token_counts = (
         [_count_tokens(pcoll, feat)
          for feat in self._output_features]
-        | "flatten_tokens" >> beam.Flatten()
-        | "count_tokens" >> beam.CombinePerKey(sum)
+        | "flatten_tokens" >> beam.Flatten())
+    total_tokens = (
+        token_counts
+        | "sum_tokens" >> beam.CombinePerKey(sum)
         | "token_count_dict" >> beam.Map(to_dict))
+    max_tokens = (
+        token_counts
+        | "max_tokens" >> beam.CombinePerKey(max)
+        | "rename_max_stat" >> beam.Map(
+            lambda x: (x[0].replace("tokens", "max_tokens"), x[1]))
+        | "token_max_dict" >> beam.Map(to_dict))
 
     def _merge_dicts(dicts):
       merged_dict = {}
@@ -324,7 +332,7 @@ class GetStats(beam.PTransform):
         merged_dict.update(d)
       return merged_dict
     return (
-        [example_counts, token_counts]
+        [example_counts, total_tokens, max_tokens]
         | "flatten_counts" >> beam.Flatten()
         | "merge_stats" >> beam.CombineGlobally(_merge_dicts))
 
