@@ -292,13 +292,8 @@ def assert_dataset(dataset, expected):
     _compare_dict(actual_ex, expected_ex)
 
 
-def assert_datasets_eq(dataset1, dataset2):
+def assert_lists_eq(dataset1, dataset2):
   """Assert that two tfds datasets are equal."""
-
-  dataset1 = list(tfds.as_numpy(dataset1))
-  dataset2 = list(tfds.as_numpy(dataset2))
-  _pyunit_proxy.assertEqual(len(dataset1), len(dataset2))
-
   def _compare_dict(dataset1, dataset2):
     _pyunit_proxy.assertEqual(
         set(dataset1.keys()), set(dataset2.keys()))
@@ -313,6 +308,22 @@ def assert_datasets_eq(dataset1, dataset2):
 
   for ex1, ex2 in zip(dataset1, dataset2):
     _compare_dict(ex1, ex2)
+
+
+def assert_lists_neq(dataset1, dataset2):
+  """Assert that two tfds datasets are unequal."""
+
+  _pyunit_proxy.assertRaises(AssertionError,
+                             assert_lists_eq, dataset1, dataset2)
+
+
+def assert_datasets_eq(dataset1, dataset2):
+  """Assert that two tfds datasets are equal."""
+
+  dataset1 = list(tfds.as_numpy(dataset1))
+  dataset2 = list(tfds.as_numpy(dataset2))
+  _pyunit_proxy.assertEqual(len(dataset1), len(dataset2))
+  assert_lists_eq(dataset1, dataset2)
 
 
 def assert_datasets_neq(dataset1, dataset2):

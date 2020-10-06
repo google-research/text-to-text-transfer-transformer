@@ -47,11 +47,17 @@ class SentencePieceVocabulary(vocabularies.Vocabulary):
     """
     self._sentencepiece_model_file = sentencepiece_model_file
     self._tokenizer = None
+    self._tf_tokenizer = None
     self._sp_model = None
     # Pass extra_ids if it is specified, otherwise, allow it to be
     # gin-configured through the base class
     kwargs = {"extra_ids": extra_ids} if extra_ids is not None else {}
     super().__init__(**kwargs)
+
+  def reset_tf(self):
+    """Re-instantiates TF resources."""
+    self._tf_tokenizer = None
+    _ = self.tf_tokenizer
 
   def _load_model(self):
     """Load SPM and Python tokenizer."""
@@ -93,7 +99,9 @@ class SentencePieceVocabulary(vocabularies.Vocabulary):
   @property
   def tf_tokenizer(self):
     """Instantiate and return a TF tokenizer."""
-    return tf_text.SentencepieceTokenizer(model=self.sp_model)
+    if not self._tf_tokenizer:
+      self._tf_tokenizer = tf_text.SentencepieceTokenizer(model=self.sp_model)
+    return self._tf_tokenizer
 
   @property
   def vocab_size(self):

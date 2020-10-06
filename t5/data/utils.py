@@ -257,6 +257,12 @@ def encode_string_features(
     a tf.data.Dataset
   """
   keys = set(keys)
+
+  # Instantiate the tokenizers outside of the map.
+  for feature in output_features.values():
+    feature.vocabulary.reset_tf()
+    _ = feature.vocabulary.tf_tokenizer
+
   def my_fn(features):
     """Encode all specified feature that are strings and return a dictionary.
 

@@ -27,6 +27,10 @@ class Vocabulary(object):
   def __init__(self, extra_ids=0):
     self._extra_ids = extra_ids
 
+  def reset_tf(self):
+    """Re-instantiates any existing TF resources."""
+    pass
+
   @property
   def vocab_size(self):
     raise NotImplementedError
