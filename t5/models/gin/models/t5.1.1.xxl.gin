@@ -19,4 +19,5 @@ d_model = 4096
 num_layers = 24
 d_ff = 10240
 num_heads = 64
-utils.tpu_mesh_shape.model_parallelism = 32
+utils.tpu_mesh_shape.model_parallelism = 8
+utils.serialize_num_microbatches.tokens_per_microbatch_per_replica=1024
