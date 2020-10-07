@@ -38,6 +38,30 @@ DEFAULT_OUTPUT_FEATURES = {
 }
 
 # ==================================== C4 ======================================
+# Final pretraining task used in Raffel et al., 2019.
+TaskRegistry.add(
+    "c4_v220_span_corruption",
+    TfdsTask,
+    tfds_name="c4/en:2.2.0",
+    text_preprocessor=functools.partial(
+        preprocessors.rekey, key_map={"inputs": None, "targets": "text"}),
+    token_preprocessor=preprocessors.span_corruption,
+    output_features=DEFAULT_OUTPUT_FEATURES,
+    metric_fns=[])
+
+
+# Baseline pretraining task used in Raffel et al., 2019.
+TaskRegistry.add(
+    "c4_v220_iid_denoising",
+    TfdsTask,
+    tfds_name="c4/en:2.2.0",
+    text_preprocessor=functools.partial(
+        preprocessors.rekey, key_map={"inputs": None, "targets": "text"}),
+    token_preprocessor=preprocessors.iid_denoising,
+    output_features=DEFAULT_OUTPUT_FEATURES,
+    metric_fns=[])
+
+
 # Configurable tasks used for comparisons in Raffel et al., 2019.
 _c4_config_suffixes = ["", ".noclean", ".realnewslike", ".webtextlike"]
 for config_suffix in _c4_config_suffixes:
@@ -52,79 +76,6 @@ for config_suffix in _c4_config_suffixes:
       output_features=DEFAULT_OUTPUT_FEATURES,
       metric_fns=[])
 
-# Final pretraining task used in Raffel et al., 2019.
-TaskRegistry.add(
-    "c4_v220_span_corruption",
-    TfdsTask,
-    tfds_name="c4/en:2.2.0".format(config=config_suffix),
-    text_preprocessor=functools.partial(
-        preprocessors.rekey, key_map={"inputs": None, "targets": "text"}),
-    token_preprocessor=[
-        functools.partial(
-            preprocessors.select_random_chunk,
-            feature_key="targets",
-            max_length=65536
-        ),
-        functools.partial(
-            preprocessors.reduce_concat_tokens,
-            feature_key="targets",
-            batch_size=128
-        ),
-        functools.partial(
-            preprocessors.split_tokens,
-            feature_key="targets",
-            min_tokens_per_segment=None,
-            max_tokens_per_segment=preprocessors.random_spans_helper(
-                extra_tokens_per_span_inputs=1,
-                extra_tokens_per_span_targets=1,
-                inputs_length=512,
-                mean_noise_span_length=3.0,
-                noise_density=0.15
-            )[0]
-        ),
-        functools.partial(
-            preprocessors.denoise,
-            inputs_fn=preprocessors.noise_span_to_unique_sentinel,
-            targets_fn=preprocessors.nonnoise_span_to_unique_sentinel,
-            noise_density=0.15,
-            noise_mask_fn=functools.partial(
-                preprocessors.random_spans_noise_mask,
-                mean_noise_span_length=3.0
-            )
-        )
-    ],
-    output_features=DEFAULT_OUTPUT_FEATURES,
-    metric_fns=[])
-
-# Baseline pretraining task used in Raffel et al., 2019.
-TaskRegistry.add(
-    "c4_v220_iid_denoising",
-    TfdsTask,
-    tfds_name="c4/en:2.2.0".format(config=config_suffix),
-    text_preprocessor=functools.partial(
-        preprocessors.rekey, key_map={"inputs": None, "targets": "text"}),
-    token_preprocessor=[
-        functools.partial(
-            preprocessors.select_random_chunk,
-            feature_key="targets",
-            max_length=65536
-        ),
-        functools.partial(
-            preprocessors.reduce_concat_tokens,
-            feature_key="targets",
-            batch_size=128
-        ),
-        preprocessors.split_tokens_to_inputs_length,
-        functools.partial(
-            preprocessors.denoise,
-            inputs_fn=preprocessors.noise_span_to_unique_sentinel,
-            targets_fn=preprocessors.nonnoise_span_to_unique_sentinel,
-            noise_density=0.15,
-            noise_mask_fn=preprocessors.iid_noise_mask
-        )
-    ],
-    output_features=DEFAULT_OUTPUT_FEATURES,
-    metric_fns=[])
 
 # ================================ Wikipedia ===================================
 TaskRegistry.add(

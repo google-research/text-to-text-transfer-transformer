@@ -15,6 +15,7 @@
 """Preprocess tensorflow.data.Dataset()."""
 
 import collections
+import functools
 import math
 import re
 import uuid
@@ -1691,7 +1692,147 @@ def rank_classification(
   ds = ds.unbatch()
   return ds
 
+
+def parse_tsv(dataset,
+              field_names=None,
+              field_delim='\t'):
+  """Splits TSV lines into dict examples mapping field name to string value.
+
+  Args:
+    dataset: a `tf.data.Dataset` containing comma/tab-delimited strings.
+    field_names: a list of strings, the ordered names of the TSV fields.
+      Defaults to "inputs" and "targets".
+    field_delim: a string, the delimiter to split on e.g. ',' for csv.
+  Returns:
+    A `tf.data.Dataset` containing dict examples mapping field name to string
+    value.
+  """
+  field_names = field_names or ['inputs', 'targets']
+  def parse_line(line):
+    return dict(zip(
+        field_names,
+        tf.io.decode_csv(
+            line, record_defaults=[''] * len(field_names),
+            field_delim=field_delim, use_quote_delim=False)
+    ))
+
+  return dataset.map(
+      parse_line, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+
+def preprocess_tsv(dataset,
+                   field_delim='\t',
+                   num_fields=2,
+                   inputs_format='{0}',
+                   targets_format='{1}'):
+  r"""Parse tab-delimited strings into inputs and targets.
+
+  This function takes a tf.data.Dataset of strings, each of which contains
+  tab-delimited fields.  The function returns a tf.data.Dataset of feature
+  dictionaries of the form {"inputs": string, "targets": string}.
+
+  inputs_format contains a template string and field numbers used to produce
+  the "inputs" string.
+  targets_format contains a template string and field numbers used to produce
+  the "targets" string.
+
+  Example:
+    The input dataset contains the lines:
+    "6,7,42"
+    "2,9,18"
+    preprocess_tsv(dataset,
+                   field_delim=',',
+                   inputs_format='numerator: {2} denominator: {1}',
+                   targets_format='quotient: {0}'
+    would produce a dataset containing the dictionaries:
+    {"inputs": "numerator: 42 denomnator: 7", "targets": "quotient: 6"}
+    {"inputs": "numerator: 18 denomnator: 9", "targets": "quotient: 2"}
+
+  Args:
+    dataset: a tf.data.Dataset containing comma/tab-delimited strings.
+    field_delim: a string, the delimiter to split on e.g. ',' for csv.
+    num_fields: an integer
+    inputs_format: a string, the desired output format with placeholders for
+      field values.
+    targets_format: a string, the desired output format with placeholders for
+      field values.
+  Returns:
+    a tf.data.Dataset of feature dictionaries with 'inputs' and
+    'targets' features.
+  """
+  def _format_part(part, field_values):
+    found = re.findall(r'{(\d)}', part)
+    if found:
+      return field_values[int(found[0])]
+    else:
+      return part
+
+  def _format(format_string, field_values):
+    parts = [_format_part(p, field_values)
+             for p in re.split(r'({\d})', format_string)]
+    return tf.strings.join(parts)
+
+  def _parse_fn(line):
+    """Function to process a line."""
+    field_values = tf.io.decode_csv(
+        line, record_defaults=[''] * num_fields,
+        field_delim=field_delim, use_quote_delim=False)
+    return {'inputs': _format(inputs_format, field_values),
+            'targets': _format(targets_format, field_values)}
+  return dataset.map(
+      _parse_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+
 # ======================Token Preprocessors=====================================
+
+
+def span_corruption(dataset, sequence_length, output_features):
+  """Final pretraining objective used in Raffel et al., 2019."""
+  del sequence_length
+  ds = dataset
+  ds = select_random_chunk(ds, feature_key='targets', max_length=65536)
+  ds = reduce_concat_tokens(ds, feature_key='targets', batch_size=128)
+  ds = split_tokens(
+      ds,
+      feature_key='targets',
+      min_tokens_per_segment=None,
+      max_tokens_per_segment=random_spans_helper(
+          extra_tokens_per_span_inputs=1,
+          extra_tokens_per_span_targets=1,
+          inputs_length=512,
+          mean_noise_span_length=3.0,
+          noise_density=0.15
+      )[0]
+  )
+  ds = denoise(
+      ds,
+      output_features,
+      inputs_fn=noise_span_to_unique_sentinel,
+      targets_fn=nonnoise_span_to_unique_sentinel,
+      noise_density=0.15,
+      noise_mask_fn=functools.partial(
+          random_spans_noise_mask,
+          mean_noise_span_length=3.0
+      )
+  )
+  return ds
+
+
+def iid_denoising(dataset, sequence_length, output_features):
+  """Baseline pretraining objective used in Raffel et al., 2019."""
+  ds = dataset
+  ds = select_random_chunk(ds, feature_key='targets', max_length=65536)
+  ds = reduce_concat_tokens(ds, feature_key='targets', batch_size=128)
+  ds = split_tokens_to_inputs_length(ds, sequence_length=sequence_length)
+  ds = denoise(
+      ds,
+      output_features,
+      inputs_fn=noise_span_to_unique_sentinel,
+      targets_fn=nonnoise_span_to_unique_sentinel,
+      noise_density=0.15,
+      noise_mask_fn=iid_noise_mask
+  )
+  return ds
 
 
 @gin.configurable
@@ -2517,100 +2658,10 @@ def take(dataset, num_examples=-1, **unused_kwargs):
     return dataset.take(num_examples).cache()
 
 
-def parse_tsv(dataset,
-              field_names=None,
-              field_delim='\t'):
-  """Splits TSV lines into dict examples mapping field name to string value.
-
-  Args:
-    dataset: a `tf.data.Dataset` containing comma/tab-delimited strings.
-    field_names: a list of strings, the ordered names of the TSV fields.
-      Defaults to "inputs" and "targets".
-    field_delim: a string, the delimiter to split on e.g. ',' for csv.
-  Returns:
-    A `tf.data.Dataset` containing dict examples mapping field name to string
-    value.
-  """
-  field_names = field_names or ['inputs', 'targets']
-  def parse_line(line):
-    return dict(zip(
-        field_names,
-        tf.io.decode_csv(
-            line, record_defaults=[''] * len(field_names),
-            field_delim=field_delim, use_quote_delim=False)
-    ))
-
-  return dataset.map(
-      parse_line, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
-
-def preprocess_tsv(dataset,
-                   field_delim='\t',
-                   num_fields=2,
-                   inputs_format='{0}',
-                   targets_format='{1}'):
-  r"""Parse tab-delimited strings into inputs and targets.
-
-  This function takes a tf.data.Dataset of strings, each of which contains
-  tab-delimited fields.  The function returns a tf.data.Dataset of feature
-  dictionaries of the form {"inputs": string, "targets": string}.
-
-  inputs_format contains a template string and field numbers used to produce
-  the "inputs" string.
-  targets_format contains a template string and field numbers used to produce
-  the "targets" string.
-
-  Example:
-    The input dataset contains the lines:
-    "6,7,42"
-    "2,9,18"
-    preprocess_tsv(dataset,
-                   field_delim=',',
-                   inputs_format='numerator: {2} denominator: {1}',
-                   targets_format='quotient: {0}'
-    would produce a dataset containing the dictionaries:
-    {"inputs": "numerator: 42 denomnator: 7", "targets": "quotient: 6"}
-    {"inputs": "numerator: 18 denomnator: 9", "targets": "quotient: 2"}
-
-  Args:
-    dataset: a tf.data.Dataset containing comma/tab-delimited strings.
-    field_delim: a string, the delimiter to split on e.g. ',' for csv.
-    num_fields: an integer
-    inputs_format: a string, the desired output format with placeholders for
-      field values.
-    targets_format: a string, the desired output format with placeholders for
-      field values.
-  Returns:
-    a tf.data.Dataset of feature dictionaries with 'inputs' and
-    'targets' features.
-  """
-  def _format_part(part, field_values):
-    found = re.findall(r'{(\d)}', part)
-    if found:
-      return field_values[int(found[0])]
-    else:
-      return part
-
-  def _format(format_string, field_values):
-    parts = [_format_part(p, field_values)
-             for p in re.split(r'({\d})', format_string)]
-    return tf.strings.join(parts)
-
-  def _parse_fn(line):
-    """Function to process a line."""
-    field_values = tf.io.decode_csv(
-        line, record_defaults=[''] * num_fields,
-        field_delim=field_delim, use_quote_delim=False)
-    return {'inputs': _format(inputs_format, field_values),
-            'targets': _format(targets_format, field_values)}
-  return dataset.map(
-      _parse_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
-
 # ==========================Deprecated=========================================
 
 
 @gin.configurable
 def num_parallel_calls(deterministic=False):
   """DEPRECATED: Cannot be removed to preserve gin backward compatibility."""
-  raise AssertionError('`num_paralell_calls` is deprecated. Do not use.')
+  raise NotImplementedError('`num_paralell_calls` is deprecated. Do not use.')
