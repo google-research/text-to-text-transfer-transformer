@@ -15,7 +15,6 @@
 # Lint as: python3
 """Tests for t5.data.utils."""
 
-import functools
 import os
 
 from absl.testing import absltest
@@ -30,7 +29,7 @@ tf.enable_eager_execution()
 
 TaskRegistry = utils.TaskRegistry
 mock = absltest.mock
-partial = functools.partial
+
 
 class AnyArg(object):
 
@@ -436,91 +435,86 @@ class TasksTest(test_utils.FakeTaskTest):
     fn_task = TaskRegistry.get("task_no_eos")
     test_utils.verify_task_matches_fake_datasets(fn_task, use_cached=False)
 
-  def _compare_with_seeds(self, dataset_fn, same_seeds, should_equal):
-
-    dataset_fn = functools.partial(
-        dataset_fn, split="train", sequence_length={"inputs": 13, "targets": 13}
-    )
-    dataset1 = dataset_fn(seed=0)
-    dataset1 = list(tfds.as_numpy(dataset1))
-    dataset2 = dataset_fn(seed=0 if same_seeds else 42)
-    dataset2 = list(tfds.as_numpy(dataset2))
-    if should_equal:
-      test_utils.assert_lists_eq(dataset1, dataset2)
-    else:
-      test_utils.assert_lists_neq(dataset1, dataset2)
-
   def test_same_seeds_cached(self):
-    self._compare_with_seeds(
-        functools.partial(
-            self.cached_task.get_dataset,
-            use_cached=True, shuffle=True),
-        same_seeds=True,
-        should_equal=True)
+    dataset1 = self.cached_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=True, shuffle=True, seed=0)
+    dataset2 = self.cached_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=True, shuffle=True, seed=0)
+    test_utils.assert_datasets_eq(dataset1, dataset2)
 
   def test_different_seeds_cached(self):
-    self._compare_with_seeds(
-        functools.partial(
-            self.cached_task.get_dataset,
-            use_cached=True, shuffle=True),
-        same_seeds=False,
-        should_equal=False)
+    dataset1 = self.cached_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=True, shuffle=True, seed=0)
+    dataset2 = self.cached_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=True, shuffle=True, seed=42)
+    test_utils.assert_datasets_neq(dataset1, dataset2)
 
   def test_same_seeds_uncached(self):
-    self._compare_with_seeds(
-        functools.partial(
-            self.uncached_task.get_dataset,
-            use_cached=False, shuffle=True),
-        same_seeds=True,
-        should_equal=True)
+    dataset1 = self.uncached_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=False, shuffle=True, seed=0)
+    dataset2 = self.uncached_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=False, shuffle=True, seed=0)
+    test_utils.assert_datasets_eq(dataset1, dataset2)
 
   def test_different_seeds_uncached(self):
-    self._compare_with_seeds(
-        functools.partial(
-            self.uncached_task.get_dataset,
-            use_cached=False, shuffle=True),
-        same_seeds=False,
-        should_equal=False)
+    dataset1 = self.uncached_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=False, shuffle=True, seed=0)
+    dataset2 = self.uncached_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=False, shuffle=True, seed=42)
+    test_utils.assert_datasets_neq(dataset1, dataset2)
 
   def test_same_seeds_random_tp_uncached(self):
-    self._compare_with_seeds(
-        functools.partial(
-            self.uncached_random_task.get_dataset,
-            use_cached=False, shuffle=True),
-        same_seeds=True,
-        should_equal=True)
+    dataset1 = self.uncached_random_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=False, shuffle=True, seed=0)
+    dataset2 = self.uncached_random_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=False, shuffle=True, seed=0)
+    test_utils.assert_datasets_eq(dataset1, dataset2)
 
   def test_different_seeds_random_tp_uncached(self):
-    self._compare_with_seeds(
-        functools.partial(
-            self.uncached_random_task.get_dataset,
-            use_cached=False, shuffle=True),
-        same_seeds=False,
-        should_equal=False)
+    dataset1 = self.uncached_random_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=False, shuffle=True, seed=0)
+    dataset2 = self.uncached_random_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=False, shuffle=True, seed=42)
+    test_utils.assert_datasets_neq(dataset1, dataset2)
 
   def test_no_shuffle_with_seed_cached(self):
-    self._compare_with_seeds(
-        functools.partial(
-            self.cached_task.get_dataset,
-            use_cached=True, shuffle=False),
-        same_seeds=False,
-        should_equal=True)
+    dataset1 = self.cached_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=True, shuffle=False, seed=0)
+    dataset2 = self.cached_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=True, shuffle=False, seed=42)
+    test_utils.assert_datasets_eq(dataset1, dataset2)
 
   def test_no_shuffle_with_seed_uncached(self):
-    self._compare_with_seeds(
-        functools.partial(
-            self.uncached_task.get_dataset,
-            use_cached=False, shuffle=False),
-        same_seeds=False,
-        should_equal=True)
+    dataset1 = self.uncached_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=False, shuffle=False, seed=0)
+    dataset2 = self.uncached_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=False, shuffle=False, seed=42)
+    test_utils.assert_datasets_eq(dataset1, dataset2)
 
   def test_no_shuffle_different_seeds_random_tp_uncached(self):
-    self._compare_with_seeds(
-        functools.partial(
-            self.uncached_random_task.get_dataset,
-            use_cached=False, shuffle=False),
-        same_seeds=False,
-        should_equal=False)
+    dataset1 = self.uncached_random_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=False, shuffle=False, seed=0)
+    dataset2 = self.uncached_random_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=False, shuffle=False, seed=42)
+    test_utils.assert_datasets_neq(dataset1, dataset2)
 
 
 class UtilsTest(absltest.TestCase):
