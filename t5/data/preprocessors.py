@@ -1988,6 +1988,33 @@ def split_tokens_to_random_length(dataset, sequence_length, **unused_kwargs):
                       max_tokens_per_segment=sequence_length['inputs'])
 
 
+def trim_tokens_at_front(dataset,
+                         sequence_length,
+                         keys_to_trim=None,
+                         **unused_kwargs):
+  """Token-preprocessor to trim sequence at the beginning.
+
+  The default behavior is to trim the sequence at the end.
+
+  Args:
+    dataset: a tf.data.Dataset with dictionaries containing keys_to_trim.
+    sequence_length: a dict of ints.
+    keys_to_trim: a list of feature keys.
+
+  Returns:
+    a dataset
+  """
+
+  def my_fn(inputs):
+    for key in (keys_to_trim or sequence_length.keys()):
+      if key in inputs:
+        # trim tokens, leaving room for EOS which gets added later
+        inputs[key] = inputs[key][-(sequence_length[key] - 1):]
+    return inputs
+
+  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+
 @gin.configurable()
 def denoise(dataset,
             output_features,
