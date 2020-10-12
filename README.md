@@ -23,6 +23,8 @@ T5 can be used as a library for future model development by providing useful mod
   * [Decode](#decode)
   * [Export](#export)
   * [GPU Usage](#gpu-usage)
+  * [Reproducing our experiments](#reproducing-our-experiments)
+  * [Useful Options](#useful-options)
 * [Released Model Checkpoints](#released-model-checkpoints)
 * [How to Cite](#how-to-cite)
 
@@ -362,6 +364,7 @@ t5_mesh_transformer  \
 ```
 
 
+
 ### Reproducing our experiments
 
 We provide operative configs for all of the experiments in the [paper][paper] in [gs://t5-data/experiments](https://console.cloud.google.com/storage/browser/t5-data/experiments).
@@ -402,6 +405,26 @@ t5_mesh_transformer  \
   --gin_param="utils.tpu_mesh_shape.tpu_topology = '${TPU_SIZE}'"
 ```
 
+### Useful Options
+
+Some training variants need multiple flags to be set at the same time. For each
+of the below variants, add the group of flags to
+`./third_party/py/t5/google/scripts/run_finetune.sh`.
+
+*Deterministic training*
+
+```sh
+  --train_gin_param="mesh_train_dataset_fn.seed=${SEED}" \
+  --train_gin_param="utils.run.skip_seen_data = True" \
+```
+
+*Language model*
+
+```sh
+  --objective="lm" \
+  --train_gin_param="utils.run.model_type = \"lm\"" \
+```
+
 ## Released Model Checkpoints
 
 We have released the following checkpoints for pre-trained models described in our [paper][paper]:
@@ -418,13 +441,15 @@ See [here][released_checkpoints] for a list of additional experimental pre-train
 If you extend or use this work, please cite the [paper][paper] where it was introduced:
 
 ```
-@article{2019t5,
-  author = {Colin Raffel and Noam Shazeer and Adam Roberts and Katherine Lee and Sharan Narang and Michael Matena and Yanqi Zhou and Wei Li and Peter J. Liu},
-  title = {Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer},
-  journal = {arXiv e-prints},
-  year = {2019},
-  archivePrefix = {arXiv},
-  eprint = {1910.10683},
+@article{2020t5,
+  author  = {Colin Raffel and Noam Shazeer and Adam Roberts and Katherine Lee and Sharan Narang and Michael Matena and Yanqi Zhou and Wei Li and Peter J. Liu},
+  title   = {Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer},
+  journal = {Journal of Machine Learning Research},
+  year    = {2020},
+  volume  = {21},
+  number  = {140},
+  pages   = {1-67},
+  url     = {http://jmlr.org/papers/v21/20-074.html}
 }
 ```
 
