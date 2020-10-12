@@ -144,13 +144,13 @@ def main(_):
   gin.add_config_file_search_path(
       pkg_resources.resource_filename(__name__, "gin"))
   try:
-    tf.io.gfile.makedirs(FLAGS.model_dir)
     suffix = 0
-    command_filename = os.path.join(FLAGS.model_dir, "command")
+    command_dir = os.path.join(FLAGS.model_dir, "commands")
+    tf.io.gfile.makedirs(command_dir)
+    command_filename = os.path.join(command_dir, "command")
     while tf.io.gfile.exists(command_filename):
       suffix += 1
-      command_filename = os.path.join(
-          FLAGS.model_dir, "command.{}".format(suffix))
+      command_filename = os.path.join(command_dir, "command.{}".format(suffix))
     with tf.io.gfile.GFile(command_filename, "w") as f:
       f.write(" ".join(sys.argv))
   except tf.errors.PermissionDeniedError:
