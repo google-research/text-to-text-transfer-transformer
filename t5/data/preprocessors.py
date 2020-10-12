@@ -1994,8 +1994,6 @@ def trim_tokens_at_front(dataset,
                          **unused_kwargs):
   """Token-preprocessor to trim sequence at the beginning.
 
-  The default behavior is to trim the sequence at the end.
-
   Args:
     dataset: a tf.data.Dataset with dictionaries containing keys_to_trim.
     sequence_length: a dict of ints.

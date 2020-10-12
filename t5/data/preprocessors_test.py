@@ -613,6 +613,15 @@ class PreprocessorsTest(tf.test.TestCase):
     _verify_split(100, 1)
     _verify_split(1000, 1)
 
+  def test_trim_tokens_at_front(self):
+    sequence_length = {'inputs': 4}
+    inputs = tf.data.Dataset.from_tensors(
+        {'inputs': tf.constant([10, 11, 12, 13, 14, 15])})
+    output = prep.trim_tokens_at_front(inputs, sequence_length=sequence_length)
+
+    expected_output = [{'inputs': tf.constant([13, 14, 15])}]
+    test_utils.assert_dataset(output, expected_output)
+
   def test_split_text_to_words(self):
     dataset = tf.data.Dataset.from_tensor_slices(
         {'text': ['That good.', 'That.']})
