@@ -87,7 +87,7 @@ def maybe_shuffle_and_subsample_dataset(
     ds,
     num_eval_examples=None,
     shuffle_eval_examples=False,
-    shuffle_buffer_size=t5.data.utils.SHUFFLE_BUFFER_SIZE):
+    shuffle_buffer_size=t5.data.SHUFFLE_BUFFER_SIZE):
   """Takes only `num_eval_examples` and shuffles examples if needed."""
 
   if num_eval_examples is None:
@@ -108,7 +108,7 @@ def mesh_eval_dataset_fn(
     use_cached=False,
     pack=False,
     shuffle_eval_examples=False,
-    shuffle_buffer_size=t5.data.utils.SHUFFLE_BUFFER_SIZE):
+    shuffle_buffer_size=t5.data.SHUFFLE_BUFFER_SIZE):
   """Returns all tf.data.Datasets for evaluation on a given mixture.
 
   This uses the format required for utils.run's `eval_dataset_fn` argument in

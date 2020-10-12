@@ -25,13 +25,14 @@ from absl import flags
 from absl import logging
 from absl.testing import absltest
 import numpy as np
+from t5.data import dataset_providers
 from t5.data import sentencepiece_vocabulary
 from t5.data import utils as dataset_utils
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
 
-TaskRegistry = dataset_utils.TaskRegistry
-MixtureRegistry = dataset_utils.MixtureRegistry
+TaskRegistry = dataset_providers.TaskRegistry
+MixtureRegistry = dataset_providers.MixtureRegistry
 
 mock = absltest.mock
 
@@ -423,11 +424,11 @@ def add_tfds_task(
     splits=None):
   TaskRegistry.add(
       name,
-      dataset_utils.TfdsTask,
+      dataset_providers.TfdsTask,
       tfds_name=tfds_name,
       text_preprocessor=text_preprocessor,
       token_preprocessor=token_preprocessor,
-      output_features=dataset_utils.Feature(sentencepiece_vocab()),
+      output_features=dataset_providers.Feature(sentencepiece_vocab()),
       metric_fns=[],
       splits=splits)
 
@@ -440,7 +441,7 @@ def add_task(
     splits=("train", "validation"),
     **kwargs):
   if "output_features" not in kwargs:
-    kwargs["output_features"] = dataset_utils.Feature(sentencepiece_vocab())
+    kwargs["output_features"] = dataset_providers.Feature(sentencepiece_vocab())
   TaskRegistry.add(
       name,
       dataset_fn=dataset_fn,
@@ -566,13 +567,13 @@ class FakeTaskTest(absltest.TestCase):
         _FAKE_DATASET["train"], [2, 1], _dump_examples_to_tsv)
     TaskRegistry.add(
         "text_line_task",
-        dataset_utils.TextLineTask,
+        dataset_providers.TextLineTask,
         split_to_filepattern={
             "train": os.path.join(self.test_data_dir, "train.tsv*"),
         },
         skip_header_lines=1,
         text_preprocessor=[_split_tsv_preprocessor, test_text_preprocessor],
-        output_features=dataset_utils.Feature(sentencepiece_vocab()),
+        output_features=dataset_providers.Feature(sentencepiece_vocab()),
         metric_fns=[])
     self.text_line_task = TaskRegistry.get("text_line_task")
 
@@ -582,7 +583,7 @@ class FakeTaskTest(absltest.TestCase):
         _FAKE_DATASET["train"], [2, 1], _dump_examples_to_tfrecord)
     TaskRegistry.add(
         "tf_example_task",
-        dataset_utils.TFExampleTask,
+        dataset_providers.TFExampleTask,
         split_to_filepattern={
             "train": os.path.join(self.test_data_dir, "train.tfrecord*"),
         },
@@ -591,7 +592,7 @@ class FakeTaskTest(absltest.TestCase):
             "suffix": tf.io.FixedLenFeature([], tf.string),
         },
         text_preprocessor=[test_text_preprocessor],
-        output_features=dataset_utils.Feature(sentencepiece_vocab()),
+        output_features=dataset_providers.Feature(sentencepiece_vocab()),
         metric_fns=[])
     self.tf_example_task = TaskRegistry.get("tf_example_task")
 
@@ -603,11 +604,11 @@ class FakeTaskTest(absltest.TestCase):
       return tf.data.TextLineDataset(filepattern)
     TaskRegistry.add(
         "general_task",
-        dataset_utils.Task,
+        dataset_providers.Task,
         dataset_fn=_dataset_fn,
         splits=["train"],
         text_preprocessor=[_split_tsv_preprocessor, test_text_preprocessor],
-        output_features=dataset_utils.Feature(sentencepiece_vocab()),
+        output_features=dataset_providers.Feature(sentencepiece_vocab()),
         metric_fns=[])
     self.general_task = TaskRegistry.get("general_task")
 

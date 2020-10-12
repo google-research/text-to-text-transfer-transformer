@@ -17,7 +17,7 @@
 from absl.testing import absltest
 from t5.data import preprocessors as prep
 from t5.data import test_utils
-from t5.data import utils
+from t5.data.dataset_providers import Feature
 import tensorflow.compat.v1 as tf
 
 tf.disable_v2_behavior()
@@ -1071,7 +1071,7 @@ class PreprocessorsTest(tf.test.TestCase):
     })
 
     output_features = {
-        'targets': utils.Feature(vocab),
+        'targets': Feature(vocab),
     }
 
     # These are the parameters of denoise in the operative config of 'base'.

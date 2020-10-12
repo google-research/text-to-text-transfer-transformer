@@ -33,7 +33,6 @@ import os
 from absl import app
 from absl import flags
 import t5.data
-from t5.data.utils import TaskRegistry
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
 
@@ -78,7 +77,7 @@ def main(_):
       FLAGS.out_dir, "{}.{{extension}}".format(FILE_NAME_MAP[FLAGS.tfds_name])
   )
 
-  ds = TaskRegistry.get_dataset(
+  ds = t5.data.TaskRegistry.get_dataset(
       FLAGS.task, _FAKE_LEN, FLAGS.split, use_cached=FLAGS.cached, shuffle=False
   )
   examples = [{k: v.numpy() for k, v in ex.items()} for ex in ds]
