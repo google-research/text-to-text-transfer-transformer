@@ -56,6 +56,8 @@ flags.DEFINE_string(
 
 flags.DEFINE_bool("detokenize", False, "If True, then decode ids to strings.")
 
+flags.DEFINE_bool("shuffle", False, "If True, will shuffle data before dump.")
+
 
 @gin.configurable
 def sequence_length(value=512):
@@ -92,7 +94,7 @@ def main(_):
   ds = task.get_dataset(sequence_length=sequence_length(),
                         split=FLAGS.split,
                         use_cached=False,
-                        shuffle=False)
+                        shuffle=FLAGS.shuffle)
 
   keys = re.findall(r"{([\w+]+)}", FLAGS.format_string)
   def _example_to_string(ex):
