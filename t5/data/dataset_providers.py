@@ -168,7 +168,6 @@ class Task(DatasetProviderBase):
                output_features=None,
                num_input_examples=None,
                supports_caching=True,
-               sentencepiece_model_path=None,
                shuffle_buffer_size=SHUFFLE_BUFFER_SIZE):
     """Task constructor.
 
@@ -213,8 +212,6 @@ class Task(DatasetProviderBase):
         to its size in number of input examples (before preprocessing). The
         `num_input_examples` method will return None if not provided.
       supports_caching: bool, whether or not this task supports offline caching.
-      sentencepiece_model_path: DEPRECATED use `output_features` to specify a
-        non-default vocabulary.
       shuffle_buffer_size: an optional integer
     """
     if not _VALID_TASK_NAME_REGEX.match(name):
@@ -241,15 +238,6 @@ class Task(DatasetProviderBase):
     self._cache_dir = None
     self._stats = {}
     self._shuffle_buffer_size = shuffle_buffer_size
-
-    if sentencepiece_model_path == utils.DEFAULT_SPM_PATH:
-      logging.warn(
-          "`sentencepiece_model_path` is deprecated and is ignored. Please "
-          "update your code as this will cause a failure in future versions.")
-    elif sentencepiece_model_path:
-      raise ValueError(
-          "`sentencepiece_model_path` is deprecated. Please use "
-          "`output_features` to specify a non-default vocabulary.")
 
     if hasattr(output_features, "__len__") and not output_features:
       raise ValueError("output_features must be non-empty.")
