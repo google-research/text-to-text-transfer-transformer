@@ -280,3 +280,26 @@ def rate_unsupervised(task, value=1e6):
   del task
   return value
 
+
+# ======================== Decorators =========================================
+
+
+def map_over_dataset(fn):
+  """Decorator to map decorated function over dataset.
+
+  Many preprocessors map a function over a dataset. This decorator helps reduce
+  boilerplate for this common pattern.
+
+  Args:
+    fn: map function
+
+  Returns:
+    Function which takes dataset as first argument.
+  """
+
+  def wrapped_fn(ds, *args, **kargs):
+    return ds.map(
+        lambda arg: fn(arg, *args, **kargs),
+        num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+  return wrapped_fn

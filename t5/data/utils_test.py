@@ -132,6 +132,15 @@ class UtilsTest(absltest.TestCase):
                      [b"this is a target"])
     self.assertEqual(tfe.features.feature["weight"].float_list.value, [5.0])
 
+  def test_map_over_dataset(self):
+    inputs = tf.data.Dataset.range(5)
+
+    @utils.map_over_dataset
+    def test_fn(x):
+      return x + 1
+
+    self.assertEqual(list(tfds.as_numpy(test_fn(inputs))), [1, 2, 3, 4, 5])
+
 
 if __name__ == "__main__":
   absltest.main()
