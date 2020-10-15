@@ -365,11 +365,12 @@ class Task(DatasetProviderBase):
     return dataset
 
   def preprocess_tokens(self, dataset, sequence_length):
-    """Preprocesses tokenized dataset.
+    """Preprocesses tokenized dataset, truncates, and appends EOS.
 
     Args:
       dataset: a tf.data.Dataset
-      sequence_length: dict mapping feature key to int length for that feature
+      sequence_length: dict mapping feature key to int length for that feature.
+        If None, the features will not be truncated.
     Returns:
       a tf.data.Dataset
     """
@@ -387,10 +388,13 @@ class Task(DatasetProviderBase):
     def _trim_and_append_eos(feat, v):
       if feat not in self.output_features:
         return v
-      if self.output_features[feat].add_eos:
-        return tf.concat([v[:sequence_length[feat]-1], [1]], axis=0)
-      else:
-        return v[:sequence_length[feat]]
+      if sequence_length and self.output_features[feat].add_eos:
+        v = tf.concat([v[:sequence_length[feat]-1], [1]], axis=0)
+      elif sequence_length:
+        v = v[:sequence_length[feat]]
+      elif self.output_features[feat].add_eos:
+        v = tf.concat([v, [1]], axis=0)
+      return v
 
     return dataset.map(
         lambda ex: {k: _trim_and_append_eos(k, v) for k, v in ex.items()},

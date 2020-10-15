@@ -118,7 +118,8 @@ def mesh_eval_dataset_fn(
     mixture_or_task_name: string, an identifier for a Mixture or Task in the
       appropriate registry. Must be specified via gin.
     sequence_length: dict mapping feature key to the int length for that feature
-      the max sequence length.
+      the max sequence length. If set to None, packing and padding will be
+      disabled.
     vocabulary: a t5.data.vocabularies.Vocabulary.
     dataset_split: string, which split of the dataset to load.
     num_eval_examples: maximum number of examples per task to use for continuous
@@ -140,7 +141,7 @@ def mesh_eval_dataset_fn(
 
   mixture_or_task = t5.data.get_mixture_or_task(mixture_or_task_name)
 
-  def _get_dataset_for_single_task(task):
+  def _get_dataset_for_single_task(task, sequence_length):
     """Get a tensorflow.data.Dataset for the provided task."""
     ds = task.get_dataset(
         sequence_length, split=dataset_split,
@@ -148,12 +149,20 @@ def mesh_eval_dataset_fn(
     )
     eos_keys = set(
         k for k, f in mixture_or_task.output_features.items() if f.add_eos)
-    ds = transformer_dataset.pack_or_pad(
-        ds,
-        sequence_length,
-        pack=pack,
-        feature_keys=tuple(task.output_features),
-        ensure_eos=eos_keys)
+    if sequence_length is None:
+      tf.logging.info(
+          "Skipping packing/padding for '%s' since sequence length is None.",
+          task.name)
+    else:
+      tf.logging.info(
+          "%sing '%s' with sequence lengths: %s",
+          "Pack" if pack else "Padd", task.name, sequence_length)
+      ds = transformer_dataset.pack_or_pad(
+          ds,
+          sequence_length,
+          pack=pack,
+          feature_keys=tuple(task.output_features),
+          ensure_eos=eos_keys)
     ds = maybe_shuffle_and_subsample_dataset(
         ds, num_eval_examples, shuffle_eval_examples, shuffle_buffer_size)
     return ds
@@ -170,7 +179,10 @@ def mesh_eval_dataset_fn(
     outputs.append(
         transformer_dataset.EvalDataset(
             task.name,
-            functools.partial(_get_dataset_for_single_task, task),
+            functools.partial(
+                _get_dataset_for_single_task,
+                task=task,
+                sequence_length=sequence_length),
             task.postprocess_fn,
             task.metric_fns,
         )
