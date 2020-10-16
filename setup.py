@@ -54,7 +54,7 @@ setuptools.setup(
         'sacrebleu',
         'scikit-learn',
         'scipy',
-        'sentencepiece',
+        'sentencepiece==0.1.92',
         'six>=1.14',  # TODO(adarob): Remove once rouge-score is updated.
         'tensorflow-text',
         'tfds-nightly',
