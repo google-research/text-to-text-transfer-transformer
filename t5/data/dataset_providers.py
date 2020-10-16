@@ -28,7 +28,7 @@ import re
 from absl import logging
 import gin
 from t5.data import utils
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 import tensorflow_datasets as tfds
 
 _DEFAULT_FEATURE_KEYS = ["inputs", "targets"]
@@ -316,10 +316,9 @@ class Task(DatasetProviderBase):
     Returns:
       a validated tf.data.Dataset.
     """
-    types = tf.data.get_output_types(dataset)
-    shapes = tf.data.get_output_shapes(dataset)
+    element_spec = dataset.element_spec
     for feat in self.output_features:
-      if feat not in types:
+      if feat not in element_spec:
         if self.output_features[feat].required:
           raise ValueError(
               "Task dataset is missing expected output feature after {label}: "
@@ -327,24 +326,26 @@ class Task(DatasetProviderBase):
         else:
           # It's ok that this feature does not exist.
           continue
-      if expected_output_type != types[feat]:
+      if expected_output_type != element_spec[feat].dtype:
         raise ValueError(
             "Task dataset has incorrect type for feature '{feat}' after "
             "{label}: Got {actual}, expected {expected}".format(
-                feat=feat, label=error_label, actual=types[feat].name,
+                feat=feat, label=error_label,
+                actual=element_spec[feat].dtype.name,
                 expected=expected_output_type.name))
-      if expected_output_rank != len(shapes[feat]):
+      if expected_output_rank != len(element_spec[feat].shape):
         raise ValueError(
             "Task dataset has incorrect rank for feature '{feat}' after "
             "{label}: Got {actual}, expected {expected}".format(
-                feat=feat, label=error_label, actual=len(shapes[feat]),
+                feat=feat, label=error_label,
+                actual=len(element_spec[feat].shape),
                 expected=expected_output_rank))
 
     def _ensure_no_eos(feat, v):
       if feat not in self.output_features:
         return v
       with tf.control_dependencies([
-          tf.assert_none_equal(
+          tf.debugging.assert_none_equal(
               v, tf.constant(1, tf.int64),
               message="Feature '{feat}' unexpectedly contains EOS=1 token "
               "after {label}.".format(feat=feat, label=error_label))
@@ -495,7 +496,7 @@ class Task(DatasetProviderBase):
       logging.warning(("Global random seed is now set to %d. All TF operations "
                        "are now deterministic with respect to that seed."),
                       seed)
-      tf.set_random_seed(seed)
+      tf.random.set_seed(seed)
 
     if use_cached and not self.supports_caching:
       logging.warning(
@@ -561,7 +562,7 @@ class Task(DatasetProviderBase):
         tf.data.TFRecordDataset,
         cycle_length=16, block_length=16,
         num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    ds = ds.map(lambda ex: tf.parse_single_example(ex, feature_desc),
+    ds = ds.map(lambda ex: tf.io.parse_single_example(ex, feature_desc),
                 num_parallel_calls=tf.data.experimental.AUTOTUNE)
     if self.get_cached_stats(split)["examples"] <= _MAX_EXAMPLES_TO_MEM_CACHE:
       ds = ds.cache()

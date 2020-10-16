@@ -28,7 +28,7 @@ import numpy as np
 from t5.data import dataset_providers
 from t5.data import sentencepiece_vocabulary
 from t5.data import utils as dataset_utils
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 import tensorflow_datasets as tfds
 
 TaskRegistry = dataset_providers.TaskRegistry
@@ -220,7 +220,7 @@ def _assert_compare_to_fake_dataset(
         {"id": [], "ids": [None], "idx": [], "idxs": [None]})
   _pyunit_proxy.assertDictEqual(
       expected_output_shapes,
-      {k: v.as_list() for k, v in ds.output_shapes.items()})
+      {k: v.shape.as_list() for k, v in ds.element_spec.items()})
 
   actual_examples = _get_comparable_examples_from_ds(ds)
   expected_examples = [
@@ -377,7 +377,7 @@ def test_token_preprocessor(dataset, output_features, **unused_kwargs):
   def my_fn(ex):
     inputs = ex["inputs"]
     res = ex.copy()
-    res["inputs"] = tf.where_v2(
+    res["inputs"] = tf.where(
         tf.greater(inputs, 15),
         tf.constant(50, tf.int64),
         inputs)
@@ -394,7 +394,7 @@ def random_token_preprocessor(dataset, output_features, **unused_kwargs):
     tokens = ex["inputs"]
     res = ex.copy()
     n_tokens = tf.size(tokens)
-    random_index = tf.random_uniform([], maxval=n_tokens, dtype=tf.int32)
+    random_index = tf.random.uniform([], maxval=n_tokens, dtype=tf.int32)
     res["inputs"] = [tokens[random_index]]
     return res
 

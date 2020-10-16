@@ -38,14 +38,13 @@ from absl import logging
 import apache_beam as beam
 import apache_beam.metrics as metrics
 import t5
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 import tensorflow_datasets as tfds
 
 
-tf.disable_v2_behavior()
 
-# Significantly speeds up preprocessing.
-tf.enable_eager_execution()
+# Significantly speeds up preprocessing in tf1.
+tf.compat.v1.enable_eager_execution()
 
 FLAGS = flags.FLAGS
 

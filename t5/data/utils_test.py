@@ -17,11 +17,10 @@
 
 from absl.testing import absltest
 from t5.data import utils
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 import tensorflow_datasets as tfds
 
-tf.disable_v2_behavior()
-tf.enable_eager_execution()
+tf.compat.v1.enable_eager_execution()
 
 mock = absltest.mock
 

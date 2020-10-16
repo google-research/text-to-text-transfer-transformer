@@ -22,7 +22,7 @@ These functions should assume input strings to be unicode, but that strings
 in the `example` dict will be in bytes.
 """
 
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 
 def string_to_float(string, default=-1., **unused_kwargs):

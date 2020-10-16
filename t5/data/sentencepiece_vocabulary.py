@@ -21,7 +21,7 @@ import hashlib
 
 import gin
 from t5.data import vocabularies
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 import tensorflow_text as tf_text
 
 import sentencepiece as sentencepiece_processor
@@ -56,7 +56,7 @@ class SentencePieceVocabulary(vocabularies.Vocabulary):
   def _load_model(self):
     """Load SPM and Python tokenizer."""
     # Handle cases where SP can't load the file, but gfile can.
-    with tf.gfile.GFile(self._sentencepiece_model_file, "rb") as f:
+    with tf.io.gfile.GFile(self._sentencepiece_model_file, "rb") as f:
       self._sp_model = f.read()
     # Load Python tokenizer and ensure the EOS and PAD IDs are correct.
     # TODO(adarob): Add support for arbitrary EOS and PAD IDs.
@@ -148,7 +148,7 @@ class SentencePieceVocabulary(vocabularies.Vocabulary):
     Returns:
       a tf Scalar with dtype tf.string
     """
-    ids = tf.where_v2(
+    ids = tf.where(
         tf.less(ids, self.tokenizer.GetPieceSize()),
         ids, self.tokenizer.unk_id())
 

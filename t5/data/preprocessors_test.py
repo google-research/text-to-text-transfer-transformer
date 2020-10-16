@@ -18,10 +18,9 @@ from absl.testing import absltest
 from t5.data import preprocessors as prep
 from t5.data import test_utils
 from t5.data.dataset_providers import Feature
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
-tf.disable_v2_behavior()
-tf.enable_eager_execution()
+tf.compat.v1.enable_eager_execution()
 
 mock = absltest.mock
 assert_dataset = test_utils.assert_dataset
@@ -54,7 +53,7 @@ class PreprocessorsTest(tf.test.TestCase):
       self.assertFalse(self.evaluate(last))
 
   def test_random_spans_noise_mask(self):
-    tf.set_random_seed(55)
+    tf.random.set_seed(55)
     length = 32
     noise_density = 0.25
     mean_noise_span_length = 2.0
@@ -122,7 +121,7 @@ class PreprocessorsTest(tf.test.TestCase):
     self.assertAllEqual(output, expected_output)
 
   def test_permute_noise_tokens(self):
-    tf.set_random_seed(55)
+    tf.random.set_seed(55)
     vocabulary = test_utils.mock_vocabulary({'foo': 10}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
     noise_mask = tf.constant([True, True, False, False, True, False])
@@ -132,7 +131,7 @@ class PreprocessorsTest(tf.test.TestCase):
     self.assertAllEqual(output, expected_output)
 
   def test_noise_token_to_gathered_token(self):
-    tf.set_random_seed(55)
+    tf.random.set_seed(55)
     vocabulary = test_utils.mock_vocabulary({'foo': 10}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
     noise_mask = tf.constant([True, True, False, False, True, False])
@@ -142,7 +141,7 @@ class PreprocessorsTest(tf.test.TestCase):
     self.assertAllEqual(output, expected_output)
 
   def test_noise_token_to_random_token(self):
-    tf.set_random_seed(55)
+    tf.random.set_seed(55)
     vocabulary = test_utils.mock_vocabulary({'foo': 10}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
     noise_mask = tf.constant([True, True, False, False, True, False])
@@ -153,7 +152,7 @@ class PreprocessorsTest(tf.test.TestCase):
     self.assertAllEqual(output, expected_output)
 
   def test_noise_token_to_random_token_or_sentinel(self):
-    tf.set_random_seed(55)
+    tf.random.set_seed(55)
     vocabulary = test_utils.mock_vocabulary({'foo': 10}, vocab_size=1000)
     tokens = tf.constant(list(range(10)))
     noise_mask = tf.constant(
@@ -1065,7 +1064,7 @@ class PreprocessorsTest(tf.test.TestCase):
     assert_dataset(dataset, [{'f1': 'a', 'f2': 'b'}, {'f1': 'c', 'f2': 'd'}])
 
   def test_denoise(self):
-    tf.set_random_seed(55)
+    tf.random.set_seed(55)
 
     vocab = test_utils.sentencepiece_vocab()
     target_tokens = vocab.encode('The quick brown fox.')

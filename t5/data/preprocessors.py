@@ -20,9 +20,10 @@ import math
 import re
 import uuid
 
+from absl import logging
 import babel
 import gin
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
 # pylint: disable=g-long-lambda
 
@@ -73,10 +74,9 @@ def translate(dataset, source_language, target_language):
   # Language codes like zh-cn are not supported; use only the first 2 chars
   for language in (source_language, target_language):
     if language != language[:2]:
-      tf.logging.warn(
-          'Extended language code {} not supported. Falling back on {}'.format(
-              language, language[:2]
-          )
+      logging.warn(
+          'Extended language code %s not supported. Falling back on %s.',
+          language, language[:2]
       )
   lang_id_to_string = {
       source_language: babel.Locale(source_language[:2]).english_name,
@@ -348,25 +348,21 @@ def _span_answer(context, answer_text):
     """
     l_n = tf.size(n)
     l_h = tf.size(h)
-    i = tf.constant(0)
-    end = l_h - l_n
-    # TODO(peterjliu): Replace with craffel@'s more efficient code
-    # if necessary: cr/254848350.
-    w = tf.while_loop(
-        lambda i: tf.logical_and(tf.less(i, end),
-                                 tf.reduce_any(tf.not_equal(h[i:i+l_n], n))),
-        lambda i: i+1,
-        [i])
-    return tf.cond(tf.equal(end, w), lambda: -1, lambda: w)
+    found = -1
+    for i in tf.range(0, l_h - l_n):
+      if tf.reduce_all(tf.equal(h[i:i+l_n], n)):
+        found = i
+        break
+    return found
 
   answer_tokens = space_tok(answer_text)
   context_tokens = space_tok(context)
   start = find_subseq(answer_tokens, context_tokens)
   end = start + tf.size(answer_tokens) - 1
   # Just take the first candidate that matches exactly.
-  return tf.cond(tf.equal(start, -1),
-                 lambda: tf.constant(''),
-                 lambda: tf.strings.format('start: {} end: {}', [start, end]))
+  if tf.equal(start, -1):
+    return ''
+  return tf.strings.format('start: {} end: {}', [start, end])
 
 
 def squad_span_space_tokenized(dataset):
@@ -392,7 +388,7 @@ def squad_span_space_tokenized(dataset):
   def my_fn(x):
     """Create squad example as in squad_span_char, but tokenized on spaces."""
     res = dict(x)
-    res['targets'] = _span_answer(x['context'], x['targets'],)
+    res['targets'] = _span_answer(x['context'], x['targets'])
     return res
 
   dataset = squad(dataset)
@@ -464,14 +460,16 @@ def random_split_text(dataset,
       words = random_chunk(words, max_words_total)
     n_words = tf.size(words)
     # first pick a length (number of words per segment)
-    length = tf.cast(tf.exp(tf.random_uniform(
+    length = tf.cast(tf.exp(tf.random.uniform(
         [],
         minval=math.log(min_words_per_segment),
         maxval=math.log(max_words_per_segment))), tf.int32)
     # Pad to a multiple of length, then use tf.reshape to split up the words
     # into num_segments segments each of the given length.
     num_segments = tf.cast(
-        tf.ceil(tf.cast(n_words, tf.float32) / tf.cast(length, tf.float32)),
+        tf.math.ceil(
+            tf.cast(n_words, tf.float32) / tf.cast(length, tf.float32)
+        ),
         tf.int32)
     padding = num_segments * length - n_words
     words = tf.pad(words, [[0, padding]])
@@ -553,23 +551,23 @@ def fill_in_the_blank(dataset,
     # First select the break probability.  We pick this on a log-uniform
     # distribution between 1/(n_words + 1) and  1/2.  This means that some
     # sequences will be chopped roughly and others finely.
-    min_log_p_break = -tf.math.log(tf.to_float(n_words) + 2.0)
+    min_log_p_break = -tf.math.log(tf.cast(n_words, tf.float32) + 2.0)
     max_log_p_break = -tf.math.log(2.0)
-    p_break = tf.exp(tf.random_uniform(
+    p_break = tf.exp(tf.random.uniform(
         [], minval=min_log_p_break, maxval=max_log_p_break))
-    # craffel@ says that there may be bugs in random_uniform making it not
+    # craffel@ says that there may be bugs in random.uniform making it not
     # really uniform.  This doesn't seem horribly important here, but may
     # need another look.
-    breaks = tf.less(tf.random_uniform([n_words - 1]), p_break)
+    breaks = tf.less(tf.random.uniform([n_words - 1]), p_break)
     def one_random_break():
-      pos = tf.random_uniform(
+      pos = tf.random.uniform(
           [], minval=0, maxval=n_words - 1, dtype=tf.int32)
       return tf.one_hot(pos, n_words - 1,
                         dtype=tf.bool, on_value=True, off_value=False)
     breaks = tf.cond(
         tf.math.reduce_any(breaks), lambda: breaks, one_random_break)
     breaks = tf.concat([[True], breaks], axis=0)
-    word_to_seq_id = tf.mod(tf.math.cumsum(tf.to_int32(breaks)), 2)
+    word_to_seq_id = tf.math.mod(tf.math.cumsum(tf.cast(breaks, tf.int32)), 2)
     # separators:
     #   if in your segment: ' '
     #   if break to other segment: ' X'
@@ -579,10 +577,10 @@ def fill_in_the_blank(dataset,
       in_my_seq = tf.equal(word_to_seq_id, seq_id)
       separator_strings = tf.where(
           in_my_seq,
-          tf.fill([n_words], ' '),
-          tf.where(breaks, tf.fill([n_words], ' X'),
-                   tf.fill([n_words], '')))
-      word_strings = tf.where(in_my_seq, words, tf.fill([n_words], ''))
+          ' ',
+          tf.where(breaks, ' X', '')
+      )
+      word_strings = tf.where(in_my_seq, words, '')
       all_strings = tf.stack([separator_strings, word_strings], axis=1)
       results.append(tf.strings.substr(
           tf.strings.reduce_join(all_strings), 1, tf.int32.max))
@@ -696,7 +694,7 @@ def prefix_lm(dataset,
     words = x['words']
     num_words = tf.size(words)
 
-    split = tf.random_uniform(
+    split = tf.random.uniform(
         [], minval=0, maxval=num_words - 1, dtype=tf.int32)
 
     input_words, target_words = tf.split(words, [split, num_words - split])
@@ -1866,10 +1864,11 @@ def select_random_chunk(dataset,
     tokens = x[feature_key]
     n_tokens = tf.size(tokens)
     num_segments = tf.cast(
-        tf.ceil(tf.cast(n_tokens, tf.float32)
-                / tf.cast(max_length, tf.float32)),
+        tf.math.ceil(
+            tf.cast(n_tokens, tf.float32) / tf.cast(max_length, tf.float32)
+        ),
         tf.int32)
-    start = max_length * tf.random_uniform(
+    start = max_length * tf.random.uniform(
         [], maxval=num_segments, dtype=tf.int32)
     end = tf.minimum(start + max_length, n_tokens)
     return {feature_key: tokens[start:end]}
@@ -1944,7 +1943,7 @@ def split_tokens(dataset,
       length = max_tokens_per_segment
     else:
       # pick a length - log-uniformly distributed
-      length = tf.cast(tf.exp(tf.random_uniform(
+      length = tf.cast(tf.exp(tf.random.uniform(
           [],
           minval=math.log(min_tokens_per_segment),
           maxval=math.log(max_tokens_per_segment))), tf.int32)
@@ -1952,7 +1951,9 @@ def split_tokens(dataset,
     # Pad to a multiple of length, then use tf.reshape to split up the tokens
     # into num_segments segments each of the given length.
     num_segments = tf.cast(
-        tf.ceil(tf.cast(n_tokens, tf.float32) / tf.cast(length, tf.float32)),
+        tf.math.ceil(
+            tf.cast(n_tokens, tf.float32) / tf.cast(length, tf.float32))
+        ,
         tf.int32)
     padding = num_segments * length - tf.size(tokens)
     tokens = tf.pad(tokens, [[0, padding]])
@@ -1963,7 +1964,8 @@ def split_tokens(dataset,
 
   # Filter empty examples.
   dataset = dataset.filter(lambda x: tf.not_equal(tf.size(x[feature_key]), 0))
-  dataset = dataset.map(_split_tokens, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  dataset = dataset.map(
+      _split_tokens, num_parallel_calls=tf.data.experimental.AUTOTUNE)
   dataset = dataset.unbatch()
   return dataset.map(
       _strip_padding, num_parallel_calls=tf.data.experimental.AUTOTUNE)
@@ -2170,7 +2172,7 @@ def trivia_qa_truncate_inputs(dataset, output_features, sequence_length):
 
       def slice_inputs(inputs, answer_len, pos_mask):
         """Helper function to slice inputs while keeping the answer."""
-        ans_start_pos = tf.to_int32(tf.where(pos_mask)[0][0])
+        ans_start_pos = tf.cast(tf.where(pos_mask)[0][0], tf.int32)
         inputs_len = tf.shape(inputs)[0]
         start_range_min = tf.maximum(
             0, ans_start_pos - (max_input_tokens - answer_len))
@@ -2217,7 +2219,7 @@ def unsupervised(dataset, preprocessors=None, **kwargs):
     A preprocessed tf.data.Dataset.
   """
   if preprocessors is None:
-    tf.logging.warn(
+    logging.warn(
         'unsupervised preprocessor got preprocessors=None; no preprocessing '
         'will be applied.'
     )
@@ -2329,7 +2331,7 @@ def random_spans_noise_mask(length,
                           seed=123),
         [[1, 0]])
     segment_id = tf.cumsum(first_in_segment)
-    segment_length = tf.segment_sum(tf.ones_like(segment_id), segment_id)
+    segment_length = tf.math.segment_sum(tf.ones_like(segment_id), segment_id)
     return segment_length
   noise_span_lengths = _random_segmentation(num_noise_tokens, num_noise_spans)
   nonnoise_span_lengths = _random_segmentation(
@@ -2338,7 +2340,7 @@ def random_spans_noise_mask(length,
       tf.stack([nonnoise_span_lengths, noise_span_lengths], axis=1),
       [num_noise_spans * 2])
   span_starts = tf.cumsum(interleaved_span_lengths)[:-1]
-  span_start_indicator = tf.unsorted_segment_sum(
+  span_start_indicator = tf.math.unsorted_segment_sum(
       tf.ones_like(span_starts), span_starts, length)
   span_num = tf.cumsum(span_start_indicator)
   is_noise = tf.equal(span_num % 2, 1)
@@ -2400,11 +2402,11 @@ def random_spans_helper(inputs_length=gin.REQUIRED,
     tokens_length -= 1
     targets_length -= 1
   if verbose:
-    tf.logging.info(
+    logging.info(
         'tokens_length=%s inputs_length=%s targets_length=%s '
-        'noise_density=%s mean_noise_span_length=%s ' %
-        (tokens_length, inputs_length, targets_length,
-         noise_density, mean_noise_span_length))
+        'noise_density=%s mean_noise_span_length=%s ',
+        tokens_length, inputs_length, targets_length,
+        noise_density, mean_noise_span_length)
   return tokens_length, targets_length
 
 
@@ -2473,9 +2475,9 @@ def noise_token_to_sentinel(tokens, noise_mask, vocabulary):
   Returns:
     a Tensor with the same shape and dtype as tokens
   """
-  return tf.where_v2(noise_mask,
-                     tf.cast(sentinel_id(vocabulary), tokens.dtype),
-                     tokens)
+  return tf.where(noise_mask,
+                  tf.cast(sentinel_id(vocabulary), tokens.dtype),
+                  tokens)
 
 
 @gin.configurable()
@@ -2489,9 +2491,9 @@ def noise_span_to_sentinel(tokens, noise_mask, vocabulary):
   Returns:
     a Tensor with the same shape and dtype as tokens
   """
-  tokens = tf.where_v2(noise_mask,
-                       tf.cast(sentinel_id(vocabulary), tokens.dtype),
-                       tokens)
+  tokens = tf.where(noise_mask,
+                    tf.cast(sentinel_id(vocabulary), tokens.dtype),
+                    tokens)
   prev_token_is_noise = tf.pad(noise_mask[:-1], [[1, 0]])
   subsequent_noise_tokens = tf.logical_and(noise_mask, prev_token_is_noise)
   return tf.boolean_mask(tokens, tf.logical_not(subsequent_noise_tokens))
@@ -2537,7 +2539,7 @@ def noise_span_to_unique_sentinel(tokens, noise_mask, vocabulary):
 
   sentinel = vocab_size - tf.cumsum(tf.cast(first_noise_tokens, tokens.dtype))
 
-  tokens = tf.where_v2(first_noise_tokens, sentinel, tokens)
+  tokens = tf.where(first_noise_tokens, sentinel, tokens)
   return tf.boolean_mask(tokens, tf.logical_not(subsequent_noise_tokens))
 
 
@@ -2591,9 +2593,9 @@ def permute_noise_tokens(tokens, noise_mask, unused_vocabulary):
   # pad to avoid errors when it has size 0
   permuted = tf.pad(permuted, [[0, 1]])
   indices = tf.cumsum(tf.cast(noise_mask, tf.int32), exclusive=True)
-  return tf.where_v2(noise_mask,
-                     tf.gather(permuted, indices),
-                     tokens)
+  return tf.where(noise_mask,
+                  tf.gather(permuted, indices),
+                  tokens)
 
 
 @gin.configurable()
@@ -2607,11 +2609,11 @@ def noise_token_to_gathered_token(tokens, noise_mask, unused_vocabulary):
   Returns:
     a Tensor with the same shape and dtype as tokens
   """
-  indices = tf.random_uniform(
+  indices = tf.random.uniform(
       shape=tf.shape(tokens), maxval=tf.size(tokens), dtype=tf.int32)
-  return tf.where_v2(noise_mask,
-                     tf.gather(tokens, indices),
-                     tokens)
+  return tf.where(noise_mask,
+                  tf.gather(tokens, indices),
+                  tokens)
 
 
 @gin.configurable()
@@ -2627,13 +2629,13 @@ def noise_token_to_random_token(tokens, noise_mask, vocabulary,
   Returns:
     a Tensor with the same shape and dtype as tokens
   """
-  return tf.where_v2(noise_mask,
-                     tf.random.uniform(
-                         tf.shape(tokens),
-                         minval=num_reserved_tokens,
-                         maxval=vocabulary.vocab_size,
-                         dtype=tokens.dtype),
-                     tokens)
+  return tf.where(noise_mask,
+                  tf.random.uniform(
+                      tf.shape(tokens),
+                      minval=num_reserved_tokens,
+                      maxval=vocabulary.vocab_size,
+                      dtype=tokens.dtype),
+                  tokens)
 
 
 @gin.configurable()
@@ -2653,7 +2655,7 @@ def noise_token_to_random_token_or_sentinel(tokens, noise_mask, vocabulary,
     a Tensor with the same shape and dtype as tokens
   """
   use_random = tf.random.uniform(tf.shape(tokens)) < random_prob
-  return tf.where_v2(
+  return tf.where(
       use_random,
       noise_token_to_random_token(tokens, noise_mask, vocabulary),
       noise_token_to_sentinel(tokens, noise_mask, vocabulary))

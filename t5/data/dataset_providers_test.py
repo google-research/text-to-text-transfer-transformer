@@ -22,11 +22,10 @@ import numpy as np
 from t5.data import dataset_providers
 from t5.data import test_utils
 from t5.data import utils
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 import tensorflow_datasets as tfds
 
-tf.disable_v2_behavior()
-tf.enable_eager_execution()
+tf.compat.v1.enable_eager_execution()
 
 TaskRegistry = dataset_providers.TaskRegistry
 mock = absltest.mock
@@ -133,7 +132,7 @@ class TasksTest(test_utils.FakeTaskTest):
   def test_get_cached_stats(self):
     expected_train_stats = {
         "examples": 3,
-        "inputs_tokens": 36, "inputs_max_tokens":13,
+        "inputs_tokens": 36, "inputs_max_tokens": 13,
         "targets_tokens": 18, "targets_max_tokens": 6}
     self.assertEqual(
         expected_train_stats,
