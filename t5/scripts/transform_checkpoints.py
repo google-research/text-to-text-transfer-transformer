@@ -77,8 +77,8 @@ def average_tensors(tensors):
 def main(_):
   assert FLAGS.model_dirs_or_checkpoints
 
-  if not tf.gfile.Exists(FLAGS.output_dir):
-    tf.gfile.MakeDirs(FLAGS.output_dir)
+  if not tf.io.gfile.exists(FLAGS.output_dir):
+    tf.io.gfile.makedirs(FLAGS.output_dir)
 
   if (FLAGS.operation == "average_last_n" and
       len(FLAGS.model_dirs_or_checkpoints) > 1):
@@ -87,7 +87,7 @@ def main(_):
   checkpoints = []
 
   for path in FLAGS.model_dirs_or_checkpoints:
-    if tf.gfile.IsDirectory(path):
+    if tf.io.gfile.isdir(path):
       # Grab the latest checkpoint for all the provided model dirs
       checkpoint_state = tf.train.get_checkpoint_state(path)
       if FLAGS.operation == "average_last_n":

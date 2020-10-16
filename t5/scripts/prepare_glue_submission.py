@@ -33,7 +33,7 @@ import os
 from absl import app
 from absl import flags
 import t5.data
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 import tensorflow_datasets as tfds
 
 FLAGS = flags.FLAGS
@@ -152,5 +152,4 @@ def main(_):
       tsv_writer.writerows([i, p] for i, p in zip(indices, predictions))
 
 if __name__ == "__main__":
-  tf.enable_eager_execution()
   app.run(main)

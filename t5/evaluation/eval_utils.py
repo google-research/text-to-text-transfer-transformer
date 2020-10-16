@@ -88,7 +88,7 @@ def parse_events_files(tb_summary_dir):
     Event tuples with step and value attributes.
   """
   events = collections.defaultdict(list)
-  for events_file in tf.gfile.Glob(os.path.join(tb_summary_dir, "events.*")):
+  for events_file in tf.io.gfile.glob(os.path.join(tb_summary_dir, "events.*")):
     try:
       for e in tf.train.summary_iterator(events_file):
         for v in e.summary.value:
@@ -169,8 +169,9 @@ def scores_to_df(scores, metric_names=None):
     if tag not in metric_names:
       metric_names[tag] = Metric(tag)
       logging.warning(
-          "TensorBoard tag {} not found in metric_names. "
-          "Using tag as metric name.".format(tag))
+          "TensorBoard tag %s not found in metric_names. "
+          "Using tag as metric name.",
+          tag)
 
   # Sort the tags in scores according to metric_names order
   sorted_tags = sorted(

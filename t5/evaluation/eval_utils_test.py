@@ -134,7 +134,7 @@ class EvalUtilsTest(absltest.TestCase):
     df.index.name = "step"
     output_file = os.path.join(self.create_tempdir().full_path, "results.csv")
     eval_utils.log_csv(df, output_file=output_file)
-    with tf.gfile.Open(output_file) as f:
+    with tf.io.gfile.GFile(output_file) as f:
       output = f.read()
     expected = """step,{},{},{}
 10,,3.000,4.000
