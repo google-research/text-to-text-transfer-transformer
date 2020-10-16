@@ -651,65 +651,6 @@ def fill_in_the_blank_sized(
   return dataset
 
 
-def prefix_lm(dataset,
-              text_key='text',
-              label='prefix: '):
-  """Create a dataset consisting of text prefix examples for LM-style training.
-
-  The input examples should have a key text_key associated with a tf.string
-  value.
-
-  The output examples have keys 'inputs' and 'targets'.
-
-  The input string is split on whitespace to form a sequence of words.
-  A random uniform distribution is used to select a prefix from the input text.
-  This prefix is the inputs and rest of the text is the targets. Inputs with
-  less than two words are dropped.
-
-  The given label is prepended to the inputs.
-
-  EXAMPLE:
-
-  input:
-  {
-    'text': 'The fat cat sat on the mat.'
-  }
-  output:
-  {
-    'inputs': 'prefix: The fat'
-    'targets': 'cat sat on the mat.'
-  }
-
-  Args:
-    dataset: a tf.data.Dataset
-    text_key: a string, the key for the text feature to preprocess in the
-      dataset examples.
-    label: a string, the label to prepend to the inputs.
-  Returns:
-    a tf.data.Dataset
-  """
-
-  def my_fn(x):
-    """Split an example into two parts for text2text models."""
-    words = x['words']
-    num_words = tf.size(words)
-
-    split = tf.random.uniform(
-        [], minval=0, maxval=num_words - 1, dtype=tf.int32)
-
-    input_words, target_words = tf.split(words, [split, num_words - split])
-    inputs = tf.strings.join(
-        [label,
-         tf.strings.reduce_join([input_words], separator=' ')])
-
-    targets = tf.strings.reduce_join([target_words], separator=' ')
-
-    return {'inputs': inputs, 'targets': targets}
-
-  dataset = _split_text_to_words(dataset, text_key, min_num_words=2)
-  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
-
 def neighboring_pairs(dataset, text_key='text', reuse_sentences=True):
   """Create a dataset consisting of neighboring sentence pairs.
 
@@ -1784,6 +1725,7 @@ def preprocess_tsv(dataset,
 # ======================Token Preprocessors=====================================
 
 
+# TODO(adarob): Add a test.
 def span_corruption(dataset, sequence_length, output_features):
   """Final pretraining objective used in Raffel et al., 2019."""
   del sequence_length
@@ -1816,6 +1758,7 @@ def span_corruption(dataset, sequence_length, output_features):
   return ds
 
 
+# TODO(adarob): Add a test.
 def iid_denoising(dataset, sequence_length, output_features):
   """Baseline pretraining objective used in Raffel et al., 2019."""
   ds = dataset
@@ -1829,6 +1772,22 @@ def iid_denoising(dataset, sequence_length, output_features):
       targets_fn=nonnoise_span_to_unique_sentinel,
       noise_density=0.15,
       noise_mask_fn=iid_noise_mask
+  )
+  return ds
+
+
+def prefix_lm(dataset, sequence_length, output_features):
+  """Prefix language modeling objective used in Raffel et al. 2019."""
+  ds = dataset
+  ds = select_random_chunk(ds, feature_key='targets', max_length=65536)
+  ds = split_tokens_to_inputs_length(ds, sequence_length=sequence_length)
+  ds = denoise(
+      ds,
+      output_features,
+      inputs_fn=drop_nonnoise_tokens,
+      targets_fn=drop_noise_tokens,
+      noise_density=0.5,
+      noise_mask_fn=random_prefix_noise_mask,
   )
   return ds
 
@@ -1936,7 +1895,7 @@ def split_tokens(dataset,
     a dataset
   """
   def _split_tokens(x):
-    """Split one token sequence into multiple multiple."""
+    """Split one token sequence into multiple sequenes."""
     tokens = x[feature_key]
     n_tokens = tf.size(tokens)
     if min_tokens_per_segment is None:

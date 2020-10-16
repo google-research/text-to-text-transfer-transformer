@@ -8,12 +8,12 @@ include 'objectives/denoise.gin'
 # close proximity.
 preprocessors.unsupervised.preprocessors = [
 @preprocessors.select_random_chunk,
-@preprocessors.split_tokens_to_random_length,
+@preprocessors.split_tokens_to_inputs_length,
 @preprocessors.denoise,
 ]
 
 
 preprocessors.denoise.noise_mask_fn = @preprocessors.random_prefix_noise_mask
 preprocessors.denoise.noise_density = 0.5
-preprocessors.denoise.inputs_fn = @preprocessors.drop_noise_tokens
-preprocessors.denoise.targets_fn = @preprocessors.drop_nonnoise_tokens
+preprocessors.denoise.inputs_fn = @preprocessors.drop_nonnoise_tokens
+preprocessors.denoise.targets_fn = @preprocessors.drop_noise_tokens

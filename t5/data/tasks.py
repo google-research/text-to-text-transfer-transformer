@@ -62,6 +62,18 @@ TaskRegistry.add(
     metric_fns=[])
 
 
+# Prefix language modeling pretraining task used in Raffel et al., 2019.
+TaskRegistry.add(
+    "c4_v220_prefix_lm",
+    TfdsTask,
+    tfds_name="c4/en:2.2.0",
+    text_preprocessor=functools.partial(
+        preprocessors.rekey, key_map={"inputs": None, "targets": "text"}),
+    token_preprocessor=preprocessors.prefix_lm,
+    output_features=DEFAULT_OUTPUT_FEATURES,
+    metric_fns=[])
+
+
 # Configurable tasks used for comparisons in Raffel et al., 2019.
 _c4_config_suffixes = ["", ".noclean", ".realnewslike", ".webtextlike"]
 for config_suffix in _c4_config_suffixes:
