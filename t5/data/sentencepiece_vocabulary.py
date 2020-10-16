@@ -21,7 +21,7 @@ import hashlib
 
 import gin
 from t5.data import vocabularies
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 import tensorflow_text as tf_text
 
 import sentencepiece as sentencepiece_processor
