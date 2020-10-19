@@ -39,7 +39,7 @@ class SentencepieceVocabularyTest(absltest.TestCase):
     self.assertEqual(
         _TEST_STRING,
         tf.compat.as_bytes(vocab.decode(_TEST_TOKENS)))
-    self.assertEqual(
+    self.assertSequenceEqual(
         _TEST_TOKENS,
         tuple(vocab.encode_tf(_TEST_STRING).numpy()))
     self.assertEqual(
@@ -52,6 +52,7 @@ class SentencepieceVocabularyTest(absltest.TestCase):
     self.assertEqual("v", vocab.decode([25]))
     self.assertEqual(_UNK_STRING, tf.compat.as_bytes(vocab.decode([35])))
     self.assertEqual(_UNK_STRING, vocab.decode_tf([35]).numpy())
+
 
   def test_equal(self):
     vocab1 = test_utils.sentencepiece_vocab()

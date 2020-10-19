@@ -33,6 +33,7 @@ class SentencePieceVocabulary(vocabularies.Vocabulary):
 
   Assumes the model was built using flags to reserve ID=0 for padding, ID=1 for
   EOS, and ID=2 for UNK.
+
   """
 
   def __init__(self, sentencepiece_model_file, extra_ids=None):
@@ -102,7 +103,7 @@ class SentencePieceVocabulary(vocabularies.Vocabulary):
     Returns:
       an integer, the vocabulary size
     """
-    return self.tokenizer.GetPieceSize() + self._extra_ids
+    return self.tokenizer.GetPieceSize() + self._extra_ids  # pylint:disable=unreachable
 
   def encode(self, s):
     """Encode a python string as a list of integers.
