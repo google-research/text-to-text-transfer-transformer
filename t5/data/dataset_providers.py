@@ -898,6 +898,7 @@ class Mixture(DatasetProviderBase):
       use_cached=False,
       shuffle=True,
       seed=None,
+      copy_plaintext=False,
       compute_stats_empirically=False,
   ):
     """Returns the dataset of mixed tasks using the object-specified rates.
@@ -910,6 +911,8 @@ class Mixture(DatasetProviderBase):
       shuffle: bool, whether to shuffle the dataset.  Only used when generating
         on the fly (use_cached=False).
       seed: tf.int64 scalar tf.Tensor (or None) for shuffling tf.data.
+      copy_plaintext: bool, whether to pass through copies of plaintext strings
+        with a "_plaintext" suffix added to the key.
       compute_stats_empirically: a boolean - does not work on TPU
     """
     self._check_same_vocabularies()
@@ -923,11 +926,17 @@ class Mixture(DatasetProviderBase):
       tasks.append(task)
     if not tasks:
       raise ValueError("No datasets have a '{}' split".format(split))
+
+    output_feature_keys = set(self.output_features.keys())
+    if copy_plaintext:
+      output_feature_keys.update(
+          {f + "_plaintext" for f in output_feature_keys})
+
     def filter_features(ex):
-      return {k: v for k, v in ex.items() if k in self.output_features}
+      return {k: v for k, v in ex.items() if k in output_feature_keys}
     datasets = [
         task.get_dataset(sequence_length, split, use_cached, shuffle=shuffle,  # pylint:disable=g-complex-comprehension
-                         seed=seed)
+                         seed=seed, copy_plaintext=copy_plaintext)
         .repeat()
         .map(filter_features, num_parallel_calls=tf.data.experimental.AUTOTUNE)
         for task in tasks]
