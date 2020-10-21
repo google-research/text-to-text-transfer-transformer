@@ -28,7 +28,7 @@ import tensorflow_datasets as tfds
 
 def valid_vocabulary(vocabulary):
   """Tests that a vocabulary is valid to pass to Mesh Tensorflow transformer."""
-   # Mesh TF allows for a (inputs_vocab, targets_vocab) tuple
+  # Mesh TF allows for a (inputs_vocab, targets_vocab) tuple
   if not isinstance(vocabulary, tuple):
     vocabulary = (vocabulary,)
   for v in vocabulary:
@@ -43,7 +43,8 @@ def mesh_train_dataset_fn(
     vocabulary,
     dataset_split=tfds.Split.TRAIN,
     seed=None,
-    use_cached=False):
+    use_cached=False,
+    pack=True):
   """Returns the tf.data.Dataset for training on a given mixture.
 
   This uses the format required for utils.run's `train_dataset_fn` argument in
@@ -60,6 +61,7 @@ def mesh_train_dataset_fn(
     seed: tf.int64 scalar tf.Tensor (or None). Used for both the global seed and
       shuffle seed for tf.data
     use_cached: bool, whether to load the cached version of this dataset.
+    pack: bool, whether to pack the dataset.
 
   Returns:
     A tf.data.Dataset of preprocessed, tokenized, and batched examples.
@@ -78,7 +80,7 @@ def mesh_train_dataset_fn(
   eos_keys = set(
       k for k, f in mixture_or_task.output_features.items() if f.add_eos)
   ds = transformer_dataset.pack_or_pad(
-      ds, sequence_length, pack=True,
+      ds, sequence_length, pack=pack,
       feature_keys=feature_keys, ensure_eos=eos_keys)
   return ds
 
