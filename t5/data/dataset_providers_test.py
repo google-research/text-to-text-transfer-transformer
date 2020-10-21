@@ -505,6 +505,31 @@ class MixturesTest(test_utils.FakeTaskTest):
     res = sum(int(item["inputs"][0]) for item in tfds.as_numpy(mix_ds))
     self.assertEqual(res, 2500)
 
+  def test_mixture_of_mixtures(self):
+    test_utils.add_task("task_a", test_utils.get_fake_dataset)
+    test_utils.add_task("task_b", test_utils.get_fake_dataset)
+    test_utils.add_task("task_c", test_utils.get_fake_dataset)
+    MixtureRegistry.add("another_mix", [("task_a", 1), ("task_b", 1)])
+    MixtureRegistry.add("supermix", [("another_mix", 1), ("task_c", 1)])
+    supermix = MixtureRegistry.get("supermix")
+    names = [task.name for task in supermix.tasks]
+    self.assertEqual(names, ["task_a", "task_b", "task_c"])
+    self.assertEqual([supermix.get_rate(t) for t in supermix.tasks],
+                     [0.5, 0.5, 1])
+
+  def test_mixture_of_mixtures_dupe(self):
+    test_utils.add_task("task2_a", test_utils.get_fake_dataset)
+    test_utils.add_task("task2_b", test_utils.get_fake_dataset)
+    test_utils.add_task("task2_c", test_utils.get_fake_dataset)
+    MixtureRegistry.add("yet_another_mix", [("task2_a", 1), ("task2_b", 1)])
+    MixtureRegistry.add("supermix_with_dupe", [("yet_another_mix", 1),
+                                               ("task2_a", 1), ("task2_c", 1)])
+    supermix = MixtureRegistry.get("supermix_with_dupe")
+    names = [task.name for task in supermix.tasks]
+    self.assertEqual(names, ["task2_a", "task2_b", "task2_c"])
+    self.assertEqual([supermix.get_rate(t) for t in supermix.tasks],
+                     [1.5, 0.5, 1])
+
 
 if __name__ == "__main__":
   absltest.main()

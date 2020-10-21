@@ -812,7 +812,7 @@ class TaskRegistry(DatasetProviderRegistry):
 class Mixture(DatasetProviderBase):
   """Class for mixing multiple tasks."""
 
-  def __init__(self, tasks, default_rate=None):
+  def __init__(self, name, tasks, default_rate=None):
     """Mixture constructor.
 
     A mixture specifies a set of tasks with associated mixing rates.
@@ -829,6 +829,7 @@ class Mixture(DatasetProviderBase):
     receive the Task as an argument.
 
     Args:
+      name: string, a unique name for the Mixture.
       tasks: a list where each element is either a string (task name) or a
         pair whose first element is the task name and whose second element
         is either a float (rate) or a function from Task to float.
@@ -837,6 +838,8 @@ class Mixture(DatasetProviderBase):
     """
     self._task_to_rate = {}
     self._tasks = []
+    self._sub_mixtures = []
+    self._name = name
     for t in tasks:
       if isinstance(t, str):
         task_name = t
@@ -845,20 +848,46 @@ class Mixture(DatasetProviderBase):
           raise ValueError("need a rate for each task")
       else:
         task_name, rate = t
-      self._tasks.append(TaskRegistry.get(task_name))
-      self._task_to_rate[task_name] = rate
-    if len(set(tuple(t.output_features) for t in self._tasks)) != 1:
+
+      if task_name in TaskRegistry.names():
+        self._tasks.append(TaskRegistry.get(task_name))
+        self._task_to_rate[task_name] = rate
+      else:
+        self._sub_mixtures.append(MixtureRegistry.get(task_name))
+        self._task_to_rate[task_name] = rate
+
+    if len(set(tuple(t.output_features) for t in self.tasks)) != 1:
       raise ValueError(
           "All Tasks in a Mixture must have the same output features."
       )
 
   @property
+  def name(self):
+    return self._name
+
+  @property
   def tasks(self):
-    return self._tasks
+    sub_tasks = (mix.tasks for mix in self._sub_mixtures)
+    return list(sorted(set(sum(sub_tasks, self._tasks)), key=lambda t: t.name))
+
+  @property
+  def total_rate(self):
+    return sum(float(rate(name) if callable(rate) else rate)
+               for name, rate in self._task_to_rate.items())
 
   def get_rate(self, task):
-    rate = self._task_to_rate[task.name]
-    return float(rate(task) if callable(rate) else rate)
+    value = 0.0
+
+    for mix in self._sub_mixtures:
+      if task in mix.tasks:
+        rate = self._task_to_rate[mix.name]
+        value += rate * mix.get_rate(task) / mix.total_rate
+
+    if task.name in self._task_to_rate:
+      rate = self._task_to_rate[task.name]
+      value += float(rate(task) if callable(rate) else rate)
+
+    return value
 
   def num_input_examples(self, split):
     return sum(t.num_input_examples(split) for t in self.tasks)
@@ -867,12 +896,12 @@ class Mixture(DatasetProviderBase):
   def output_features(self):
     # We require all tasks to have the same output_features in __init__
     # so we can just get the output_features for the 0th task
-    return self._tasks[0].output_features
+    return self.tasks[0].output_features
 
   def _check_same_vocabularies(self):
     """Throw an Exception if features across tasks have different vocabs."""
-    for name, feature in self._tasks[0].output_features.items():
-      for task in self._tasks[1:]:
+    for name, feature in self.tasks[0].output_features.items():
+      for task in self.tasks[1:]:
         if task.output_features[name].vocabulary != feature.vocabulary:
           raise ValueError(
               "Features across tasks in a mixture must use the same vocabulary."
@@ -889,7 +918,7 @@ class Mixture(DatasetProviderBase):
     Returns: a Vocabulary object.
     """
     self._check_same_vocabularies()
-    return self._tasks[0].get_vocabulary(feature_name=feature_name)
+    return self.tasks[0].get_vocabulary(feature_name=feature_name)
 
   def get_dataset(
       self,
@@ -1037,7 +1066,7 @@ class MixtureRegistry(DatasetProviderRegistry):
 
   @classmethod
   def add(cls, name, tasks, default_rate=None):
-    super(MixtureRegistry, cls).add(name, Mixture, tasks, default_rate)
+    super(MixtureRegistry, cls).add(name, Mixture, name, tasks, default_rate)
 
 
 def get_mixture_or_task(task_or_mixture_name):
