@@ -23,12 +23,15 @@ import uuid
 from absl import logging
 import babel
 import gin
+from t5.data import utils
 import tensorflow as tf
 
 # pylint: disable=g-long-lambda
+AUTOTUNE = tf.data.experimental.AUTOTUNE
 
 
-def rekey(dataset, key_map=None):
+@utils.map_over_dataset
+def rekey(x, key_map=None):
   """Replace the feature keys according to the mapping in `key_map`.
 
   For example, if the dataset returns examples of the format:
@@ -38,22 +41,22 @@ def rekey(dataset, key_map=None):
   {'boo': 'something', 'spar': 'something else'}
 
   If a mapping is to an empty key or None, set the new key to an empty string.
-
   Args:
-    dataset: a tf.data.Dataset to process.
+    x: an example to process.
     key_map: dictionary mapping new keys to original keys
   Returns:
-    A preprocessed tf.data.Dataset with the format listed above.
+    A preprocessed example with the format listed above.
   """
-  def my_fn(x):
-    if key_map:
-      return {new_key: x[old_key] if old_key else ''
-              for new_key, old_key in key_map.items()}
-    return x
-  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  if key_map:
+    return {
+        new_key: x[old_key] if old_key else ''
+        for new_key, old_key in key_map.items()
+    }
+  return x
 
 
-def translate(dataset, source_language, target_language):
+@utils.map_over_dataset
+def translate(x, source_language, target_language):
   """Convert a translation dataset to a text2text pair.
 
   For example, say the dataset returns examples of this format:
@@ -64,12 +67,12 @@ def translate(dataset, source_language, target_language):
      'targets': 'That is good.'}
 
   Args:
-    dataset: a tf.data.Dataset to process.
+    x: an example to process.
     source_language: source language code (e.g. 'en') to translate from.
     target_language: target language code (e.g. 'de') to translate to.
 
   Returns:
-    A preprocessed tf.data.Dataset with the format listed above.
+    A preprocessed example with the format listed above.
   """
   # Language codes like zh-cn are not supported; use only the first 2 chars
   for language in (source_language, target_language):
@@ -82,18 +85,16 @@ def translate(dataset, source_language, target_language):
       source_language: babel.Locale(source_language[:2]).english_name,
       target_language: babel.Locale(target_language[:2]).english_name,
   }
-  def my_fn(x):
-    """Add translate X to X strings to source/target language strings."""
-    src_str = 'translate {}'.format(lang_id_to_string[source_language])
-    tgt_str = ' to {}: '.format(lang_id_to_string[target_language])
-    return {
-        'inputs': tf.strings.join([src_str, tgt_str, x[source_language]]),
-        'targets': x[target_language],
-    }
-  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  src_str = 'translate {}'.format(lang_id_to_string[source_language])
+  tgt_str = ' to {}: '.format(lang_id_to_string[target_language])
+  return {
+      'inputs': tf.strings.join([src_str, tgt_str, x[source_language]]),
+      'targets': x[target_language],
+  }
 
 
-def summarize(dataset, article_key, summary_key):
+@utils.map_over_dataset
+def summarize(x, article_key, summary_key):
   """Convert a summarization dataset to a text2text pair.
 
   For example, say the dataset returns examples of this format:
@@ -103,20 +104,17 @@ def summarize(dataset, article_key, summary_key):
     {'inputs': 'summarize': <article>, 'targets': <summary>}
 
   Args:
-    dataset: a tf.data.Dataset to process.
+    x: an example to process.
     article_key: the feature key for the article to summarize.
     summary_key: the feature key for the target summary.
   Returns:
-    A preprocessed tf.data.Dataset with the format listed above.
+    A preprocessed example with the format listed above.
   """
-  def my_fn(x):
-    """Convert summarization example to a text2text example."""
-    strs_to_join = ['summarize:', x[article_key]]
-    return {
-        'inputs': tf.strings.join(strs_to_join, separator=' '),
-        'targets': x[summary_key],
-    }
-  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  strs_to_join = ['summarize:', x[article_key]]
+  return {
+      'inputs': tf.strings.join(strs_to_join, separator=' '),
+      'targets': x[summary_key],
+  }
 
 
 # Unicode ranges for characters in non-spaced languages.
@@ -144,29 +142,27 @@ NON_SPACED_LANGUAGE_RANGES = (
 )
 
 
-def pad_nonspaced_languages(dataset, text_key='text'):
+@utils.map_over_dataset
+def pad_nonspaced_languages(x, text_key='text'):
   """Pad non-spaced languages with spaces around each character.
 
   Args:
-    dataset: a tf.data.Dataset to process.
+    x: an example to process.
     text_key: a string, the key for the text feature to preprocess in the
       dataset examples.
 
   Returns:
-    a tf.data.Dataset with the modified examples.
+    A preprocessed example.
   """
-  def my_fn(x):
-    res = dict(x)
-    text = res[text_key]
-    # Add spaces around any character from a non-spaced language.
-    pattern = ''.join(NON_SPACED_LANGUAGE_RANGES)
-    text = tf.strings.regex_replace(text, u'([{}])'.format(pattern), r' \1 ')
-    # Collapse consecutive whitespace into one space.
-    text = tf.strings.regex_replace(text, r'\s+', ' ')
-    res[text_key] = text
-    return res
-
-  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  res = dict(x)
+  text = res[text_key]
+  # Add spaces around any character from a non-spaced language.
+  pattern = ''.join(NON_SPACED_LANGUAGE_RANGES)
+  text = tf.strings.regex_replace(text, u'([{}])'.format(pattern), r' \1 ')
+  # Collapse consecutive whitespace into one space.
+  text = tf.strings.regex_replace(text, r'\s+', ' ')
+  res[text_key] = text
+  return res
 
 
 def _pad_punctuation(text):
@@ -275,11 +271,13 @@ def trivia_qa(dataset):
         'inputs': join_q_c,
         'targets': a
     }
-  dataset = dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+  dataset = dataset.map(my_fn, num_parallel_calls=AUTOTUNE)
   return dataset.unbatch()
 
 
-def squad(dataset, include_context=True):
+@utils.map_over_dataset
+def squad(x, include_context=True):
   """Convert SQuAD examples to a text2text pair.
 
   SQuAD produces examples with this form:
@@ -292,31 +290,26 @@ def squad(dataset, include_context=True):
      'answers': [<n answers>]},
 
   Args:
-    dataset: a tf.data.Dataset to process.
+    x: an example to process.
     include_context: a boolean
   Returns:
-    A preprocessed tf.data.Dataset with the format listed above.
+    A preprocessed example with the format listed above.
   """
-  def my_fn(x):
-    """Create squad example."""
-
-    a = _pad_punctuation(x['answers']['text'])
-    q = _pad_punctuation(x['question'])
-    c = _pad_punctuation(x['context'])
-    if include_context:
-      inputs = _string_join(['question:', q, 'context:', c])
-    else:
-      inputs = _string_join(['squad trivia question:', q])
-    return {
-        'inputs': inputs,
-        'targets': a[0],
-        'id': x['id'],
-        'context': c,
-        'question': q,
-        'answers': a
-    }
-
-  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  a = _pad_punctuation(x['answers']['text'])
+  q = _pad_punctuation(x['question'])
+  c = _pad_punctuation(x['context'])
+  if include_context:
+    inputs = _string_join(['question:', q, 'context:', c])
+  else:
+    inputs = _string_join(['squad trivia question:', q])
+  return {
+      'inputs': inputs,
+      'targets': a[0],
+      'id': x['id'],
+      'context': c,
+      'question': q,
+      'answers': a
+  }
 
 
 def _span_answer(context, answer_text):
@@ -392,7 +385,7 @@ def squad_span_space_tokenized(dataset):
     return res
 
   dataset = squad(dataset)
-  dataset = dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  dataset = dataset.map(my_fn, num_parallel_calls=AUTOTUNE)
   return dataset.filter(lambda x: tf.strings.length(x['targets']) > 0)
 
 
@@ -478,7 +471,8 @@ def random_split_text(dataset,
     # spaces that get stripped out.
     words = tf.strings.reduce_join(words, axis=1, separator=' ')
     return {text_key: tf.strings.strip(words)}
-  dataset = dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+  dataset = dataset.map(my_fn, num_parallel_calls=AUTOTUNE)
   return dataset.unbatch()
 
 
@@ -489,7 +483,7 @@ def _split_text_to_words(dataset, text_key='text', min_num_words=2):
     res['words'] = tf.strings.split([x[text_key]]).values
     return res
 
-  dataset = dataset.map(split, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  dataset = dataset.map(split, num_parallel_calls=AUTOTUNE)
   return dataset.filter(lambda x: tf.size(x['words']) >= min_num_words)
 
 
@@ -589,7 +583,7 @@ def fill_in_the_blank(dataset,
     targets = tf.stack([results[1], results[0]])
     return {'inputs': inputs, 'targets': targets}
   dataset = _split_text_to_words(dataset, text_key, min_num_words=2)
-  dataset = dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  dataset = dataset.map(my_fn, num_parallel_calls=AUTOTUNE)
   return dataset.unbatch()
 
 
@@ -647,7 +641,7 @@ def fill_in_the_blank_sized(
   dataset = _split_text_to_words(dataset, text_key, min_num_words=2)
   # Filter out examples with fewer words than the minimum.
   dataset = dataset.filter(lambda x: tf.size(x['words']) >= bins[0])
-  dataset = dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  dataset = dataset.map(my_fn, num_parallel_calls=AUTOTUNE)
   return dataset
 
 
@@ -684,8 +678,7 @@ def neighboring_pairs(dataset, text_key='text', reuse_sentences=True):
       lines = tf.strings.split([text], sep='\n').values
       return tf.strings.strip(lines)
 
-    dataset = dataset.map(
-        my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    dataset = dataset.map(my_fn, num_parallel_calls=AUTOTUNE)
     dataset = dataset.unbatch()
     return dataset.filter(lambda x: tf.strings.length(x) > 0)
 
@@ -711,13 +704,11 @@ def neighboring_pairs(dataset, text_key='text', reuse_sentences=True):
         tf.strings.length(x['first']), tf.strings.length(x['second']))
 
   # Split by lines.
-  dataset = dataset.map(
-      lambda x: x[text_key], num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  dataset = dataset.map(lambda x: x[text_key], num_parallel_calls=AUTOTUNE)
   dataset = split_by_lines(dataset)
 
   # Get pairs of neighboring sentences.
-  dataset = dataset.map(
-      split_into_pairs, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  dataset = dataset.map(split_into_pairs, num_parallel_calls=AUTOTUNE)
   dataset = dataset.unbatch()
 
   # Remove examples with empty strings.
@@ -725,8 +716,8 @@ def neighboring_pairs(dataset, text_key='text', reuse_sentences=True):
   return dataset
 
 
-def glue(
-    dataset, benchmark_name, label_names, feature_names=None, id_key='idx'):
+@utils.map_over_dataset
+def glue(x, benchmark_name, label_names, feature_names=None, id_key='idx'):
   """Convert a dataset from glue to text2text examples.
 
   This function uses the feature names from the dataset to unpack examples into
@@ -753,7 +744,7 @@ def glue(
   }
 
   Args:
-    dataset: a tf.data.Dataset to process.
+    x: an example to process.
     benchmark_name: the name of the GLUE benchmark for this dataset.
     label_names: a list of label names corresponding to class index.
     feature_names: an optional ordered list of feature names. If provided,
@@ -761,55 +752,54 @@ def glue(
       features (except 'idx' and 'label') will be used, sorted by name.
     id_key: str, key for id in the dataset. If not provided, 'idx' will be used.
       if None, no id will be added to the dataset.
+
   Returns:
-    a tf.data.Dataset
+    A preprocessed example.
   """
-  def my_fn(x):
-    """Collapse an example into or text2text pair."""
-    # If an ordering is not provided, sort feature keys to ensure a consistent
-    # order.
-    feature_keys = (
-        feature_names or sorted(set(x.keys()).difference(['label', 'idx'])))
-    # Pack keys (formatted as " key: ") and corresponding text feature
-    strs_to_join = []
-    for key in feature_keys:
-      strs_to_join.append('{}:'.format(key))
-      strs_to_join.append(x[key])
-    # Add benchmark name at the start
-    strs_to_join.insert(0, benchmark_name)
-    label_name = tf.cond(
-        # When no label is provided (label == -1), use "<unk>"
-        tf.equal(x['label'], -1),
-        lambda: tf.constant('<unk>'),
-        # Otherwise grab the label text from label_names
-        lambda: tf.gather(label_names, x['label']),
-    )
-    joined = tf.strings.join(strs_to_join, separator=' ')
+  # If an ordering is not provided, sort feature keys to ensure a consistent
+  # order.
+  feature_keys = (
+      feature_names or sorted(set(x.keys()).difference(['label', 'idx'])))
+  # Pack keys (formatted as " key: ") and corresponding text feature
+  strs_to_join = []
+  for key in feature_keys:
+    strs_to_join.append('{}:'.format(key))
+    strs_to_join.append(x[key])
+  # Add benchmark name at the start
+  strs_to_join.insert(0, benchmark_name)
+  label_name = tf.cond(
+      # When no label is provided (label == -1), use "<unk>"
+      tf.equal(x['label'], -1),
+      lambda: tf.constant('<unk>'),
+      # Otherwise grab the label text from label_names
+      lambda: tf.gather(label_names, x['label']),
+  )
+  joined = tf.strings.join(strs_to_join, separator=' ')
 
-    ex = {}
+  ex = {}
 
-    if benchmark_name == 'multirc':
-      # Remove HTML markup.
-      joined = tf.strings.regex_replace(joined, '<br>', ' ')
-      joined = tf.strings.regex_replace(joined, '<(/)?b>', '')
+  if benchmark_name == 'multirc':
+    # Remove HTML markup.
+    joined = tf.strings.regex_replace(joined, '<br>', ' ')
+    joined = tf.strings.regex_replace(joined, '<(/)?b>', '')
 
-      # Store the data index in the returned example (used by eval)
-      ex['idx/paragraph'] = x['idx']['paragraph']
-      ex['idx/question'] = x['idx']['question']
-      ex['idx/answer'] = x['idx']['answer']
-    else:
-      # Store the data index in the returned example (used by eval)
-      if id_key:
-        ex['idx'] = x[id_key]
+    # Store the data index in the returned example (used by eval)
+    ex['idx/paragraph'] = x['idx']['paragraph']
+    ex['idx/question'] = x['idx']['question']
+    ex['idx/answer'] = x['idx']['answer']
+  else:
+    # Store the data index in the returned example (used by eval)
+    if id_key:
+      ex['idx'] = x[id_key]
 
-    ex['inputs'] = joined
-    ex['targets'] = label_name
+  ex['inputs'] = joined
+  ex['targets'] = label_name
 
-    return ex
-  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  return ex
 
 
-def stsb(dataset):
+@utils.map_over_dataset
+def stsb(x):
   """Convert STSB examples to text2text format.
 
   STSB maps two sentences to a floating point number between 1 and 5
@@ -839,22 +829,20 @@ def stsb(dataset):
   }
 
   Args:
-    dataset: a tf.data.Dataset to process.
+    x: an example to process.
   Returns:
-    a tf.data.Dataset
+    A preprocessed example.
   """
-  def my_fn(x):
-    """Collapse an example into a text2text pair."""
-    strs_to_join = [
-        'stsb sentence1:', x['sentence1'], 'sentence2:', x['sentence2']
-    ]
-    label_string = tf.as_string(tf.round(x['label']*5)/5, precision=1)
-    joined = tf.strings.join(strs_to_join, separator=' ')
-    return {'inputs': joined, 'targets': label_string, 'idx': x['idx']}
-  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  strs_to_join = [
+      'stsb sentence1:', x['sentence1'], 'sentence2:', x['sentence2']
+  ]
+  label_string = tf.as_string(tf.round(x['label'] * 5) / 5, precision=1)
+  joined = tf.strings.join(strs_to_join, separator=' ')
+  return {'inputs': joined, 'targets': label_string, 'idx': x['idx']}
 
 
-def wsc(dataset):
+@utils.map_over_dataset
+def wsc(x):
   """Convert WSC examples to text2text format.
 
   WSC includes a sentence along with 2 'spans': the first denoting a noun and
@@ -879,39 +867,36 @@ def wsc(dataset):
   }
 
   Args:
-    dataset: a tf.data.Dataset to process.
+    x: an example to process.
   Returns:
-    a tf.data.Dataset
+    A preprocessed example.
   """
-  def my_fn(x):
-    """Collapse an example into a text2text pair."""
-    def _mark_span(text, span_str, span_idx, mark):
-      pattern_tmpl = r'^((?:\S+\s){N})(W)'
-      pattern = tf.strings.regex_replace(
-          pattern_tmpl, 'N', tf.as_string(span_idx))
-      pattern = tf.strings.regex_replace(pattern, 'W', span_str)
-      return tf.strings.regex_replace(
-          text, pattern, r'\1{0} \2 {0}'.format(mark))
-    text = x['text']
-    text = _mark_span(text, x['span1_text'], x['span1_index'], '*')
-    # Compensate for 2 added "words" added in previous step.
-    span2_index = x['span2_index'] + 2 * tf.cast(
-        x['span1_index'] < x['span2_index'], tf.int32)
-    text = _mark_span(text, x['span2_text'], span2_index, '#')
 
-    # Add benchmark name at the start
-    strs_to_join = ['wsc', 'text:', text]
-    label_name = tf.cond(
-        # When no label is provided (label == -1), use "<unk>"
-        tf.equal(x['label'], -1),
-        lambda: tf.constant('<unk>'),
-        # Otherwise use False/True.
-        lambda: tf.gather(['False', 'True'], x['label'])
-    )
+  def _mark_span(text, span_str, span_idx, mark):
+    pattern_tmpl = r'^((?:\S+\s){N})(W)'
+    pattern = tf.strings.regex_replace(pattern_tmpl, 'N',
+                                       tf.as_string(span_idx))
+    pattern = tf.strings.regex_replace(pattern, 'W', span_str)
+    return tf.strings.regex_replace(text, pattern, r'\1{0} \2 {0}'.format(mark))
 
-    joined = tf.strings.join(strs_to_join, separator=' ')
-    return {'inputs': joined, 'targets': label_name, 'idx': x['idx']}
-  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  text = x['text']
+  text = _mark_span(text, x['span1_text'], x['span1_index'], '*')
+  # Compensate for 2 added "words" added in previous step.
+  span2_index = x['span2_index'] + 2 * tf.cast(
+      x['span1_index'] < x['span2_index'], tf.int32)
+  text = _mark_span(text, x['span2_text'], span2_index, '#')
+
+  # Add benchmark name at the start
+  strs_to_join = ['wsc', 'text:', text]
+  label_name = tf.cond(
+      # When no label is provided (label == -1), use "<unk>"
+      tf.equal(x['label'], -1),
+      lambda: tf.constant('<unk>'),
+      # Otherwise use False/True.
+      lambda: tf.gather(['False', 'True'], x['label']))
+
+  joined = tf.strings.join(strs_to_join, separator=' ')
+  return {'inputs': joined, 'targets': label_name, 'idx': x['idx']}
 
 
 @gin.configurable
@@ -1002,10 +987,9 @@ def record(dataset):
     ex['answers'] = x['answers']
     return ex
 
-  dataset = dataset.map(
-      process_answers, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  dataset = dataset.map(process_answers, num_parallel_calls=AUTOTUNE)
   dataset = dataset.unbatch()
-  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  return dataset.map(my_fn, num_parallel_calls=AUTOTUNE)
 
 
 def multi_translate(dataset, source_language, target_language):
@@ -1050,14 +1034,12 @@ def multi_translate(dataset, source_language, target_language):
         target_language: x['translations']['translation'][tgt_idx],
     }
   dataset = dataset.filter(filter_fn)
-  dataset = dataset.map(
-      map_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE
-  )
+  dataset = dataset.map(map_fn, num_parallel_calls=AUTOTUNE)
   return translate(dataset, source_language, target_language)
 
 
-def definite_pronoun_resolution_simple(dataset,
-                                       label='wsc:'):
+@utils.map_over_dataset
+def definite_pronoun_resolution_simple(x, label='wsc:'):
   """Converts DPR examples to a simple text to text format.
 
   A typical example from the definite pronoun resolution dataset might look like
@@ -1075,32 +1057,27 @@ def definite_pronoun_resolution_simple(dataset,
   }
 
   Args:
-    dataset: a tf.data.Dataset
+    x: an example to process.
     label: a string, the label to prepend to the inputs.
 
   Returns:
-    a tf.data.Dataset
+    A preprocessed example.
   """
-
-  def my_fn(x):
-    """Function to be called for every example."""
-    # If there are multiple instances of the pronoun in the sentence, the first
-    # one is the one that needs to be resolved.
-    inputs = [
-        label,
-        tf.strings.regex_replace(
-            x['sentence'],
-            tf.strings.join([r' (', x['pronoun'], r')( |\.|,)']),
-            r' *\1*\2',
-            replace_global=False,
-        ),
-    ]
-    return {
-        'inputs': tf.strings.join(inputs, separator=' '),
-        'targets': x['candidates'][x['label']],
-    }
-
-  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  # If there are multiple instances of the pronoun in the sentence, the first
+  # one is the one that needs to be resolved.
+  inputs = [
+      label,
+      tf.strings.regex_replace(
+          x['sentence'],
+          tf.strings.join([r' (', x['pronoun'], r')( |\.|,)']),
+          r' *\1*\2',
+          replace_global=False,
+      ),
+  ]
+  return {
+      'inputs': tf.strings.join(inputs, separator=' '),
+      'targets': x['candidates'][x['label']],
+  }
 
 
 def next_sentence_prediction(dataset,
@@ -1198,7 +1175,7 @@ def next_sentence_prediction(dataset,
 
     return {'inputs': inputs, 'targets': targets}
 
-  dataset = dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  dataset = dataset.map(my_fn, num_parallel_calls=AUTOTUNE)
   dataset = dataset.unbatch()
 
   def example_len(x):
@@ -1209,7 +1186,8 @@ def next_sentence_prediction(dataset,
   return dataset.filter(lambda x: example_len(x) > 0)
 
 
-def lm(dataset):
+@utils.map_over_dataset
+def lm(x):
   """Basic language modeling objective for text - empty inputs.
 
   Given inputs with the format:
@@ -1218,15 +1196,12 @@ def lm(dataset):
   {"inputs": "", "targets": "Here is some text."}
 
   Args:
-    dataset: A tf.data.Dataset to process.
+    x: an example to process.
 
   Returns:
-    A preprocessed tf.data.Dataset.
+    A preprocessed example.
   """
-  return dataset.map(
-      lambda x: {'inputs': '', 'targets': x['text']},
-      num_parallel_calls=tf.data.experimental.AUTOTUNE,
-  )
+  return {'inputs': '', 'targets': x['text']}
 
 
 def _wsc_inputs(x):
@@ -1346,10 +1321,11 @@ def wsc_simple(dataset,
   if correct_referent_only:
     dataset = dataset.filter(lambda x: tf.cast(x.get('label', False), tf.bool))
 
-  return dataset.map(map_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  return dataset.map(map_fn, num_parallel_calls=AUTOTUNE)
 
 
-def wnli_simple(dataset, label='wsc:'):
+@utils.map_over_dataset
+def wnli_simple(x, label='wsc:'):
   """Converts GLUE WNLI examples to a simple text to text format.
 
   A typical example from WNLI might look like:
@@ -1373,11 +1349,11 @@ def wnli_simple(dataset, label='wsc:'):
   be used eval and not train.
 
   Args:
-    dataset: a tf.data.Dataset
+    x: an example to process.
     label: a string, the label to prepend to the inputs.
 
   Returns:
-    a tf.data.Dataset
+    A preprocessed example.
   """
   pronouns = ['he', 'she', 'they', 'it', 'her', 'his', 'their', 'them', 'him']
   PronounMatch = collections.namedtuple(  # pylint: disable=invalid-name
@@ -1499,22 +1475,19 @@ def wnli_simple(dataset, label='wsc:'):
     inputs = '{} {}'.format(label, highlight(premise, match.index_in_premise))
     return inputs, targets
 
-  def map_fn(x):
-    inputs, targets = tf.py_function(
-        compute_inputs_and_targets,
-        inp=[x['sentence1'], x['sentence2']],
-        Tout=[tf.string, tf.string])
-    return {
-        # The reshape is necessary as otherwise the tensor has unknown rank.
-        'inputs': tf.reshape(inputs, shape=[]),
-        'targets': tf.reshape(targets, shape=[]),
-        'premise': x['sentence1'],
-        'hypothesis': x['sentence2'],
-        'label': x.get('label', 0),
-        'idx': x['idx'],
-    }
-
-  return dataset.map(map_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  inputs, targets = tf.py_function(
+      compute_inputs_and_targets,
+      inp=[x['sentence1'], x['sentence2']],
+      Tout=[tf.string, tf.string])
+  return {
+      # The reshape is necessary as otherwise the tensor has unknown rank.
+      'inputs': tf.reshape(inputs, shape=[]),
+      'targets': tf.reshape(targets, shape=[]),
+      'premise': x['sentence1'],
+      'hypothesis': x['sentence2'],
+      'label': x.get('label', 0),
+      'idx': x['idx'],
+  }
 
 
 def rank_classification(
@@ -1627,39 +1600,39 @@ def rank_classification(
     return new_ex
 
   ds = ds.enumerate()
-  ds = ds.map(format_features, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  ds = ds.map(format_features, num_parallel_calls=AUTOTUNE)
   ds = ds.unbatch()
   return ds
 
 
-def parse_tsv(dataset,
-              field_names=None,
-              field_delim='\t'):
+@utils.map_over_dataset
+def parse_tsv(line, field_names=None, field_delim='\t'):
   """Splits TSV lines into dict examples mapping field name to string value.
 
   Args:
-    dataset: a `tf.data.Dataset` containing comma/tab-delimited strings.
+    line: an example containing a comma/tab-delimited string.
     field_names: a list of strings, the ordered names of the TSV fields.
       Defaults to "inputs" and "targets".
     field_delim: a string, the delimiter to split on e.g. ',' for csv.
+
   Returns:
-    A `tf.data.Dataset` containing dict examples mapping field name to string
-    value.
+    A feature dict mapping field name to string value.
   """
   field_names = field_names or ['inputs', 'targets']
-  def parse_line(line):
-    return dict(zip(
-        field_names,
-        tf.io.decode_csv(
-            line, record_defaults=[''] * len(field_names),
-            field_delim=field_delim, use_quote_delim=False)
-    ))
+  return dict(
+      zip(field_names,
+          tf.io.decode_csv(
+              line,
+              record_defaults=[''] * len(field_names),
+              field_delim=field_delim,
+              use_quote_delim=False
+          )
+      )
+  )
 
-  return dataset.map(
-      parse_line, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-
-def preprocess_tsv(dataset,
+@utils.map_over_dataset
+def preprocess_tsv(line,
                    field_delim='\t',
                    num_fields=2,
                    inputs_format='{0}',
@@ -1688,7 +1661,7 @@ def preprocess_tsv(dataset,
     {"inputs": "numerator: 18 denomnator: 9", "targets": "quotient: 2"}
 
   Args:
-    dataset: a tf.data.Dataset containing comma/tab-delimited strings.
+    line: an example containing comma/tab-delimited string.
     field_delim: a string, the delimiter to split on e.g. ',' for csv.
     num_fields: an integer
     inputs_format: a string, the desired output format with placeholders for
@@ -1696,8 +1669,7 @@ def preprocess_tsv(dataset,
     targets_format: a string, the desired output format with placeholders for
       field values.
   Returns:
-    a tf.data.Dataset of feature dictionaries with 'inputs' and
-    'targets' features.
+    A feature dict with 'inputs' and 'targets' features.
   """
   def _format_part(part, field_values):
     found = re.findall(r'{(\d)}', part)
@@ -1711,15 +1683,15 @@ def preprocess_tsv(dataset,
              for p in re.split(r'({\d})', format_string)]
     return tf.strings.join(parts)
 
-  def _parse_fn(line):
-    """Function to process a line."""
-    field_values = tf.io.decode_csv(
-        line, record_defaults=[''] * num_fields,
-        field_delim=field_delim, use_quote_delim=False)
-    return {'inputs': _format(inputs_format, field_values),
-            'targets': _format(targets_format, field_values)}
-  return dataset.map(
-      _parse_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  field_values = tf.io.decode_csv(
+      line,
+      record_defaults=[''] * num_fields,
+      field_delim=field_delim,
+      use_quote_delim=False)
+  return {
+      'inputs': _format(inputs_format, field_values),
+      'targets': _format(targets_format, field_values)
+  }
 
 
 # ======================Token Preprocessors=====================================
@@ -1833,7 +1805,7 @@ def select_random_chunk(dataset,
     return {feature_key: tokens[start:end]}
   # Filter empty examples.
   dataset = dataset.filter(lambda x: tf.not_equal(tf.size(x[feature_key]), 0))
-  return dataset.map(_my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  return dataset.map(_my_fn, num_parallel_calls=AUTOTUNE)
 
 
 @gin.configurable
@@ -1855,15 +1827,16 @@ def reduce_concat_tokens(dataset,
   Returns:
     a dataset
   """
-  dataset = dataset.map(lambda x: {feature_key: x[feature_key]},
-                        num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  dataset = dataset.map(
+      lambda x: {feature_key: x[feature_key]}, num_parallel_calls=AUTOTUNE)
   dataset = dataset.padded_batch(batch_size, padded_shapes={feature_key: [-1]})
   def _my_fn(x):
     tokens = tf.reshape(x[feature_key], [-1])
     # strip padding
     tokens = tf.boolean_mask(tokens, tf.cast(tokens, tf.bool))
     return {feature_key: tokens}
-  return dataset.map(_my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+  return dataset.map(_my_fn, num_parallel_calls=AUTOTUNE)
 
 
 @gin.configurable
@@ -1923,11 +1896,9 @@ def split_tokens(dataset,
 
   # Filter empty examples.
   dataset = dataset.filter(lambda x: tf.not_equal(tf.size(x[feature_key]), 0))
-  dataset = dataset.map(
-      _split_tokens, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  dataset = dataset.map(_split_tokens, num_parallel_calls=AUTOTUNE)
   dataset = dataset.unbatch()
-  return dataset.map(
-      _strip_padding, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  return dataset.map(_strip_padding, num_parallel_calls=AUTOTUNE)
 
 
 @gin.configurable
@@ -1949,33 +1920,32 @@ def split_tokens_to_random_length(dataset, sequence_length, **unused_kwargs):
                       max_tokens_per_segment=sequence_length['inputs'])
 
 
-def trim_tokens_at_front(dataset,
+@utils.map_over_dataset
+def trim_tokens_at_front(x,
                          sequence_length,
                          keys_to_trim=None,
                          **unused_kwargs):
   """Token-preprocessor to trim sequence at the beginning.
 
   Args:
-    dataset: a tf.data.Dataset with dictionaries containing keys_to_trim.
+    x: an example with dictionaries containing keys_to_trim.
     sequence_length: a dict of ints.
     keys_to_trim: a list of feature keys.
 
   Returns:
-    a dataset
+    A preprocessed example.
   """
 
-  def my_fn(inputs):
-    for key in (keys_to_trim or sequence_length.keys()):
-      if key in inputs:
-        # trim tokens, leaving room for EOS which gets added later
-        inputs[key] = inputs[key][-(sequence_length[key] - 1):]
-    return inputs
-
-  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  for key in (keys_to_trim or sequence_length.keys()):
+    if key in x:
+      # trim tokens, leaving room for EOS which gets added later
+      x[key] = x[key][-(sequence_length[key] - 1):]
+  return x
 
 
+@utils.map_over_dataset
 @gin.configurable()
-def denoise(dataset,
+def denoise(features,
             output_features,
             noise_density=gin.REQUIRED,
             noise_mask_fn=gin.REQUIRED,
@@ -2014,7 +1984,7 @@ def denoise(dataset,
     - task labels prepended to the inputs
 
   Args:
-    dataset: A tf.data.Dataset to process.
+    features: an example to process.
     output_features: a dict mapping feature name to t5.data.Feature.
     noise_density: a float
     noise_mask_fn: a function from (length, noise_density) -> boolean mask
@@ -2022,26 +1992,22 @@ def denoise(dataset,
     targets_fn: a function from (tokens, noise_mask, vocabulary) -> tokens
 
   Returns:
-    A preprocessed tf.data.Dataset.
+    A preprocessed example.
   """
-  def my_fn(features):
-    """Map function."""
-    tokens = features['targets']
-    vocabulary = output_features['targets'].vocabulary
-    if ('inputs' in output_features and
-        vocabulary != output_features['inputs'].vocabulary):
-      raise ValueError(
-          'denoise creates inputs based on tokenized targets but was applied '
-          'to a task that uses different vocabularies for inputs and targets.'
-      )
-    noise_mask = noise_mask_fn(tf.size(tokens), noise_density)
-    inputs = inputs_fn(tokens, noise_mask, vocabulary)
-    if targets_fn:
-      targets = targets_fn(tokens, noise_mask, vocabulary)
-    else:
-      targets = tokens
-    return {'inputs': inputs, 'targets': targets}
-  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  tokens = features['targets']
+  vocabulary = output_features['targets'].vocabulary
+  if ('inputs' in output_features and
+      vocabulary != output_features['inputs'].vocabulary):
+    raise ValueError(
+        'denoise creates inputs based on tokenized targets but was applied '
+        'to a task that uses different vocabularies for inputs and targets.')
+  noise_mask = noise_mask_fn(tf.size(tokens), noise_density)
+  inputs = inputs_fn(tokens, noise_mask, vocabulary)
+  if targets_fn:
+    targets = targets_fn(tokens, noise_mask, vocabulary)
+  else:
+    targets = tokens
+  return {'inputs': inputs, 'targets': targets}
 
 
 def trivia_qa_truncate_inputs(dataset, output_features, sequence_length):
@@ -2157,7 +2123,7 @@ def trivia_qa_truncate_inputs(dataset, output_features, sequence_length):
 
     return {'inputs': inputs, 'targets': features['targets']}
 
-  dataset = dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  dataset = dataset.map(my_fn, num_parallel_calls=AUTOTUNE)
   return dataset.filter(lambda x: tf.size(x['inputs']) > 0)
 
 
