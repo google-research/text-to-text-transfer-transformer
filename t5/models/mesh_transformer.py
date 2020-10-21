@@ -104,7 +104,7 @@ def mesh_eval_dataset_fn(
     sequence_length,
     vocabulary,
     dataset_split,
-    num_eval_examples=None,
+    num_eval_examples=-1,
     use_cached=False,
     pack=False,
     shuffle_eval_examples=False,
@@ -123,7 +123,7 @@ def mesh_eval_dataset_fn(
     vocabulary: a t5.data.vocabularies.Vocabulary.
     dataset_split: string, which split of the dataset to load.
     num_eval_examples: maximum number of examples per task to use for continuous
-      eval. If None, use all examples.
+      eval. If None or less than 0, use all examples.
     use_cached: bool, whether to load the cached version of this dataset.
     pack: a boolean, whether to pack examples. This is useful for perplexity
       evals but should not be used for iterative decoding.
@@ -138,6 +138,9 @@ def mesh_eval_dataset_fn(
     A list of mesh_tensorflow.transformer.dataset.EvalDataset tuples.
   """
   valid_vocabulary(vocabulary)
+
+  if num_eval_examples is not None and num_eval_examples < 0:
+    num_eval_examples = None
 
   mixture_or_task = t5.data.get_mixture_or_task(mixture_or_task_name)
 
