@@ -28,6 +28,7 @@ import tensorflow_datasets as tfds
 tf.compat.v1.enable_eager_execution()
 
 TaskRegistry = dataset_providers.TaskRegistry
+MixtureRegistry = dataset_providers.MixtureRegistry
 mock = absltest.mock
 
 
@@ -427,6 +428,82 @@ class TasksTest(test_utils.FakeTaskTest):
         {"inputs": 13, "targets": 13},
         split="train", use_cached=False, shuffle=False, seed=42)
     test_utils.assert_datasets_neq(dataset1, dataset2)
+
+
+class MixturesTest(test_utils.FakeTaskTest):
+
+  def test_tasks(self):
+    test_utils.add_task("task1", test_utils.get_fake_dataset)
+    test_utils.add_task("task2", test_utils.get_fake_dataset)
+    MixtureRegistry.add("test_mix1", [("task1", 1), ("task2", 1)])
+    mix = MixtureRegistry.get("test_mix1")
+    self.assertEqual(len(mix.tasks), 2)
+
+    for task in mix.tasks:
+      test_utils.verify_task_matches_fake_datasets(task, use_cached=False)
+      self.assertEqual(mix.get_rate(task), 1)
+
+  def test_num_examples(self):
+    MixtureRegistry.add("test_mix2", [(self.cached_task.name, 1)])
+    mix = MixtureRegistry.get("test_mix2")
+    self.assertEqual(mix.num_input_examples(split="train"), 30)
+
+  def test_get_dataset(self):
+    MixtureRegistry.add("test_mix3", [(self.cached_task.name, 1)])
+
+    task_ds = TaskRegistry.get_dataset(
+        self.cached_task.name, {
+            "inputs": 13,
+            "targets": 13
+        },
+        "train",
+        use_cached=False,
+        shuffle=False)
+
+    mix_ds = MixtureRegistry.get("test_mix3").get_dataset({
+            "inputs": 13,
+            "targets": 13
+        }, "train", use_cached=False, shuffle=False)
+
+    # limit size since get_dataset repeats the dataset
+    mix_ds = mix_ds.take(3)
+
+    # mix.get_dataset strips non-output features
+    task_ds = task_ds.map(lambda x: {
+        "inputs": x["inputs"],
+        "targets": x["targets"]
+    })
+
+    test_utils.assert_datasets_eq(task_ds, mix_ds)
+
+  def test_get_dataset_mix(self):
+
+    test_utils.add_task(
+        "two_task",
+        test_utils.get_fake_dataset,
+        token_preprocessor=lambda ds, **unused: ds.map(
+            lambda _: {
+                "targets": tf.constant([2], tf.int64),
+                "inputs": tf.constant([2], tf.int64),
+            }))
+
+    test_utils.add_task(
+        "three_task",
+        test_utils.get_fake_dataset,
+        token_preprocessor=lambda ds, **unused: ds.map(
+            lambda _: {
+                "targets": tf.constant([3], tf.int64),
+                "inputs": tf.constant([3], tf.int64),
+            }))
+
+    MixtureRegistry.add("test_mix4", [("two_task", 1), ("three_task", 1)])
+
+    sequence_length = {"inputs": 2, "targets": 2}
+    mix_ds = MixtureRegistry.get("test_mix4").get_dataset(
+        sequence_length, "train", seed=13).take(1000)
+
+    res = sum(int(item["inputs"][0]) for item in tfds.as_numpy(mix_ds))
+    self.assertEqual(res, 2500)
 
 
 if __name__ == "__main__":
