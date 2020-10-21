@@ -125,7 +125,7 @@ def tokens_to_batches(dataset, sequence_length, batch_size, output_features):
 
   dataset = dataset.map(
       _map_fn,
-      num_parallel_calls=t5.data.preprocessors.num_parallel_calls()
+      num_parallel_calls=tf.data.experimental.AUTOTUNE,
   )
 
   dataset = dataset.batch(batch_size, drop_remainder=False)
@@ -546,7 +546,7 @@ class HfPyTorchModel(T5Model):
     dataset = tf.data.Dataset.from_tensor_slices(inputs)
     dataset = dataset.map(
         lambda x: {"inputs": tf.cast(vocabs["inputs"].encode_tf(x), tf.int64)},
-        num_parallel_calls=t5.data.preprocessors.num_parallel_calls()
+        num_parallel_calls=tf.data.experimental.AUTOTUNE,
     )
     dataset = tokens_to_batches(
         dataset, sequence_length, batch_size, ["inputs"]
