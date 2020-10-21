@@ -74,7 +74,7 @@ def translate(dataset, source_language, target_language):
   # Language codes like zh-cn are not supported; use only the first 2 chars
   for language in (source_language, target_language):
     if language != language[:2]:
-      logging.warn(
+      logging.warning(
           'Extended language code %s not supported. Falling back on %s.',
           language, language[:2]
       )
@@ -2178,7 +2178,7 @@ def unsupervised(dataset, preprocessors=None, **kwargs):
     A preprocessed tf.data.Dataset.
   """
   if preprocessors is None:
-    logging.warn(
+    logging.warning(
         'unsupervised preprocessor got preprocessors=None; no preprocessing '
         'will be applied.'
     )
