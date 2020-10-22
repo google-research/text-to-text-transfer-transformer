@@ -1,0 +1,4 @@
+preprocessors.unsupervised.preprocessors = [@preprocessors.denoise]
+preprocessors.denoise.noise_density = 0.15
+preprocessors.denoise.noise_mask_fn = @preprocessors.iid_noise_mask
+preprocessors.denoise.inputs_fn = @noise_token_to_sentinel
