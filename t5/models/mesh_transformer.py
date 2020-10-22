@@ -26,21 +26,10 @@ import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
 
 
-def valid_vocabulary(vocabulary):
-  """Tests that a vocabulary is valid to pass to Mesh Tensorflow transformer."""
-  # Mesh TF allows for a (inputs_vocab, targets_vocab) tuple
-  if not isinstance(vocabulary, tuple):
-    vocabulary = (vocabulary,)
-  for v in vocabulary:
-    if not isinstance(v, t5.data.vocabularies.Vocabulary):
-      raise ValueError("vocabulary must be a t5.data.vocabularies.Vocabulary")
-
-
 @gin.configurable()
 def mesh_train_dataset_fn(
     mixture_or_task_name,
     sequence_length,
-    vocabulary,
     dataset_split=tfds.Split.TRAIN,
     seed=None,
     use_cached=False,
@@ -55,7 +44,6 @@ def mesh_train_dataset_fn(
       appropriate registry. Must be specified via gin.
     sequence_length: dict mapping feature key to the int length for that feature
       the max sequence length.
-    vocabulary: a t5.data.vocabularies.Vocabulary.
     dataset_split: string, which split of the dataset to load. In most cases
       this should be "train".
     seed: tf.int64 scalar tf.Tensor (or None). Used for both the global seed and
@@ -66,8 +54,6 @@ def mesh_train_dataset_fn(
   Returns:
     A tf.data.Dataset of preprocessed, tokenized, and batched examples.
   """
-  valid_vocabulary(vocabulary)
-
   mixture_or_task = t5.data.get_mixture_or_task(mixture_or_task_name)
 
   ds = mixture_or_task.get_dataset(
@@ -104,7 +90,6 @@ def maybe_shuffle_and_subsample_dataset(
 def mesh_eval_dataset_fn(
     mixture_or_task_name,
     sequence_length,
-    vocabulary,
     dataset_split,
     num_eval_examples=-1,
     use_cached=False,
@@ -122,7 +107,6 @@ def mesh_eval_dataset_fn(
     sequence_length: dict mapping feature key to the int length for that feature
       the max sequence length. If set to None, packing and padding will be
       disabled.
-    vocabulary: a t5.data.vocabularies.Vocabulary.
     dataset_split: string, which split of the dataset to load.
     num_eval_examples: maximum number of examples per task to use for continuous
       eval. If None or less than 0, use all examples.
@@ -139,8 +123,6 @@ def mesh_eval_dataset_fn(
   Returns:
     A list of mesh_tensorflow.transformer.dataset.EvalDataset tuples.
   """
-  valid_vocabulary(vocabulary)
-
   if num_eval_examples is not None and num_eval_examples < 0:
     num_eval_examples = None
 
