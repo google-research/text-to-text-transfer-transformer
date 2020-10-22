@@ -19,7 +19,7 @@ import gin
 from t5.data import preprocessors as prep
 from t5.data import test_utils
 from t5.data.dataset_providers import Feature
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 tf.compat.v1.enable_eager_execution()
 

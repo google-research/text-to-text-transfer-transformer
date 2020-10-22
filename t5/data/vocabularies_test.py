@@ -17,7 +17,7 @@
 from absl.testing import absltest
 from t5.data import test_utils
 from t5.data import vocabularies
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 tf.compat.v1.enable_eager_execution()
 

@@ -28,7 +28,7 @@ import re
 from absl import logging
 import gin
 from t5.data import utils
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
 
 _DEFAULT_FEATURE_KEYS = ["inputs", "targets"]

@@ -17,7 +17,7 @@
 
 from absl.testing import absltest
 from t5.data import utils
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
 
 tf.compat.v1.enable_eager_execution()

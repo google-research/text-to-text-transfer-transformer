@@ -28,7 +28,7 @@ import numpy as np
 from t5.data import dataset_providers
 from t5.data import sentencepiece_vocabulary
 from t5.data import utils as dataset_utils
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
 
 TaskRegistry = dataset_providers.TaskRegistry

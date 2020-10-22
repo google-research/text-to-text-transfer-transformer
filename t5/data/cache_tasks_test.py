@@ -23,7 +23,7 @@ from apache_beam.testing.util import assert_that
 from apache_beam.testing.util import equal_to
 import t5
 from t5.data import cache_tasks_main
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 tf.compat.v1.enable_eager_execution()
 

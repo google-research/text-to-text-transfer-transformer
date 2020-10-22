@@ -17,7 +17,7 @@
 
 import abc
 import gin
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 
 @gin.configurable

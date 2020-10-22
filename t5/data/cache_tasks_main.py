@@ -38,7 +38,7 @@ from absl import logging
 import apache_beam as beam
 import apache_beam.metrics as metrics
 import t5
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
 
 

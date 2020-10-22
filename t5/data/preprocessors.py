@@ -24,7 +24,7 @@ from absl import logging
 import babel
 import gin
 from t5.data import utils
-import tensorflow as tf
+import tensorflow.compat.v2 as tf
 
 # pylint: disable=g-long-lambda
 AUTOTUNE = tf.data.experimental.AUTOTUNE
