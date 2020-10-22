@@ -15,6 +15,7 @@
 """Tests for from t5.preprocessors."""
 
 from absl.testing import absltest
+import gin
 from t5.data import preprocessors as prep
 from t5.data import test_utils
 from t5.data.dataset_providers import Feature
@@ -1088,6 +1089,22 @@ class PreprocessorsTest(tf.test.TestCase):
             ],
         },
     ])
+
+  def test_denoise_nested_decorators(self):
+    """Test whether gin and utils.map_over_dataset decorators are compatible."""
+    bindings = """
+      preprocessors.unsupervised.preprocessors = [@preprocessors.denoise]
+      preprocessors.denoise.noise_density = 0.15
+      preprocessors.denoise.noise_mask_fn = @preprocessors.iid_noise_mask
+      preprocessors.denoise.inputs_fn = @noise_token_to_sentinel
+    """
+    gin.parse_config(bindings)
+    og_dataset = tf.data.Dataset.from_tensor_slices({'targets': [1, 2, 3]})
+    output_features = {'targets': Feature(test_utils.sentencepiece_vocab())}
+    # Test denoise function when it is used as a gin-configurable of another
+    # gin-configurable, prep.unsupervised.
+    dataset = prep.unsupervised(og_dataset, output_features=output_features)
+    self.assertIsInstance(dataset, tf.data.Dataset)
 
   def test_prefix_lm(self):
     vocab = test_utils.sentencepiece_vocab()

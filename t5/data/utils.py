@@ -15,6 +15,7 @@
 # Lint as: python3
 """Utilities for data loading and processing."""
 
+import functools
 import os
 
 from absl import logging
@@ -297,6 +298,7 @@ def map_over_dataset(fn):
     Function which takes dataset as first argument.
   """
 
+  @functools.wraps(fn)
   def wrapped_fn(ds, *args, **kargs):
     return ds.map(
         lambda arg: fn(arg, *args, **kargs),

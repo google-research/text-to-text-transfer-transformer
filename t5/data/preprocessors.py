@@ -1943,8 +1943,8 @@ def trim_tokens_at_front(x,
   return x
 
 
-@utils.map_over_dataset
 @gin.configurable()
+@utils.map_over_dataset
 def denoise(features,
             output_features,
             noise_density=gin.REQUIRED,
