@@ -58,6 +58,7 @@ def _operative_config_path(model_dir):
 
 
 def _get_vocabulary(mixture_or_task_name=None):
+  """Attempts to find the correct vocabulary, falling back to the default."""
   if not mixture_or_task_name:
     # Attempt to extract the mixture/task name from the gin config.
     try:
@@ -65,7 +66,10 @@ def _get_vocabulary(mixture_or_task_name=None):
     except ValueError:
       logging.warning("Could not extract mixture/task name from gin config.")
   if mixture_or_task_name:
-    return t5.models.mesh_transformer.get_vocabulary(mixture_or_task_name)
+    try:
+      return t5.models.mesh_transformer.get_vocabulary(mixture_or_task_name)
+    except ValueError as e:
+      logging.warning(e)
   logging.warning("Using default vocabulary.")
   return t5.data.get_default_vocabulary()
 
