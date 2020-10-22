@@ -1943,9 +1943,8 @@ def trim_tokens_at_front(x,
   return x
 
 
-@utils.map_over_dataset
 @gin.configurable()
-def denoise(features,
+def denoise(dataset,
             output_features,
             noise_density=gin.REQUIRED,
             noise_mask_fn=gin.REQUIRED,
@@ -1984,7 +1983,7 @@ def denoise(features,
     - task labels prepended to the inputs
 
   Args:
-    features: an example to process.
+    dataset: A tf.data.Dataset to process.
     output_features: a dict mapping feature name to t5.data.Feature.
     noise_density: a float
     noise_mask_fn: a function from (length, noise_density) -> boolean mask
@@ -1992,22 +1991,26 @@ def denoise(features,
     targets_fn: a function from (tokens, noise_mask, vocabulary) -> tokens
 
   Returns:
-    A preprocessed example.
+    A preprocessed tf.data.Dataset.
   """
-  tokens = features['targets']
-  vocabulary = output_features['targets'].vocabulary
-  if ('inputs' in output_features and
-      vocabulary != output_features['inputs'].vocabulary):
-    raise ValueError(
-        'denoise creates inputs based on tokenized targets but was applied '
-        'to a task that uses different vocabularies for inputs and targets.')
-  noise_mask = noise_mask_fn(tf.size(tokens), noise_density)
-  inputs = inputs_fn(tokens, noise_mask, vocabulary)
-  if targets_fn:
-    targets = targets_fn(tokens, noise_mask, vocabulary)
-  else:
-    targets = tokens
-  return {'inputs': inputs, 'targets': targets}
+  def my_fn(features):
+    """Map function."""
+    tokens = features['targets']
+    vocabulary = output_features['targets'].vocabulary
+    if ('inputs' in output_features and
+        vocabulary != output_features['inputs'].vocabulary):
+      raise ValueError(
+          'denoise creates inputs based on tokenized targets but was applied '
+          'to a task that uses different vocabularies for inputs and targets.'
+      )
+    noise_mask = noise_mask_fn(tf.size(tokens), noise_density)
+    inputs = inputs_fn(tokens, noise_mask, vocabulary)
+    if targets_fn:
+      targets = targets_fn(tokens, noise_mask, vocabulary)
+    else:
+      targets = tokens
+    return {'inputs': inputs, 'targets': targets}
+  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 
 def trivia_qa_truncate_inputs(dataset, output_features, sequence_length):
