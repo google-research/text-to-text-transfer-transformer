@@ -872,7 +872,7 @@ class Mixture(DatasetProviderBase):
 
   @property
   def total_rate(self):
-    return sum(float(rate(name) if callable(rate) else rate)
+    return sum(float(rate(TaskRegistry.get(name)) if callable(rate) else rate)
                for name, rate in self._task_to_rate.items())
 
   def get_rate(self, task):

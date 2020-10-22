@@ -505,6 +505,16 @@ class MixturesTest(test_utils.FakeTaskTest):
     res = sum(int(item["inputs"][0]) for item in tfds.as_numpy(mix_ds))
     self.assertEqual(res, 2500)
 
+  def test_get_rate_with_callable(self):
+    def fn(t):
+      self.assertEqual(t.name, "task4")
+      return 42
+    test_utils.add_task("task4", test_utils.get_fake_dataset)
+    task = TaskRegistry.get("task4")
+    MixtureRegistry.add("test_mix5", [("task4", fn)])
+    mix = MixtureRegistry.get("test_mix5")
+    self.assertEqual(mix.get_rate(task), 42)
+
   def test_mixture_of_mixtures(self):
     test_utils.add_task("task_a", test_utils.get_fake_dataset)
     test_utils.add_task("task_b", test_utils.get_fake_dataset)
