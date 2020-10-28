@@ -263,7 +263,8 @@ class MtfModel(T5Model):
                       steps, self._ensemble_inputs, dataset_split=split)
 
   def eval(self, mixture_or_task_name, checkpoint_steps=None, summary_dir=None,
-           split="validation", eval_with_score=False):
+           split="validation", eval_with_score=False,
+           output_eval_examples=True):
     """Evaluate the model on the given Mixture or Task.
 
     Args:
@@ -280,6 +281,8 @@ class MtfModel(T5Model):
       split: str, the mixture/task split to evaluate on.
       eval_with_score: bool, whether to evaluate using log likelihood scores of
         targets instead of decoded predictions.
+      output_eval_examples: bool, whether to dump inputs, targets, and
+        predictions of the eval examples in plaintext to eval_summary_dir.
     """
     if checkpoint_steps == -1:
       checkpoint_steps = _get_latest_checkpoint_from_dir(self._model_dir)
@@ -297,7 +300,8 @@ class MtfModel(T5Model):
         sequence_length=self._sequence_length, batch_size=self.batch_size,
         dataset_split=split, model_dir=self._model_dir,
         eval_dataset_fn=dataset_fn, eval_summary_dir=summary_dir,
-        eval_checkpoint_step=checkpoint_steps, eval_with_score=eval_with_score)
+        eval_checkpoint_step=checkpoint_steps, eval_with_score=eval_with_score,
+        output_eval_example=output_eval_examples)
 
   def finetune(self, mixture_or_task_name, finetune_steps, pretrained_model_dir,
                pretrained_checkpoint_step=-1, split="train"):
