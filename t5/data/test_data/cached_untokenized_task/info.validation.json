@@ -1,0 +1,33 @@
+{
+  "features": {
+    "id": {
+      "dtype": "string",
+      "shape": []
+    },
+    "ids": {
+      "dtype": "string",
+      "shape": [
+        null
+      ]
+    },
+    "idx": {
+      "dtype": "int64",
+      "shape": []
+    },
+    "idxs": {
+      "dtype": "int64",
+      "shape": [
+        null
+      ]
+    },
+    "inputs": {
+      "dtype": "string",
+      "shape": []
+    },
+    "targets": {
+      "dtype": "string",
+      "shape": []
+    }
+  },
+  "num_shards": 1
+}

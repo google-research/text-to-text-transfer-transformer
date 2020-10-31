@@ -1,0 +1,13 @@
+{
+  "features": {
+    "inputs": {
+      "dtype": "string",
+      "shape": []
+    },
+    "targets": {
+      "dtype": "string",
+      "shape": []
+    }
+  },
+  "num_shards": 1
+}

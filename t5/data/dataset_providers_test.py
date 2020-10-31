@@ -20,10 +20,10 @@ import os
 from absl.testing import absltest
 import numpy as np
 from t5.data import dataset_providers
+from t5.data import preprocessors
 from t5.data import test_utils
 from t5.data import utils
 import tensorflow.compat.v2 as tf
-import tensorflow_datasets as tfds
 
 tf.compat.v1.enable_eager_execution()
 
@@ -166,21 +166,23 @@ class TasksTest(test_utils.FakeTaskTest):
 
   def test_get_dataset_cached(self):
     test_utils.verify_task_matches_fake_datasets(
-        self.cached_task, use_cached=True)
+        self.cached_task, use_cached=True, token_preprocessed=True)
 
-    # Test with token preprocessor.
-    self.cached_task._token_preprocessor = test_utils.test_token_preprocessor
+    # Test without token preprocessor.
     test_utils.verify_task_matches_fake_datasets(
-        self.cached_task, use_cached=False, token_preprocessed=True)
+        TaskRegistry.get("cached_task_no_token_prep"),
+        use_cached=True,
+        token_preprocessed=False)
 
   def test_get_dataset_onthefly(self):
     test_utils.verify_task_matches_fake_datasets(
-        self.uncached_task, use_cached=False)
-
-    # Test with token preprocessor.
-    self.uncached_task._token_preprocessor = test_utils.test_token_preprocessor
-    test_utils.verify_task_matches_fake_datasets(
         self.uncached_task, use_cached=False, token_preprocessed=True)
+
+    # Test without token preprocessor.
+    test_utils.verify_task_matches_fake_datasets(
+        TaskRegistry.get("uncached_task_no_token_prep"),
+        use_cached=False,
+        token_preprocessed=False)
 
     # Override mock to get more examples.
     def fake_load(s, shuffle_files=False):
@@ -188,6 +190,10 @@ class TasksTest(test_utils.FakeTaskTest):
       return test_utils.get_fake_dataset(s).repeat().take(20)
     self._tfds_patcher.new.return_value = (
         self._tfds_patcher.new.return_value._replace(load=fake_load))
+
+  def test_get_dataset_v3(self):
+    test_utils.verify_task_matches_fake_datasets(
+        self.task_v3, use_cached=False, token_preprocessed=True)
 
   def test_optional_features(self):
     def _dummy_preprocessor(output):
@@ -217,56 +223,10 @@ class TasksTest(test_utils.FakeTaskTest):
         text_preprocessor=_dummy_preprocessor({"inputs": "a"}))
     with self.assertRaisesRegex(
         ValueError,
-        "Task dataset is missing expected output feature after text "
-        "preprocessing: targets"):
+        "Task dataset is missing expected output feature after preprocessing: "
+        "targets"):
       TaskRegistry.get_dataset(
           "text_missing_required_feature", {"inputs": 13},
-          "train", use_cached=False)
-
-  def test_invalid_text_preprocessors(self):
-    def _dummy_preprocessor(output):
-      return lambda _: tf.data.Dataset.from_tensors(output)
-
-    test_utils.add_tfds_task(
-        "text_prep_ok",
-        text_preprocessor=_dummy_preprocessor(
-            {"inputs": "a", "targets": "b", "other": [0]}))
-    TaskRegistry.get_dataset(
-        "text_prep_ok", {"inputs": 13, "targets": 13},
-        "train", use_cached=False)
-
-    test_utils.add_tfds_task(
-        "text_prep_missing_feature",
-        text_preprocessor=_dummy_preprocessor({"inputs": "a"}))
-    with self.assertRaisesRegex(
-        ValueError,
-        "Task dataset is missing expected output feature after text "
-        "preprocessing: targets"):
-      TaskRegistry.get_dataset(
-          "text_prep_missing_feature", {"inputs": 13, "targets": 13},
-          "train", use_cached=False)
-
-    test_utils.add_tfds_task(
-        "text_prep_wrong_type",
-        text_preprocessor=_dummy_preprocessor({"inputs": 0, "targets": 1}))
-    with self.assertRaisesRegex(
-        ValueError,
-        "Task dataset has incorrect type for feature 'inputs' after text "
-        "preprocessing: Got int32, expected string"):
-      TaskRegistry.get_dataset(
-          "text_prep_wrong_type", {"inputs": 13, "targets": 13},
-          "train", use_cached=False)
-
-    test_utils.add_tfds_task(
-        "text_prep_wrong_shape",
-        text_preprocessor=_dummy_preprocessor(
-            {"inputs": "a", "targets": ["a", "b"]}))
-    with self.assertRaisesRegex(
-        ValueError,
-        "Task dataset has incorrect rank for feature 'targets' after text "
-        "preprocessing: Got 1, expected 0"):
-      TaskRegistry.get_dataset(
-          "text_prep_wrong_shape", {"inputs": 13, "targets": 13},
           "train", use_cached=False)
 
   def test_invalid_token_preprocessors(self):
@@ -274,9 +234,12 @@ class TasksTest(test_utils.FakeTaskTest):
       return lambda _, **unused: tf.data.Dataset.from_tensors(output)
     i64_arr = lambda x: np.array(x, dtype=np.int64)
     def _materialize(task):
-      list(tfds.as_numpy(TaskRegistry.get_dataset(
-          task, {"inputs": 13, "targets": 13},
-          "train", use_cached=False)))
+      list(
+          TaskRegistry.get_dataset(
+              task, {
+                  "inputs": 13,
+                  "targets": 13
+              }, "train", use_cached=False).as_numpy_iterator())
 
     test_utils.add_tfds_task(
         "token_prep_ok",
@@ -290,8 +253,8 @@ class TasksTest(test_utils.FakeTaskTest):
         token_preprocessor=_dummy_preprocessor({"inputs": i64_arr([2, 3])}))
     with self.assertRaisesRegex(
         ValueError,
-        "Task dataset is missing expected output feature after token "
-        "preprocessing: targets"):
+        "Task dataset is missing expected output feature after preprocessing: "
+        "targets"):
       _materialize("token_prep_missing_feature")
 
     test_utils.add_tfds_task(
@@ -300,7 +263,7 @@ class TasksTest(test_utils.FakeTaskTest):
             {"inputs": "a", "targets": i64_arr([3])}))
     with self.assertRaisesRegex(
         ValueError,
-        "Task dataset has incorrect type for feature 'inputs' after token "
+        "Task dataset has incorrect type for feature 'inputs' after "
         "preprocessing: Got string, expected int64"):
       _materialize("token_prep_wrong_type")
 
@@ -310,7 +273,7 @@ class TasksTest(test_utils.FakeTaskTest):
             {"inputs": i64_arr([2, 3]), "targets": i64_arr(1)}))
     with self.assertRaisesRegex(
         ValueError,
-        "Task dataset has incorrect rank for feature 'targets' after token "
+        "Task dataset has incorrect rank for feature 'targets' after "
         "preprocessing: Got 0, expected 1"):
       _materialize("token_prep_wrong_shape")
 
@@ -320,9 +283,49 @@ class TasksTest(test_utils.FakeTaskTest):
             {"inputs": i64_arr([1, 3]), "targets": i64_arr([4])}))
     with self.assertRaisesRegex(
         tf.errors.InvalidArgumentError,
-        r".*Feature \\'inputs\\' unexpectedly contains EOS=1 token after token "
+        r".*Feature \\'inputs\\' unexpectedly contains EOS=1 token after "
         r"preprocessing\..*"):
       _materialize("token_prep_has_eos")
+
+  def test_v3_value_errors(self):
+    dataset_fn = (
+        lambda split, shuffle_files: tf.data.Dataset.from_tensors(["test"]))
+    output_features = {
+        "inputs": dataset_providers.Feature(test_utils.sentencepiece_vocab())
+    }
+
+    with self.assertRaisesRegex(
+        ValueError, "`CacheDatasetPlaceholder` can appear at most once in the "
+        "preprocessing pipeline. Found 2 in 'multiple_cache_placeholders'."):
+      dataset_providers.TaskV3(
+          "multiple_cache_placeholders",
+          dataset_fn=dataset_fn,
+          splits=["train"],
+          preprocessors=[
+              test_utils.test_text_preprocessor, preprocessors.tokenize,
+              dataset_providers.CacheDatasetPlaceholder(),
+              test_utils.test_token_preprocessor,
+              dataset_providers.CacheDatasetPlaceholder()
+          ],
+          output_features=output_features,
+          metric_fns=[])
+
+    with self.assertRaisesRegex(
+        ValueError,
+        "'test_token_preprocessor' has a `sequence_length` argument but occurs "
+        "before `CacheDatasetPlaceholder` in 'sequence_length_pre_cache'. This "
+        "is not allowed since the sequence length is specified at run time."):
+      dataset_providers.TaskV3(
+          "sequence_length_pre_cache",
+          dataset_fn=dataset_fn,
+          splits=["train"],
+          preprocessors=[
+              test_utils.test_text_preprocessor, preprocessors.tokenize,
+              test_utils.test_token_preprocessor,
+              dataset_providers.CacheDatasetPlaceholder()
+          ],
+          output_features=output_features,
+          metric_fns=[])
 
   def test_splits(self):
     test_utils.add_tfds_task("task_with_splits", splits=["validation"])
@@ -460,7 +463,8 @@ class MixturesTest(test_utils.FakeTaskTest):
         use_cached=False,
         shuffle=False)
 
-    mix_ds = MixtureRegistry.get("test_mix3").get_dataset({
+    mix_ds = MixtureRegistry.get("test_mix3").get_dataset(
+        {
             "inputs": 13,
             "targets": 13
         }, "train", use_cached=False, shuffle=False)
@@ -477,7 +481,7 @@ class MixturesTest(test_utils.FakeTaskTest):
     test_utils.assert_datasets_eq(task_ds, mix_ds)
 
   def test_get_dataset_mix(self):
-
+    # pylint:disable=g-long-lambda
     test_utils.add_task(
         "two_task",
         test_utils.get_fake_dataset,
@@ -495,14 +499,14 @@ class MixturesTest(test_utils.FakeTaskTest):
                 "targets": tf.constant([3], tf.int64),
                 "inputs": tf.constant([3], tf.int64),
             }))
-
+    # pylint:enable=g-long-lambda
     MixtureRegistry.add("test_mix4", [("two_task", 1), ("three_task", 1)])
 
     sequence_length = {"inputs": 2, "targets": 2}
     mix_ds = MixtureRegistry.get("test_mix4").get_dataset(
         sequence_length, "train", seed=13).take(1000)
 
-    res = sum(int(item["inputs"][0]) for item in tfds.as_numpy(mix_ds))
+    res = sum(int(item["inputs"][0]) for item in mix_ds.as_numpy_iterator())
     self.assertEqual(res, 2500)
 
   def test_get_rate_with_callable(self):

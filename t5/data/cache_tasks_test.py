@@ -51,7 +51,11 @@ class ProcessTaskBeamTest(test_utils.FakeTaskTest):
             }
         }))
 
-  def validate_pipeline(self, task_name):
+  def validate_pipeline(self,
+                        task_name,
+                        expected_task_dir="cached_task",
+                        token_preprocessed=False,
+                        num_shards=2):
     self.assertTrue(TaskRegistry.get("cached_task").cache_dir)
     task = TaskRegistry.get(task_name)
     self.assertFalse(task.cache_dir)
@@ -61,9 +65,11 @@ class ProcessTaskBeamTest(test_utils.FakeTaskTest):
           p, ["cached_task", task_name], cache_dir=self.test_data_dir)
 
     actual_task_dir = os.path.join(self.test_data_dir, task_name)
-    expected_task_dir = os.path.join(test_utils.TEST_DATA_DIR, "cached_task")
+    expected_task_dir = os.path.join(test_utils.TEST_DATA_DIR,
+                                     expected_task_dir)
     expected_tfrecord_files = [
-        "train.tfrecord-00000-of-00002", "train.tfrecord-00001-of-00002",
+        "train.tfrecord-%05d-of-%05d" % (i, num_shards)
+        for i in range(num_shards)
     ]
     expected_auxiliary_files = [
         "stats.train.json", "info.train.json"
@@ -80,9 +86,12 @@ class ProcessTaskBeamTest(test_utils.FakeTaskTest):
 
     for fname in expected_auxiliary_files:
       self.assertEqual(
-          tf.io.gfile.GFile(os.path.join(expected_task_dir, fname)).read(),
-          tf.io.gfile.GFile(
-              os.path.join(actual_task_dir, fname)).read().replace(", ", ","))
+          tf.io.gfile.GFile(os.path.join(expected_task_dir,
+                                         fname)).read().replace(
+                                             '"num_shards": 2',
+                                             f'"num_shards": {num_shards}'),
+          tf.io.gfile.GFile(os.path.join(actual_task_dir,
+                                         fname)).read().replace(", ", ","))
 
     # Add COMPLETED file so that we can load `uncached_task`.
     test_utils.mark_completed(self.test_data_dir, task_name)
@@ -92,16 +101,32 @@ class ProcessTaskBeamTest(test_utils.FakeTaskTest):
 
     # Check datasets.
     test_utils.verify_task_matches_fake_datasets(
-        uncached_task, use_cached=True, splits=task.splits)
+        uncached_task,
+        use_cached=True,
+        splits=task.splits,
+        token_preprocessed=token_preprocessed)
 
   def test_tfds_pipeline(self):
-    self.validate_pipeline("uncached_task")
+    self.validate_pipeline("uncached_task", token_preprocessed=True)
 
   def test_text_line_pipeline(self):
     self.validate_pipeline("text_line_task")
 
   def test_general_pipeline(self):
-    self.validate_pipeline("text_line_task")
+    self.validate_pipeline("general_task", num_shards=1)
+
+  def test_tf_example_pipeline(self):
+    self.validate_pipeline("tf_example_task")
+
+  def test_v3_pipeline(self):
+    self.validate_pipeline("task_v3", num_shards=1, token_preprocessed=True)
+
+  def test_v3_cache_before_tokenization_pipeline(self):
+    self.validate_pipeline(
+        "task_v3_tokenized_postcache",
+        expected_task_dir="cached_untokenized_task",
+        num_shards=1,
+        token_preprocessed=True)
 
   def test_overwrite(self):
     with TestPipeline() as p:

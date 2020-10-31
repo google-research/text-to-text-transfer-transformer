@@ -138,7 +138,7 @@ class UtilsTest(absltest.TestCase):
     def test_fn(x):
       return x + 1
 
-    self.assertEqual(list(tfds.as_numpy(test_fn(inputs))), [1, 2, 3, 4, 5])
+    self.assertEqual(list(test_fn(inputs).as_numpy_iterator()), [1, 2, 3, 4, 5])
 
 
 if __name__ == "__main__":

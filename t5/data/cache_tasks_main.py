@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Lint as: python3
-r"""Dumps preprocessed, tokenized tasks as TFRecord of tf.Examples.
+r"""Dumps preprocessed tasks as TFRecord of tf.Examples.
 
 Usage:
 ====================
@@ -37,9 +37,9 @@ from absl import logging
 
 import apache_beam as beam
 import apache_beam.metrics as metrics
+import numpy as np
 import t5
 import tensorflow.compat.v2 as tf
-import tensorflow_datasets as tfds
 
 
 
@@ -85,15 +85,15 @@ def _import_modules(modules):
       importlib.import_module(module)
 
 
-class BasePreprocessAndTokenizeTask(beam.PTransform):
-  """Abstract base class to preprocess and tokenize a Task.
+class BasePreprocessTask(beam.PTransform):
+  """Abstract base class to preprocess a Task.
 
-  Returns a PCollection of tokenized example dicts containing Tensors.
+  Returns a PCollection of example dicts containing Tensors.
   """
 
   def __init__(
       self, task, split, max_input_examples=None, modules_to_import=()):
-    """BasePreprocessAndTokenizeTask constructor.
+    """BasePreprocessTask constructor.
 
     Args:
       task: Task, the task to process.
@@ -121,7 +121,7 @@ class BasePreprocessAndTokenizeTask(beam.PTransform):
     metrics.Metrics.counter(
         str("%s_%s" % (self._task.name, self._split)), name).inc()
 
-  def _emit_tokenized_examples(self, shard):
+  def _emit_examples(self, shard):
     """Emits examples keyed by shard path and index for a single shard."""
     _import_modules(self._modules_to_import)
     logging.info("Processing shard: %s", shard)
@@ -134,12 +134,9 @@ class BasePreprocessAndTokenizeTask(beam.PTransform):
           self._max_input_examples / len(self.shards))
       ds = ds.repeat().take(num_shard_examples)
 
-    ds = self._task.preprocess_text(ds)
-    ds = t5.data.encode_string_features(
-        ds, self._task.output_features, keys=self._task.output_features,
-        copy_plaintext=True)
+    ds = self._task.preprocess_precache(ds)
 
-    for i, ex in enumerate(tfds.as_numpy(ds)):
+    for i, ex in enumerate(ds.as_numpy_iterator()):
       self._increment_counter("examples")
       # Log every power of two.
       if i & (i - 1) == 0:
@@ -147,17 +144,16 @@ class BasePreprocessAndTokenizeTask(beam.PTransform):
       yield ex
 
   def expand(self, pipeline):
-    return (
-        pipeline
-        | beam.Create(self.shards)
-        | beam.FlatMap(self._emit_tokenized_examples)
-        | beam.Reshuffle())  # Allows for additional parallelization.
+    return (pipeline
+            | beam.Create(self.shards)
+            | beam.FlatMap(self._emit_examples)
+            | beam.Reshuffle())  # Allows for additional parallelization.
 
 
-class PreprocessAndTokenizeTfdsTask(BasePreprocessAndTokenizeTask):
-  """Preprocesses and tokenizes a TfdsTask.
+class PreprocessTfdsTask(BasePreprocessTask):
+  """Preprocesses a TfdsTask.
 
-  Returns a PCollection of tokenized example dicts containing Tensors.
+  Returns a PCollection of example dicts containing Tensors.
   """
 
   def _get_shards(self):
@@ -167,10 +163,10 @@ class PreprocessAndTokenizeTfdsTask(BasePreprocessAndTokenizeTask):
     return self._task.tfds_dataset.load_shard(shard)
 
 
-class PreprocessAndTokenizeFileTask(BasePreprocessAndTokenizeTask):
-  """Preprocesses and tokenizes a FileTask.
+class PreprocessFileTask(BasePreprocessTask):
+  """Preprocesses and a FileTask.
 
-  Returns a PCollection of tokenized example dicts containing Tensors.
+  Returns a PCollection of example dicts containing Tensors.
   """
 
   def _get_shards(self):
@@ -180,16 +176,16 @@ class PreprocessAndTokenizeFileTask(BasePreprocessAndTokenizeTask):
     return self._task._reader(shard)  # pylint:disable=protected-access
 
 
-class PreprocessAndTokenizeGenericTask(BasePreprocessAndTokenizeTask):
-  """Preprocesses and tokenizes a generic Task.
+class PreprocessGenericTask(BasePreprocessTask):
+  """Preprocesses a generic Task.
 
   Cannot be distributed.
 
-  Returns a PCollection of tokenized example dicts containing Tensors.
+  Returns a PCollection of example dicts containing Tensors.
   """
 
   def _get_shards(self):
-    return ["Unkown"]
+    return ["Unknown"]
 
   def _load_shard(self, unused_shard):
     return self._task._dataset_fn(self._split, shuffle_files=False)  # pylint:disable=protected-access
@@ -304,11 +300,14 @@ class GetStats(beam.PTransform):
             lambda x: ("examples", x))
         | "example_count_dict" >> beam.Map(to_dict))
     def _count_tokens(pcoll, feat):
-      return (
-          pcoll
-          | "key_%s_toks" % feat >> beam.Map(
-              lambda x:  # pylint:disable=g-long-lambda
-              ("%s_tokens" % feat, int(sum(x[feat] > 1)) if feat in x else 0)))
+
+      def _count(ex):
+        if (feat in ex and isinstance(ex[feat], np.ndarray) and
+            ex[feat].dtype in (np.int32, np.int64)):
+          yield ("%s_tokens" % feat, int(sum(ex[feat] > 1)))
+
+      return pcoll | "key_%s_toks" % feat >> beam.FlatMap(_count)
+
     token_counts = (
         [_count_tokens(pcoll, feat)
          for feat in self._output_features]
@@ -388,28 +387,29 @@ def run_pipeline(
     output_dirs.append(output_dir)
 
     if isinstance(task, t5.data.TfdsTask):
-      pat_cls = PreprocessAndTokenizeTfdsTask
+      pat_cls = PreprocessTfdsTask
     elif isinstance(task, t5.data.FileTask):
-      pat_cls = PreprocessAndTokenizeFileTask
+      pat_cls = PreprocessFileTask
     else:
       logging.warning(
           "Generic Task '%s' cannot be distributed. To speed up preprocessing, "
           "use a TfdsTask or TextLineTask instead.", task.name)
-      pat_cls = PreprocessAndTokenizeGenericTask
+      pat_cls = PreprocessGenericTask
 
     for split in task.splits:
       label = "%s_%s" % (task.name, split)
 
       pat = pat_cls(task, split, max_input_examples, modules_to_import)
-      num_shards = len(pat.shards)
+      # Liquid sharding produces uneven shards, so use the same number of shards
+      # as input, if known.
+      num_shards = (0 if isinstance(pat_cls, PreprocessGenericTask) else len(
+          pat.shards))
       examples = (
           pipeline
           | "%s_pat" % label >> pat)
       _ = (examples
            | "%s_write_tfrecord" % label >> WriteExampleTfRecord(
                t5.data.get_tfrecord_prefix(output_dir, split),
-               # Liquid sharding produces uneven shards, so use the same
-               # number of shards as input.
                num_shards=num_shards))
       _ = (
           examples

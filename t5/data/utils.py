@@ -160,43 +160,6 @@ class LazyTfdsLoader(object):
     return dataset_size
 
 
-def encode_string_features(
-    dataset, output_features, keys, copy_plaintext=False):
-  """Encode specified string features.
-
-  Passes through non-string features unchanged. Optionally passes through copy
-  of original string features with "_plaintext" suffix added to the key.
-
-  Args:
-    dataset: a tf.data.Dataset
-    output_features: a dict of Feature objects; their vocabulary attribute will
-      be used to tokenize the specified features.
-    keys: list of strings, keys of features to encode.
-    copy_plaintext: bool, whether to pass through copies of plaintext strings
-      with a "_plaintext" suffix added to the key.
-  Returns:
-    a tf.data.Dataset
-  """
-  keys = set(keys)
-  def my_fn(features):
-    """Encode all specified feature that are strings and return a dictionary.
-
-    Args:
-      features: a dictionary
-    Returns:
-      a dictionary
-    """
-    ret = {}
-    for k, v in features.items():
-      if k in keys and v.dtype == tf.string:
-        if copy_plaintext:
-          ret["%s_plaintext" % k] = v
-        v = tf.cast(output_features[k].vocabulary.encode_tf(v), tf.int64)
-      ret[k] = v
-    return ret
-  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
-
 def dict_to_tfexample(ex):
   """Convert example dictionary to tf.train.Example proto."""
   feature_dict = {}

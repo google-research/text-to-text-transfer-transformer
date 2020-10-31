@@ -26,6 +26,7 @@ from absl import logging
 from absl.testing import absltest
 import numpy as np
 from t5.data import dataset_providers
+from t5.data import preprocessors
 from t5.data import sentencepiece_vocabulary
 from t5.data import utils as dataset_utils
 import tensorflow.compat.v2 as tf
@@ -370,9 +371,10 @@ def _split_tsv_preprocessor(dataset, field_names=("prefix", "suffix")):
   return dataset.map(parse_line)
 
 
-def test_token_preprocessor(dataset, output_features, **unused_kwargs):
+def test_token_preprocessor(dataset, output_features, sequence_length):
   """Change all occurrences of non-zero even numbered tokens in inputs to 50."""
   del output_features
+  del sequence_length
 
   def my_fn(ex):
     inputs = ex["inputs"]
@@ -401,13 +403,32 @@ def random_token_preprocessor(dataset, output_features, **unused_kwargs):
   return dataset.map(my_fn)
 
 
-def mock_vocabulary(encode_dict, vocab_size=None):
-  vocab = mock.MagicMock()
-  vocab.vocab_size = vocab_size
-  vocab.encode = mock.MagicMock(side_effect=lambda x: encode_dict[x])
-  vocab.encode_tf = mock.MagicMock(
-      side_effect=lambda x: tf.constant(encode_dict[x]))
-  return vocab
+def token_preprocessor_no_sequence_length(dataset, output_features):
+  return test_token_preprocessor(dataset, output_features, sequence_length=None)
+
+
+class MockVocabulary(object):
+  """Mocks a vocabulary object for testing."""
+
+  def __init__(self, encode_dict, vocab_size=None):
+    self._encode_dict = encode_dict
+    self._vocab_size = vocab_size
+
+  def encode(self, s):
+    return self._encode_dict[s]
+
+  def encode_tf(self, s):
+    res = tf.constant([-1])
+    for k, v in self._encode_dict.items():
+      if tf.equal(s, k):
+        res = tf.constant(v)
+      else:
+        pass
+    return res
+
+  @property
+  def vocab_size(self):
+    return self._vocab_size
 
 
 def sentencepiece_vocab(extra_ids=0):
@@ -540,9 +561,10 @@ class FakeTaskTest(absltest.TestCase):
     # Register a cached test Task.
     dataset_utils.set_global_cache_dirs([self.test_data_dir])
     clear_tasks()
-    add_tfds_task("cached_task")
+    add_tfds_task("cached_task", token_preprocessor=test_token_preprocessor)
+    add_tfds_task("cached_task_no_token_prep")
 
-    # Prepare cached task.
+    # Prepare cached tasks.
     self.cached_task = TaskRegistry.get("cached_task")
     cached_task_dir = os.path.join(self.test_data_dir, "cached_task")
     _dump_fake_dataset(
@@ -551,11 +573,14 @@ class FakeTaskTest(absltest.TestCase):
     _dump_fake_dataset(
         os.path.join(cached_task_dir, "validation.tfrecord"),
         _FAKE_TOKENIZED_DATASET["validation"], [2], _dump_examples_to_tfrecord)
+    shutil.copytree(
+        cached_task_dir,
+        os.path.join(self.test_data_dir, "cached_task_no_token_prep"))
 
     # Prepare uncached TfdsTask.
-    add_tfds_task("uncached_task")
+    add_tfds_task("uncached_task", token_preprocessor=test_token_preprocessor)
+    add_tfds_task("uncached_task_no_token_prep")
     self.uncached_task = TaskRegistry.get("uncached_task")
-
     # Prepare uncached, random TfdsTask
     add_tfds_task("uncached_random_task",
                   token_preprocessor=random_token_preprocessor)
@@ -597,11 +622,15 @@ class FakeTaskTest(absltest.TestCase):
     self.tf_example_task = TaskRegistry.get("tf_example_task")
 
     # Prepare uncached Task.
-    def _dataset_fn(split, shuffle_files):
+    def _dataset_fn(split,
+                    shuffle_files,
+                    filepattern=os.path.join(self.test_data_dir, "train.tsv*")):
       del split
-      del shuffle_files
-      filepattern = os.path.join(self.test_data_dir, "train.tsv*")
-      return tf.data.TextLineDataset(filepattern)
+      files = tf.data.Dataset.list_files(filepattern, shuffle=shuffle_files)
+      return files.interleave(
+          lambda f: tf.data.TextLineDataset(f).skip(1),
+          num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
     TaskRegistry.add(
         "general_task",
         dataset_providers.Task,
@@ -611,6 +640,43 @@ class FakeTaskTest(absltest.TestCase):
         output_features=dataset_providers.Feature(sentencepiece_vocab()),
         metric_fns=[])
     self.general_task = TaskRegistry.get("general_task")
+
+    # Prepare uncached TaskV3.
+    TaskRegistry.add(
+        "task_v3",
+        dataset_providers.TaskV3,
+        dataset_fn=get_fake_dataset,
+        splits=["train", "validation"],
+        preprocessors=[
+            test_text_preprocessor,
+            preprocessors.tokenize,
+            token_preprocessor_no_sequence_length,
+            dataset_providers.CacheDatasetPlaceholder(),
+        ],
+        output_features={
+            "inputs": dataset_providers.Feature(sentencepiece_vocab()),
+            "targets": dataset_providers.Feature(sentencepiece_vocab()),
+        },
+        metric_fns=[])
+    self.task_v3 = TaskRegistry.get("task_v3")
+
+    # Prepare uncached TaskV3 with no caching before tokenization.
+    TaskRegistry.add(
+        "task_v3_tokenized_postcache",
+        dataset_providers.TaskV3,
+        dataset_fn=get_fake_dataset,
+        splits=["train", "validation"],
+        preprocessors=[
+            test_text_preprocessor,
+            dataset_providers.CacheDatasetPlaceholder(),
+            preprocessors.tokenize,
+            token_preprocessor_no_sequence_length,
+        ],
+        output_features={
+            "inputs": dataset_providers.Feature(sentencepiece_vocab()),
+            "targets": dataset_providers.Feature(sentencepiece_vocab()),
+        },
+        metric_fns=[])
 
   def tearDown(self):
     super().tearDown()

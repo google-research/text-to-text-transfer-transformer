@@ -68,7 +68,7 @@ class PreprocessorsTest(tf.test.TestCase):
     self.assertAllEqual(output, expected_output)
 
   def test_noise_token_to_sentinel(self):
-    vocabulary = test_utils.mock_vocabulary({'foo': 10}, vocab_size=1000)
+    vocabulary = test_utils.MockVocabulary({'foo': [10]}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
     noise_mask = tf.constant([True, True, False, False, True, False])
     expected_output = [999, 999, 12, 13, 999, 15]
@@ -77,7 +77,7 @@ class PreprocessorsTest(tf.test.TestCase):
     self.assertAllEqual(output, expected_output)
 
   def test_noise_span_to_sentinel(self):
-    vocabulary = test_utils.mock_vocabulary({'foo': 10}, vocab_size=1000)
+    vocabulary = test_utils.MockVocabulary({'foo': [10]}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
     noise_mask = tf.constant([True, True, False, False, True, False])
     expected_output = [999, 12, 13, 999, 15]
@@ -86,7 +86,7 @@ class PreprocessorsTest(tf.test.TestCase):
     self.assertAllEqual(output, expected_output)
 
   def test_nonnoise_span_to_sentinel(self):
-    vocabulary = test_utils.mock_vocabulary({'foo': 10}, vocab_size=1000)
+    vocabulary = test_utils.MockVocabulary({'foo': [10]}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
     noise_mask = tf.constant([True, True, False, False, True, False])
     expected_output = [10, 11, 999, 14, 999]
@@ -95,7 +95,7 @@ class PreprocessorsTest(tf.test.TestCase):
     self.assertAllEqual(output, expected_output)
 
   def test_noise_span_to_unique_sentinel(self):
-    vocabulary = test_utils.mock_vocabulary({'foo': 10}, vocab_size=1000)
+    vocabulary = test_utils.MockVocabulary({'foo': [10]}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
     noise_mask = tf.constant([True, True, False, False, True, False])
     expected_output = [999, 12, 13, 998, 15]
@@ -104,7 +104,7 @@ class PreprocessorsTest(tf.test.TestCase):
     self.assertAllEqual(output, expected_output)
 
   def test_drop_noise_tokens(self):
-    vocabulary = test_utils.mock_vocabulary({'foo': 10}, vocab_size=1000)
+    vocabulary = test_utils.MockVocabulary({'foo': [10]}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
     noise_mask = tf.constant([True, True, False, False, True, False])
     expected_output = [12, 13, 15]
@@ -113,7 +113,7 @@ class PreprocessorsTest(tf.test.TestCase):
     self.assertAllEqual(output, expected_output)
 
   def test_drop_nonnoise_tokens(self):
-    vocabulary = test_utils.mock_vocabulary({'foo': 10}, vocab_size=1000)
+    vocabulary = test_utils.MockVocabulary({'foo': [10]}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
     noise_mask = tf.constant([True, True, False, False, True, False])
     expected_output = [10, 11, 14]
@@ -123,7 +123,7 @@ class PreprocessorsTest(tf.test.TestCase):
 
   def test_permute_noise_tokens(self):
     tf.random.set_seed(55)
-    vocabulary = test_utils.mock_vocabulary({'foo': 10}, vocab_size=1000)
+    vocabulary = test_utils.MockVocabulary({'foo': [10]}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
     noise_mask = tf.constant([True, True, False, False, True, False])
     expected_output = [11, 14, 12, 13, 10, 15]
@@ -133,7 +133,7 @@ class PreprocessorsTest(tf.test.TestCase):
 
   def test_noise_token_to_gathered_token(self):
     tf.random.set_seed(55)
-    vocabulary = test_utils.mock_vocabulary({'foo': 10}, vocab_size=1000)
+    vocabulary = test_utils.MockVocabulary({'foo': [10]}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
     noise_mask = tf.constant([True, True, False, False, True, False])
     expected_output = [11, 11, 12, 13, 15, 15]
@@ -143,7 +143,7 @@ class PreprocessorsTest(tf.test.TestCase):
 
   def test_noise_token_to_random_token(self):
     tf.random.set_seed(55)
-    vocabulary = test_utils.mock_vocabulary({'foo': 10}, vocab_size=1000)
+    vocabulary = test_utils.MockVocabulary({'foo': [10]}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
     noise_mask = tf.constant([True, True, False, False, True, False])
     expected_output = [811, 309, 12, 13, 451, 15]
@@ -154,7 +154,7 @@ class PreprocessorsTest(tf.test.TestCase):
 
   def test_noise_token_to_random_token_or_sentinel(self):
     tf.random.set_seed(55)
-    vocabulary = test_utils.mock_vocabulary({'foo': 10}, vocab_size=1000)
+    vocabulary = test_utils.MockVocabulary({'foo': [10]}, vocab_size=1000)
     tokens = tf.constant(list(range(10)))
     noise_mask = tf.constant(
         [True, True, False, False, True, False, True, True, True, True])
@@ -1042,10 +1042,35 @@ class PreprocessorsTest(tf.test.TestCase):
     dataset = prep.take(og_dataset, -1)
     assert_dataset(dataset, [{'inputs': 1} for _ in range(100)])
 
-  def parse_tsv(self):
+  def test_parse_tsv(self):
     og_dataset = tf.data.Dataset.from_tensor_slices(['a\tb', 'c\td'])
     dataset = prep.parse_tsv(og_dataset, field_names=['f1', 'f2'])
     assert_dataset(dataset, [{'f1': 'a', 'f2': 'b'}, {'f1': 'c', 'f2': 'd'}])
+
+  def test_tokenize(self):
+    og_dataset = tf.data.Dataset.from_tensors({
+        'prefix': 'This is',
+        'suffix': 'a test.'
+    })
+    output_features = {
+        'prefix': Feature(test_utils.MockVocabulary({'This is': [0, 1]})),
+        'suffix': Feature(test_utils.MockVocabulary({'a test.': [2, 3]})),
+    }
+
+    assert_dataset(
+        prep.tokenize(og_dataset, output_features=output_features), {
+            'prefix': [0, 1],
+            'prefix_plaintext': 'This is',
+            'suffix': [2, 3],
+            'suffix_plaintext': 'a test.'
+        })
+    assert_dataset(
+        prep.tokenize(
+            og_dataset, output_features=output_features, copy_plaintext=False),
+        {
+            'prefix': [0, 1],
+            'suffix': [2, 3]
+        })
 
   def test_denoise(self):
     tf.random.set_seed(55)

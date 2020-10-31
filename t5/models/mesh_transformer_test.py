@@ -65,7 +65,7 @@ class MeshDatasetFnsTest(test_utils.FakeMixtureTest):
       # No postprocess_fn is supplied so it should function as a pass-through
       self.assertEqual("test", postprocess_fn("test"))
       # test_utils task has empty metric_fns list
-      self.assertEqual([], metric_fns)
+      self.assertEmpty(metric_fns)
       # Materialize the full dataset to test for errors.
       list(tfds.as_numpy(ds))
 

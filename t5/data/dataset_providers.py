@@ -24,12 +24,15 @@ import inspect
 import json
 import os
 import re
+from typing import Any, Callable, Iterable, Optional, Mapping, Sequence, Union
 
 from absl import logging
 import gin
 from t5.data import utils
+from t5.data.preprocessors import tokenize as tokenize_preprocessor
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
+
 
 _DEFAULT_FEATURE_KEYS = ["inputs", "targets"]
 
@@ -102,8 +105,14 @@ class DatasetProviderRegistry(object):
     return cls._REGISTRY.keys()
 
   @classmethod
-  def get_dataset(cls, name, sequence_length, split, use_cached=False,
-                  shuffle=True, seed=None):
+  def get_dataset(
+      cls,
+      name,
+      sequence_length,
+      split,
+      use_cached=False,
+      shuffle=True,
+      seed=None):
     return cls.get(name).get_dataset(
         sequence_length=sequence_length, split=split, use_cached=use_cached,
         shuffle=shuffle, seed=seed)
@@ -149,69 +158,56 @@ def maybe_print_dataset(dataset, should_print=False):
   return print_dataset(dataset) if should_print else dataset
 
 
-class Task(DatasetProviderBase):
-  """A wrapper for a `tf.data.Dataset` along with preprocessing information.
+class CacheDatasetPlaceholder(object):
+  """A placeholder to signal when in the pipeline offline caching will occur."""
 
-  Tasks handle preprocessing (via arbitrary TF function) and tokenization
-  (via SentencePiece). Non-train splits also pass through the original
-  plaintext strings with a "_plaintext" suffix added to the key.
+  def __call__(self, dataset):
+    raise RuntimeError("`CacheDatasetPlaceholder` should never be called.")
+
+
+class TaskV3(DatasetProviderBase):
+  """A class to manage a dataset and its related metrics.
+
+  The V3 API is still under development and may change without warning.
   """
 
-  def __init__(self,
-               name,
-               dataset_fn,
-               splits,
-               text_preprocessor,
-               metric_fns=None,
-               postprocess_fn=None,
-               token_preprocessor=None,
-               output_features=None,
-               num_input_examples=None,
-               supports_caching=True,
-               shuffle_buffer_size=SHUFFLE_BUFFER_SIZE):
-    """Task constructor.
-
-    Attributes of output features, including the vocabulary used for
-    tokenization, should be provided via the `output_features` argument.
+  def __init__(
+      self,
+      name: str,
+      dataset_fn: Callable[[str, bool, Optional[int]], tf.data.Dataset],
+      splits: Iterable[str],
+      output_features: Mapping[str, Feature],
+      preprocessors: Optional[Sequence[Callable[..., tf.data.Dataset]]] = None,
+      postprocess_fn: Optional[Callable[..., Any]] = None,
+      metric_fns: Optional[Callable[..., Mapping[str, float]]] = None,
+      num_input_examples: Optional[Mapping[str, int]] = None,
+      shuffle_buffer_size: Optional[int] = SHUFFLE_BUFFER_SIZE):
+    """Task V3 constructor.
 
     Args:
-      name: string, a unique name for the Task. A ValueError will be raised if
-        another task with this name is already registered.
-      dataset_fn: callable, a function with the signature
-        `dataset_fn(split, shuffle_files)' (and optionally the variable `seed`)
-        that returns a `tf.data.Dataset`.
-      splits: list(string), a list of allowable splits to request from the
-        `dataset_fn`.
-      text_preprocessor: a function (or list of functions) that (each) takes in
-        a tf.data.Dataset of string features and returns a tf.data.Dataset of
-        string features. Can be set to None as a no-op. If a list is given,
-        they will be executed sequentially.
-      metric_fns: list(callable), list of metric functions with the signature
-        `metric_fn(targets, predictions)` to use during evaluation. By default
-        (None), an empty list will be used, resulting in no evaluation on this
-        task.
-      postprocess_fn: function (or list of functions) that (each) takes in
-        decoded model outputs (strings) and returns a string which is ready
-        for evaluation using the metric functions in `metric_fns`. Can be
-        set to None as a no-op. If a list is given, functions will be executed
-        sequentially.
-      token_preprocessor: an optional function (or list of functions) that
-        (each) takes in a tf.data.Dataset of token features and returns a
-        tf.data.Dataset of token features.
-        Can be set to None as a no-op. If a list is given, they will be
-        executed sequentially.
-        The functions are also passed `sequence_length` and `vocabulary`
-        keyword arguments.
-      output_features: dict(str, Feature), list(str), Feature, or None. Output
-        features of the Task. If list(str) is provided, a default `Feature` will
-        be constructed for each provided feature name. If a `Feature` is
-        provided, it will be used for the default feature names ('inputs' and
-        'targets'). When None (default), a default `Feature` will be constructed
-        for the default feature names.
+      name: a unique name for the Task.
+      dataset_fn: a function with the signature `dataset_fn(split,
+        shuffle_files)' (and optionally the variable `seed`) that returns a
+        `tf.data.Dataset`.
+      splits: an iterable of allowable splits to request from  the `dataset_fn`.
+      output_features: dict(str, Feature), output features of the Task to be
+        passed to the model. After preprocessing, examples will be validated to
+        ensure they include features that match this specification. Note that
+        additional features may be included (e.g., for evaluation), but they
+        will not be passed to the model.
+      preprocessors: list(callable), an optional list of functions that receive
+        a tf.data.Dataset and return a tf.data.Dataset. These will be executed
+        sequentually and the final dataset must include features matching
+        `output_features`.
+      postprocess_fn: callable, an optional function that receives decoded model
+        outputs and converts them to a form that is ready for evaluation using
+        the metric functions in `metric_fns`.
+      metric_fns: list(callable), an optional list of metric functions with the
+        signature `metric_fn(targets, predictions)` to use during evaluation. If
+        undefined or empty, no evaluation will occur on the task.
       num_input_examples: dict(string: int) or None, a dictionary mapping split
         to its size in number of input examples (before preprocessing). The
         `num_input_examples` method will return None if not provided.
-      supports_caching: bool, whether or not this task supports offline caching.
       shuffle_buffer_size: an optional integer
     """
     if not _VALID_TASK_NAME_REGEX.match(name):
@@ -225,88 +221,92 @@ class Task(DatasetProviderBase):
 
     self._name = name
     self._dataset_fn = dataset_fn
-    self._text_preprocessor = (
-        [] if text_preprocessor is None else text_preprocessor)
-    self._token_preprocessor = (
-        [] if token_preprocessor is None else token_preprocessor)
-    self._metric_fns = metric_fns
-    # Use a pass-through if postprocess_fn is not provided
-    self._postprocess_fn = (
-        [(lambda x, **unused_kwargs: x)]
-        if postprocess_fn is None else postprocess_fn)
+
+    # Find optional CacheDatasetPlaceholder.
+    preprocessors = tuple(preprocessors or [])
+    cache_step_idxs = [
+        i for i, p in enumerate(preprocessors)
+        if isinstance(p, CacheDatasetPlaceholder)
+    ]
+    if len(cache_step_idxs) > 1:
+      raise ValueError(
+          "`CacheDatasetPlaceholder` can appear at most once in the "
+          f"preprocessing pipeline. Found {len(cache_step_idxs)} in '{name}'.")
+    cache_step_idx = cache_step_idxs[0] if cache_step_idxs else -1
+    if cache_step_idx > -1:
+      for prep in preprocessors[:cache_step_idx]:
+        if "sequence_length" in inspect.signature(prep).parameters.keys():
+          raise ValueError(
+              f"'{prep.__name__}' has a `sequence_length` argument but occurs "
+              f"before `CacheDatasetPlaceholder` in '{name}'. This is not "
+              "allowed since the sequence length is specified at run time.")
+    self._cache_step_idx = cache_step_idx
+    self._preprocessors = preprocessors
+
+    self._metric_fns = tuple(metric_fns)
+    self._postprocess_fn = postprocess_fn
 
     self._cache_dir = None
     self._stats = {}
     self._shuffle_buffer_size = shuffle_buffer_size
 
-    if hasattr(output_features, "__len__") and not output_features:
-      raise ValueError("output_features must be non-empty.")
-    if output_features is None:
-      output_features = Feature(utils.get_default_vocabulary())
-    if isinstance(output_features, dict):
-      pass
-    elif isinstance(output_features, Feature):
-      output_features = {k: output_features for k in _DEFAULT_FEATURE_KEYS}
-    elif isinstance(output_features, list) and all(
-        isinstance(f, str) for f in output_features):
-      output_features = {
-          k: Feature(utils.get_default_vocabulary()) for k in output_features
-      }
-    else:
-      raise ValueError(
-          "output_features must be a dict, Feature, list of str, or None")
     self._output_features = collections.OrderedDict(
         sorted(list(output_features.items()))
     )
 
     self._splits = splits
     self._num_input_examples = num_input_examples
-    self._supports_caching = supports_caching
 
   @property
-  def name(self):
+  def name(self) -> str:
     return self._name
 
   @property
-  def metric_fns(self):
+  def metric_fns(
+      self) -> Optional[Iterable[Callable[..., Mapping[str, float]]]]:
     return self._metric_fns
 
   @property
-  def output_features(self):
+  def output_features(self) -> Mapping[str, Feature]:
     return self._output_features
 
   @property
-  def token_preprocessor(self):
-    return self._token_preprocessor
-
-  @property
-  def splits(self):
+  def splits(self) -> Iterable[str]:
     return self._splits
 
-  def num_input_examples(self, split):
+  def num_input_examples(self, split: str) -> int:
     if self._num_input_examples is None:
       return None
     return self._num_input_examples[split]
 
-  def _preprocess_dataset(self, dataset, preprocessors, **preprocess_kwargs):
-    if not hasattr(preprocessors, "__iter__"):
-      preprocessors = [preprocessors]
+  def _preprocess_dataset(
+      self,
+      dataset: tf.data.Dataset,
+      preprocessors: Iterable[Callable[..., tf.data.Dataset]],
+      sequence_length: Optional[Mapping[str, int]] = None) -> tf.data.Dataset:
+    """Sequentially applies preprocessors."""
     for prep_fn in preprocessors:
-      dataset = prep_fn(dataset, **preprocess_kwargs)
+      fn_args = set(inspect.signature(prep_fn).parameters.keys())
+      kwargs = {}
+      if "sequence_length" in fn_args:
+        assert sequence_length is not None
+        kwargs["sequence_length"] = sequence_length
+      if "output_features" in fn_args:
+        kwargs["output_features"] = self.output_features
+      dataset = prep_fn(dataset, **kwargs)
     return dataset
 
-  def _validate_dataset(
-      self,
-      dataset,
-      expected_output_type,
-      expected_output_rank,
-      error_label,
-      ensure_no_eos=False):
+  def _validate_dataset(self,
+                        dataset: tf.data.Dataset,
+                        expected_output_type: tf.DType,
+                        expected_output_rank: int,
+                        error_label: str,
+                        ensure_no_eos: bool = False) -> tf.data.Dataset:
     """Validates properties of a tf.data.Dataset, raising Exceptions if needed.
 
     Args:
       dataset: a tf.data.Dataset to validate.
-      expected_output_type: a tf.dtype, the expected type of the model features.
+      expected_output_type: a tf.Dtype, the expected type of the model features.
       expected_output_rank: an int, the expected rank of the model features.
       error_label: a string, an identifier for the previous processing step to
         report in raised ValueErrors.
@@ -357,35 +357,12 @@ class Task(DatasetProviderBase):
           num_parallel_calls=tf.data.experimental.AUTOTUNE)
     return dataset
 
-  def preprocess_text(self, dataset):
-    """Preprocessed text dataset."""
-    dataset = self._preprocess_dataset(dataset, self._text_preprocessor)
-    dataset = self._validate_dataset(
-        dataset, expected_output_type=tf.string, expected_output_rank=0,
-        error_label="text preprocessing")
-    return dataset
-
-  def preprocess_tokens(self, dataset, sequence_length):
-    """Preprocesses tokenized dataset, truncates, and appends EOS.
-
-    Args:
-      dataset: a tf.data.Dataset
-      sequence_length: dict mapping feature key to int length for that feature.
-        If None, the features will not be truncated.
-    Returns:
-      a tf.data.Dataset
-    """
-    dataset = self._preprocess_dataset(
-        dataset, self._token_preprocessor,
-        sequence_length=sequence_length,
-        output_features=self.output_features)
-    dataset = self._validate_dataset(
-        dataset,
-        expected_output_type=tf.int64,
-        expected_output_rank=1,
-        error_label="token preprocessing",
-        ensure_no_eos=True)
-    # Trim and append EOS=1 token to model features.
+  def _trim_and_ensure_eos(
+      self,
+      dataset: tf.data.Dataset,
+      sequence_length: Mapping[str, int]
+    ) -> tf.data.Dataset:
+    """Trim and append EOS=1 token to model features."""
     def _trim_and_append_eos(feat, v):
       if feat not in self.output_features:
         return v
@@ -401,8 +378,45 @@ class Task(DatasetProviderBase):
         lambda ex: {k: _trim_and_append_eos(k, v) for k, v in ex.items()},
         num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
+  def preprocess_precache(self, dataset) -> tf.data.Dataset:
+    """Runs preprocessing steps before the optional CacheDatasetPlaceholder."""
+    if not self.supports_caching:
+      return dataset
+
+    return self._preprocess_dataset(
+        dataset,
+        self._preprocessors[:self._cache_step_idx],
+    )
+
+  def preprocess_postcache(
+      self,
+      dataset: tf.data.Dataset,
+      sequence_length: Mapping[str, int],
+  ) -> tf.data.Dataset:
+    """Runs preprocessing steps after the optional CacheDatasetPlaceholder.
+
+    Args:
+      dataset: a tf.data.Dataset
+      sequence_length: dict mapping feature key to int length for that feature.
+        If None, the features will not be truncated.
+    Returns:
+      a tf.data.Dataset
+    """
+    dataset = self._preprocess_dataset(
+        dataset,
+        self._preprocessors[self._cache_step_idx + 1:],
+        sequence_length=sequence_length,
+    )
+    dataset = self._validate_dataset(
+        dataset,
+        expected_output_type=tf.int64,
+        expected_output_rank=1,
+        error_label="preprocessing",
+        ensure_no_eos=True)
+    return dataset
+
   @property
-  def cache_dir(self):
+  def cache_dir(self) -> Optional[str]:
     """Returns the cache directory (or None), initializing if needed."""
     if not self._cache_dir:
       # See if cached data exists in any of the cache directories.
@@ -423,16 +437,18 @@ class Task(DatasetProviderBase):
     return self._cache_dir
 
   @property
-  def supports_caching(self):
+  def supports_caching(self) -> bool:
     """Wether or not this task supports offline caching."""
-    return self._supports_caching
+    return self._cache_step_idx > -1
 
-  def assert_cached(self):
+  def assert_cached(self) -> None:
     """Raises an assertion error if cached dataset does not exist."""
     assert self.cache_dir, (
         "'%s' does not exist in any of the task cache directories" % self.name)
 
-  def get_cached_stats(self, split=tfds.Split.TRAIN):
+  def get_cached_stats(self,
+                       split: str = tfds.Split.TRAIN
+                      ) -> Mapping[str, Union[int, float]]:
     """Returns basic statistics for cached dataset."""
     self.assert_cached()
     if split not in self._stats:
@@ -468,14 +484,13 @@ class Task(DatasetProviderBase):
 
   def get_dataset(
       self,
-      sequence_length,
-      split=tfds.Split.TRAIN,
-      use_cached=False,
-      shuffle=True,
-      shuffle_buffer_size=None,
-      seed=None,
-      copy_plaintext=True,
-  ):
+      sequence_length: Mapping[str, int],
+      split: str = tfds.Split.TRAIN,
+      use_cached: bool = False,
+      shuffle: bool = True,
+      shuffle_buffer_size: Optional[int] = None,
+      seed: Optional[int] = None,
+  ) -> tf.data.Dataset:
     """Returns a tf.data.Dataset from cache or generated on the fly.
 
     Args:
@@ -487,8 +502,6 @@ class Task(DatasetProviderBase):
         on the fly (use_cached=False).
       shuffle_buffer_size: an integer or None to use task-specific buffer size.
       seed: tf.int64 scalar tf.Tensor (or None) for shuffling tf.data.
-      copy_plaintext: bool, whether to pass through copies of plaintext strings
-        with a "_plaintext" suffix added to the key.
     Returns:
       A mixed tf.data.Dataset.
     """
@@ -513,18 +526,15 @@ class Task(DatasetProviderBase):
         _validate_args(self._dataset_fn, ["split", "shuffle_files", "seed"])
         ds = self._dataset_fn(split=split, shuffle_files=shuffle,
                               seed=seed)
-      ds = self.preprocess_text(ds)
-      # Tokenize
-      ds = utils.encode_string_features(
-          ds, self.output_features, keys=self.output_features,
-          copy_plaintext=copy_plaintext)
+      ds = self.preprocess_precache(ds)
 
     if (not use_cached and self.num_input_examples(split) and
         self.num_input_examples(split) < _MAX_EXAMPLES_TO_MEM_CACHE):
       ds = ds.cache()
 
-    # Post tokenization processing.
-    ds = self.preprocess_tokens(ds, sequence_length)
+    # Post cache processing.
+    ds = self.preprocess_postcache(ds, sequence_length=sequence_length)
+    ds = self._trim_and_ensure_eos(ds, sequence_length=sequence_length)
     ds = maybe_print_dataset(ds)
 
     if shuffle:
@@ -535,8 +545,10 @@ class Task(DatasetProviderBase):
 
     return ds
 
-  def _get_cached_dataset(self, split=tfds.Split.TRAIN,
-                          shuffle=True, seed=None):
+  def _get_cached_dataset(self,
+                          split: str = tfds.Split.TRAIN,
+                          shuffle: bool = True,
+                          seed: Optional[int] = None) -> tf.data.Dataset:
     """Returns a tf.data.Dataset read from cached files."""
     self.assert_cached()
     with tf.io.gfile.GFile(utils.get_info_path(self.cache_dir, split)) as f:
@@ -568,14 +580,101 @@ class Task(DatasetProviderBase):
       ds = ds.cache()
     return ds
 
-  def postprocess_fn(self, string, **postprocess_kwargs):
-    """Returns the processed string after applying postprocess function(s)."""
-    postprocessors = self._postprocess_fn
-    if not hasattr(postprocessors, "__iter__"):
-      postprocessors = [self._postprocess_fn]
-    for post_fn in postprocessors:
-      string = post_fn(string, **postprocess_kwargs)
-    return string
+  def postprocess_fn(self, decoded_model_output: Any,
+                     **postprocess_kwargs) -> Any:
+    """Returns the model output after applying the postprocess function."""
+    if self._postprocess_fn:
+      return self._postprocess_fn(decoded_model_output, **postprocess_kwargs)
+    return decoded_model_output
+
+
+class Task(TaskV3):
+  """A wrapper for a `tf.data.Dataset` along with preprocessing information.
+
+  Tasks handle preprocessing (via arbitrary TF function) and tokenization.
+  Non-train splits also pass through the original plaintext strings with a
+  "_plaintext" suffix added to the key.
+  """
+
+  def __init__(self,
+               name,
+               dataset_fn,
+               splits,
+               text_preprocessor,
+               metric_fns=None,
+               postprocess_fn=None,
+               token_preprocessor=None,
+               output_features=None,
+               num_input_examples=None,
+               supports_caching=True,
+               shuffle_buffer_size=SHUFFLE_BUFFER_SIZE):
+
+    if text_preprocessor and not hasattr(text_preprocessor, "__iter__"):
+      text_preprocessor = [text_preprocessor]
+    if token_preprocessor and not hasattr(token_preprocessor, "__iter__"):
+      token_preprocessor = [token_preprocessor]
+
+    preprocessors = list(text_preprocessor or [])
+    preprocessors.append(tokenize_preprocessor)
+    if supports_caching:
+      preprocessors.append(CacheDatasetPlaceholder())
+    preprocessors.extend(token_preprocessor or [])
+
+    if hasattr(output_features, "__len__") and not output_features:
+      raise ValueError("output_features must be non-empty.")
+    if output_features is None:
+      output_features = Feature(utils.get_default_vocabulary())
+    if isinstance(output_features, dict):
+      pass
+    elif isinstance(output_features, Feature):
+      output_features = {k: output_features for k in _DEFAULT_FEATURE_KEYS}
+    elif isinstance(output_features, list) and all(
+        isinstance(f, str) for f in output_features):
+      output_features = {
+          k: Feature(utils.get_default_vocabulary()) for k in output_features
+      }
+    else:
+      raise ValueError(
+          "output_features must be a dict, Feature, list of str, or None")
+
+    if hasattr(postprocess_fn, "__iter__"):
+      postprocess_fns = postprocess_fn
+
+      def postprocess_fn(x, **postprocess_kwargs):  # pylint:disable=function-redefined
+        for post_fn in postprocess_fns:
+          x = post_fn(x, **postprocess_kwargs)
+        return x
+
+    super().__init__(
+        name=name,
+        dataset_fn=dataset_fn,
+        splits=splits,
+        output_features=output_features,
+        preprocessors=preprocessors,
+        postprocess_fn=postprocess_fn,
+        metric_fns=metric_fns,
+        num_input_examples=num_input_examples,
+        shuffle_buffer_size=shuffle_buffer_size)
+
+  def get_dataset(self,
+                  sequence_length,
+                  split,
+                  use_cached=False,
+                  shuffle=True,
+                  shuffle_buffer_size=None,
+                  seed=None,
+                  copy_plaintext=True):
+    ds = super().get_dataset(
+        sequence_length=sequence_length,
+        split=split,
+        use_cached=use_cached,
+        shuffle=shuffle,
+        shuffle_buffer_size=shuffle_buffer_size,
+        seed=seed)
+    if not copy_plaintext:
+      ds = ds.map(lambda x:
+                  {k: v for k, v in x.items() if not k.endswith("_plaintext")})
+    return ds
 
 
 class TfdsTask(Task):
@@ -801,7 +900,7 @@ class TFExampleTask(FileTask):
 
 class TaskRegistry(DatasetProviderRegistry):
   _REGISTRY = {}
-  _PROVIDER_TYPE = Task
+  _PROVIDER_TYPE = TaskV3
 
   @classmethod
   def add(cls, name, task_cls=Task, **kwargs):
@@ -876,6 +975,7 @@ class Mixture(DatasetProviderBase):
                for name, rate in self._task_to_rate.items())
 
   def get_rate(self, task):
+    """Computes the mixing rate for the given task."""
     value = 0.0
 
     for mix in self._sub_mixtures:
@@ -1033,12 +1133,10 @@ def _log_mixing_proportions(
       mean_targets_length.append(targets_sum / float(stats_examples))
   else:
     def _estimated_mean_length(task, key):
-      if task.token_preprocessor:
-        return sequence_length[key]
-      else:
-        return min(sequence_length[key],
-                   (task.get_cached_stats("train")[key + "_tokens"] /
-                    task.get_cached_stats("train")["examples"]))
+      return min(sequence_length[key],
+                 (task.get_cached_stats("train")[key + "_tokens"] /
+                  task.get_cached_stats("train")["examples"]))
+
     mean_inputs_length = [_estimated_mean_length(task, "inputs")
                           for task in tasks]
     mean_targets_length = [_estimated_mean_length(task, "targets")

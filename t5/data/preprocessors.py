@@ -1697,6 +1697,44 @@ def preprocess_tsv(line,
 # ======================Token Preprocessors=====================================
 
 
+def tokenize(dataset, output_features, copy_plaintext=True):
+  """Encode specified string features.
+
+  Passes through non-string features unchanged. Optionally passes through copy
+  of original string features with "_plaintext" suffix added to the key.
+
+  Args:
+    dataset: a tf.data.Dataset
+    output_features: a dict of Feature objects; their vocabulary attribute will
+      be used to tokenize the specified features.
+    copy_plaintext: bool, whether to pass through copies of plaintext strings
+      with a "_plaintext" suffix added to the key.
+
+  Returns:
+    a tf.data.Dataset
+  """
+
+  def my_fn(features):
+    """Encode all specified feature that are strings and return a dictionary.
+
+    Args:
+      features: a dictionary
+
+    Returns:
+      a dictionary
+    """
+    ret = {}
+    for k, v in features.items():
+      if k in output_features and v.dtype == tf.string:
+        if copy_plaintext:
+          ret[f'{k}_plaintext'] = v
+        v = tf.cast(output_features[k].vocabulary.encode_tf(v), tf.int64)
+      ret[k] = v
+    return ret
+
+  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+
 # TODO(adarob): Add a test.
 def span_corruption(dataset, sequence_length, output_features):
   """Final pretraining objective used in Raffel et al., 2019."""
