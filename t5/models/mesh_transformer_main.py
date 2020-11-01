@@ -113,6 +113,10 @@ flags.DEFINE_list(
 flags.DEFINE_string("eval_summary_dir", "", "Path to save eval summaries")
 flags.DEFINE_string("eval_split", "validation",
                     "Dataset split to use for evaluation.")
+flags.DEFINE_boolean(
+    "output_eval_examples", True,
+    "Whether to dump inputs, targets, and predictions of the eval examples in "
+    "plaintext to eval_summary_dir.")
 
 # Predict mode args
 flags.DEFINE_string("input_file", "",
@@ -194,7 +198,8 @@ def main(_):
       model.eval(mixture_or_task_name=FLAGS.mixture_or_task,
                  checkpoint_steps=checkpoint_steps,
                  summary_dir=FLAGS.eval_summary_dir,
-                 split=FLAGS.eval_split)
+                 split=FLAGS.eval_split,
+                 output_eval_examples=FLAGS.output_eval_examples)
     elif FLAGS.mode == "finetune":
       if not (FLAGS.checkpoint_mode == "latest" or
               (FLAGS.checkpoint_mode == "specific" and
