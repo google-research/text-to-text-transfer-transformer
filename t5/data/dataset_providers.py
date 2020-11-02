@@ -286,6 +286,7 @@ class TaskV3(DatasetProviderBase):
       sequence_length: Optional[Mapping[str, int]] = None) -> tf.data.Dataset:
     """Sequentially applies preprocessors."""
     for prep_fn in preprocessors:
+      # prep_fn must not rely on variable length keyword args such as **kwargs.
       fn_args = set(inspect.signature(prep_fn).parameters.keys())
       kwargs = {}
       if "sequence_length" in fn_args:

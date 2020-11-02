@@ -2166,17 +2166,26 @@ def trivia_qa_truncate_inputs(dataset, output_features, sequence_length):
 
 
 @gin.configurable()
-def unsupervised(dataset, preprocessors=None, **kwargs):
+def unsupervised(dataset,
+                 preprocessors=None,
+                 output_features=None,
+                 sequence_length=None):
   """Configure this to point at unsupervised preprocessors.
 
    This function creates an extra level of indirection in case we want
    different unsupervised pretraining functions in the future which do not
    fit into the denoise() framework.
 
+   This function should be used as a post-cache preprocessing function.
+
   Args:
     dataset: A tf.data.Dataset to process.
-    preprocessors: a list of token-preprocessor functions
-    **kwargs: passthrough keyword arguments for token preprocessors
+    preprocessors: a list of token-preprocessor functions. These functions
+      should take unused kwargs if output_features or sequence_length is not
+      used.
+    output_features: dict(str, Feature), output features of the Task to be
+      passed to the model.
+    sequence_length: dict mapping feature key to int length for that feature.
 
   Returns:
     A preprocessed tf.data.Dataset.
@@ -2187,6 +2196,13 @@ def unsupervised(dataset, preprocessors=None, **kwargs):
         'will be applied.'
     )
     return dataset
+
+  kwargs = {}
+  if output_features:
+    kwargs['output_features'] = output_features
+  if sequence_length:
+    kwargs['sequence_length'] = sequence_length
+
   for p in preprocessors:
     dataset = p(dataset, **kwargs)
   return dataset
