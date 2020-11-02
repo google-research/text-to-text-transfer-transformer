@@ -1749,7 +1749,7 @@ def span_corruption(dataset, sequence_length, output_features):
       max_tokens_per_segment=random_spans_helper(
           extra_tokens_per_span_inputs=1,
           extra_tokens_per_span_targets=1,
-          inputs_length=512,
+          inputs_length=sequence_length["inputs"],
           mean_noise_span_length=3.0,
           noise_density=0.15
       )[0]
