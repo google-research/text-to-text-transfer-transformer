@@ -321,7 +321,7 @@ t5_mesh_transformer \
   --tpu_zone="${ZONE}" \
   --model_dir="${MODEL_DIR}" \
   --use_model_api \
-  --mode="export" \
+  --mode="export_predict" \
   --export_dir="/path/to/export/dir"
 ```
 
