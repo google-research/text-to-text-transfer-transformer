@@ -205,7 +205,7 @@ class MtfModel(T5Model):
       self._batch_size = batch_size
 
   def estimator(self, vocabulary, init_checkpoint=None, disable_tpu=False,
-                score_in_predict_mode=False):
+                score_in_predict_mode=False, sequence_length=None):
 
     if not self._tpu or disable_tpu:
       with gin.unlock_config():
@@ -223,7 +223,7 @@ class MtfModel(T5Model):
         mesh_devices=None if disable_tpu else self._mesh_devices,
         model_dir=self._model_dir,
         batch_size=self.batch_size,
-        sequence_length=self._sequence_length,
+        sequence_length=sequence_length or self._sequence_length,
         autostack=self._autostack,
         learning_rate_schedule=self._learning_rate_schedule,
         keep_checkpoint_max=self._keep_checkpoint_max,
@@ -263,7 +263,8 @@ class MtfModel(T5Model):
                       steps, self._ensemble_inputs, dataset_split=split)
 
   def eval(self, mixture_or_task_name, checkpoint_steps=None, summary_dir=None,
-           split="validation", eval_with_score=False):
+           split="validation", eval_with_score=False,
+           compute_sequence_length=False):
     """Evaluate the model on the given Mixture or Task.
 
     Args:
@@ -280,6 +281,8 @@ class MtfModel(T5Model):
       split: str, the mixture/task split to evaluate on.
       eval_with_score: bool, whether to evaluate using log likelihood scores of
         targets instead of decoded predictions.
+      compute_sequence_length: bool, automatically compute maximum sequence
+        length to use during eval mode.
     """
     if checkpoint_steps == -1:
       checkpoint_steps = _get_latest_checkpoint_from_dir(self._model_dir)
@@ -290,14 +293,16 @@ class MtfModel(T5Model):
     )
     with gin.unlock_config():
       gin.parse_config_file(_operative_config_path(self._model_dir))
-    estimator = self.estimator(
-        vocabulary, score_in_predict_mode=eval_with_score)
+    estimator_fn = functools.partial(
+        self.estimator, vocabulary, score_in_predict_mode=eval_with_score)
     utils.eval_model(
-        estimator=estimator, vocabulary=vocabulary,
-        sequence_length=self._sequence_length, batch_size=self.batch_size,
-        dataset_split=split, model_dir=self._model_dir,
-        eval_dataset_fn=dataset_fn, eval_summary_dir=summary_dir,
-        eval_checkpoint_step=checkpoint_steps, eval_with_score=eval_with_score)
+        estimator=estimator_fn, vocabulary=vocabulary,
+        sequence_length=
+        None if compute_sequence_length else self._sequence_length,
+        batch_size=self.batch_size, dataset_split=split,
+        model_dir=self._model_dir, eval_dataset_fn=dataset_fn,
+        eval_summary_dir=summary_dir, eval_checkpoint_step=checkpoint_steps,
+        eval_with_score=eval_with_score)
 
   def finetune(self, mixture_or_task_name, finetune_steps, pretrained_model_dir,
                pretrained_checkpoint_step=-1, split="train"):
