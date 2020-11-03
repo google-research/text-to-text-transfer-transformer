@@ -1738,7 +1738,6 @@ def tokenize(dataset, output_features, copy_plaintext=True):
 # TODO(adarob): Add a test.
 def span_corruption(dataset, sequence_length, output_features):
   """Final pretraining objective used in Raffel et al., 2019."""
-  del sequence_length
   ds = dataset
   ds = select_random_chunk(ds, feature_key='targets', max_length=65536)
   ds = reduce_concat_tokens(ds, feature_key='targets', batch_size=128)
@@ -1749,7 +1748,7 @@ def span_corruption(dataset, sequence_length, output_features):
       max_tokens_per_segment=random_spans_helper(
           extra_tokens_per_span_inputs=1,
           extra_tokens_per_span_targets=1,
-          inputs_length=512,
+          inputs_length=sequence_length['inputs'],
           mean_noise_span_length=3.0,
           noise_density=0.15
       )[0]
