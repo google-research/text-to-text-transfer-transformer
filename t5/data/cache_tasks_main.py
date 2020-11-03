@@ -85,7 +85,7 @@ def _import_modules(modules):
       importlib.import_module(module)
 
 
-class BasePreprocessTask(beam.PTransform):
+class PreprocessTask(beam.PTransform):
   """Abstract base class to preprocess a Task.
 
   Returns a PCollection of example dicts containing Tensors.
@@ -106,16 +106,10 @@ class BasePreprocessTask(beam.PTransform):
     self._max_input_examples = max_input_examples
     self._split = split
     self._modules_to_import = modules_to_import
-    self.shards = self._get_shards()
+    self.shards = task.source.list_shards(split)
     logging.info(
         "%s %s shards: %s", task.name, split, ", ".join(
             ["%s" % f for f in self.shards]))
-
-  def _get_shards(self):
-    raise NotImplementedError
-
-  def _load_shard(self, shard):
-    raise NotImplementedError
 
   def _increment_counter(self, name):
     metrics.Metrics.counter(
@@ -127,7 +121,8 @@ class BasePreprocessTask(beam.PTransform):
     logging.info("Processing shard: %s", shard)
     self._increment_counter("input-shards")
 
-    ds = self._load_shard(shard)
+    ds = self._task.source.get_dataset(
+        split=self._split, shard=shard, shuffle=False)
 
     if self._max_input_examples:
       num_shard_examples = int(
@@ -148,47 +143,6 @@ class BasePreprocessTask(beam.PTransform):
             | beam.Create(self.shards)
             | beam.FlatMap(self._emit_examples)
             | beam.Reshuffle())  # Allows for additional parallelization.
-
-
-class PreprocessTfdsTask(BasePreprocessTask):
-  """Preprocesses a TfdsTask.
-
-  Returns a PCollection of example dicts containing Tensors.
-  """
-
-  def _get_shards(self):
-    return self._task.tfds_dataset.files(self._split)
-
-  def _load_shard(self, shard):
-    return self._task.tfds_dataset.load_shard(shard)
-
-
-class PreprocessFileTask(BasePreprocessTask):
-  """Preprocesses and a FileTask.
-
-  Returns a PCollection of example dicts containing Tensors.
-  """
-
-  def _get_shards(self):
-    return tf.io.gfile.glob(self._task._split_to_filepattern[self._split])  # pylint:disable=protected-access
-
-  def _load_shard(self, shard):
-    return self._task._reader(shard)  # pylint:disable=protected-access
-
-
-class PreprocessGenericTask(BasePreprocessTask):
-  """Preprocesses a generic Task.
-
-  Cannot be distributed.
-
-  Returns a PCollection of example dicts containing Tensors.
-  """
-
-  def _get_shards(self):
-    return ["Unknown"]
-
-  def _load_shard(self, unused_shard):
-    return self._task._dataset_fn(self._split, shuffle_files=False)  # pylint:disable=protected-access
 
 
 class WriteExampleTfRecord(beam.PTransform):
@@ -386,24 +340,18 @@ def run_pipeline(
 
     output_dirs.append(output_dir)
 
-    if isinstance(task, t5.data.TfdsTask):
-      pat_cls = PreprocessTfdsTask
-    elif isinstance(task, t5.data.FileTask):
-      pat_cls = PreprocessFileTask
-    else:
+    if isinstance(task.source, t5.data.FunctionSource):
       logging.warning(
-          "Generic Task '%s' cannot be distributed. To speed up preprocessing, "
-          "use a TfdsTask or TextLineTask instead.", task.name)
-      pat_cls = PreprocessGenericTask
+          "Task '%s' using FunctionSource cannot be distributed. If your "
+          "dataset is large, you may be able to speed up preprocessing by "
+          "sharding it and using a TfdsSource, TFExampleSource, or "
+          "TextLineSource instead.", task.name)
 
     for split in task.splits:
       label = "%s_%s" % (task.name, split)
 
-      pat = pat_cls(task, split, max_input_examples, modules_to_import)
-      # Liquid sharding produces uneven shards, so use the same number of shards
-      # as input, if known.
-      num_shards = (0 if isinstance(pat_cls, PreprocessGenericTask) else len(
-          pat.shards))
+      pat = PreprocessTask(task, split, max_input_examples, modules_to_import)
+      num_shards = len(pat.shards)
       examples = (
           pipeline
           | "%s_pat" % label >> pat)

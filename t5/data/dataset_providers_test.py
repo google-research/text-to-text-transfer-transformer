@@ -299,8 +299,10 @@ class TasksTest(test_utils.FakeTaskTest):
         "preprocessing pipeline. Found 2 in 'multiple_cache_placeholders'."):
       dataset_providers.TaskV3(
           "multiple_cache_placeholders",
-          dataset_fn=dataset_fn,
-          splits=["train"],
+          source=dataset_providers.FunctionSource(
+              dataset_fn=dataset_fn,
+              splits=["train", "validation"]
+          ),
           preprocessors=[
               test_utils.test_text_preprocessor, preprocessors.tokenize,
               dataset_providers.CacheDatasetPlaceholder(),
@@ -317,8 +319,10 @@ class TasksTest(test_utils.FakeTaskTest):
         "is not allowed since the sequence length is specified at run time."):
       dataset_providers.TaskV3(
           "sequence_length_pre_cache",
-          dataset_fn=dataset_fn,
-          splits=["train"],
+          dataset_providers.FunctionSource(
+              dataset_fn=dataset_fn,
+              splits=["train"],
+          ),
           preprocessors=[
               test_utils.test_text_preprocessor, preprocessors.tokenize,
               test_utils.test_token_preprocessor,
@@ -330,12 +334,12 @@ class TasksTest(test_utils.FakeTaskTest):
   def test_splits(self):
     test_utils.add_tfds_task("task_with_splits", splits=["validation"])
     task = TaskRegistry.get("task_with_splits")
-    self.assertListEqual(["validation"], task.splits)
+    self.assertSameElements(["validation"], task.splits)
 
     test_utils.add_tfds_task("task_with_sliced_splits",
                              splits={"validation": "train[0:1%]"})
     task = TaskRegistry.get("task_with_splits")
-    self.assertListEqual(["validation"], task.splits)
+    self.assertSameElements(["validation"], task.splits)
 
   def test_no_eos(self):
     default_vocab = test_utils.sentencepiece_vocab()
@@ -451,6 +455,14 @@ class MixturesTest(test_utils.FakeTaskTest):
     mix = MixtureRegistry.get("test_mix2")
     self.assertEqual(mix.num_input_examples(split="train"), 30)
 
+  def test_splits(self):
+    MixtureRegistry.add(
+        "test_mix",
+        [(self.cached_task.name, 1), (self.task_v3.name, 1)]
+    )
+    mix = MixtureRegistry.get("test_mix")
+    self.assertSameElements(["train", "validation"], mix.splits, 30)
+
   def test_get_dataset(self):
     MixtureRegistry.add("test_mix3", [(self.cached_task.name, 1)])
 
@@ -459,7 +471,7 @@ class MixturesTest(test_utils.FakeTaskTest):
             "inputs": 13,
             "targets": 13
         },
-        "train",
+        "validation",
         use_cached=False,
         shuffle=False)
 
@@ -467,18 +479,13 @@ class MixturesTest(test_utils.FakeTaskTest):
         {
             "inputs": 13,
             "targets": 13
-        }, "train", use_cached=False, shuffle=False)
-
-    # limit size since get_dataset repeats the dataset
-    mix_ds = mix_ds.take(3)
+        }, "validation", use_cached=False, shuffle=False)
 
     # mix.get_dataset strips non-output features
-    task_ds = task_ds.map(lambda x: {
-        "inputs": x["inputs"],
-        "targets": x["targets"]
-    })
+    task_ds = task_ds.map(lambda x: {k: x[k] for k in ["inputs", "targets"]})
 
-    test_utils.assert_datasets_eq(task_ds, mix_ds)
+    # limit size since get_dataset repeats the dataset
+    test_utils.assert_datasets_eq(task_ds.repeat(2), mix_ds.take(4))
 
   def test_get_dataset_mix(self):
     # pylint:disable=g-long-lambda

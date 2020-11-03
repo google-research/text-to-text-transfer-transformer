@@ -529,7 +529,9 @@ class FakeTaskTest(absltest.TestCase):
                 "take": -1
             }],
     }
-    def _load_shard(shard_instruction):
+    def _load_shard(shard_instruction, shuffle_files, seed):
+      del shuffle_files
+      del seed
       fname = shard_instruction["filename"]
       if "train" in fname:
         if fname.endswith("00000-of-00002"):
@@ -645,8 +647,10 @@ class FakeTaskTest(absltest.TestCase):
     TaskRegistry.add(
         "task_v3",
         dataset_providers.TaskV3,
-        dataset_fn=get_fake_dataset,
-        splits=["train", "validation"],
+        source=dataset_providers.FunctionSource(
+            dataset_fn=get_fake_dataset,
+            splits=["train", "validation"]
+        ),
         preprocessors=[
             test_text_preprocessor,
             preprocessors.tokenize,
@@ -664,8 +668,10 @@ class FakeTaskTest(absltest.TestCase):
     TaskRegistry.add(
         "task_v3_tokenized_postcache",
         dataset_providers.TaskV3,
-        dataset_fn=get_fake_dataset,
-        splits=["train", "validation"],
+        source=dataset_providers.FunctionSource(
+            dataset_fn=get_fake_dataset,
+            splits=["train", "validation"]
+        ),
         preprocessors=[
             test_text_preprocessor,
             dataset_providers.CacheDatasetPlaceholder(),

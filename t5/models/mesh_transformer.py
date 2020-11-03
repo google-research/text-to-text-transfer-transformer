@@ -221,7 +221,15 @@ def get_vocabulary(mixture_or_task_name):
   if "inputs" in features and "targets" in features:
     return (features["inputs"].vocabulary, features["targets"].vocabulary)
   else:
-    return provider.get_vocabulary()
+    feature_values = list(features.values())
+    vocabulary = feature_values[0].vocabulary
+    for feature in feature_values[1:]:
+      if feature.vocabulary != vocabulary:
+        raise ValueError(
+            "No feature_name was provided to get_vocabulary, but "
+            "output_features have different vocabularies."
+        )
+    return vocabulary
 
 
 @gin.configurable()
