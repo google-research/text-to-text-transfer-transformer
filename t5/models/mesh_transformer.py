@@ -249,12 +249,23 @@ def get_sentencepiece_model_path(mixture_or_task_name):
       "get_sentencepiece_model_path is deprecated. Please pass the mixture or "
       "task vocabulary directly to the Mesh TensorFlow Transformer instead."
   )
-  provider = t5.data.get_mixture_or_task(mixture_or_task_name)
-  vocabulary = provider.get_vocabulary()
-  if not isinstance(vocabulary,
-                    t5.data.sentencepiece_vocabulary.SentencePieceVocabulary):
-    raise ValueError(
-        "get_sentencepiece_model_path was called for a provider that does not "
-        "use a SentencePieceVocabulary."
-    )
-  return vocabulary.sentencepiece_model_file
+  vocabulary = get_vocabulary(mixture_or_task_name)
+  if isinstance(vocabulary, t5.data.SentencePieceVocabulary):
+    return vocabulary.sentencepiece_model_file
+  elif (
+      isinstance(vocabulary, tuple) and
+      all(isinstance(v, t5.data.SentencePieceVocabulary) for v in vocabulary)
+  ):
+    sentencepiece_model_files = set(
+        v.sentencepiece_model_file for v in vocabulary)
+    if len(sentencepiece_model_files) > 1:
+      raise ValueError(
+          "get_sentencepiece_model_path was called for a provider that does "
+          "not use the same SentencePieceVocabulary for all features."
+      )
+    (sentencepiece_model_file,) = sentencepiece_model_files
+    return sentencepiece_model_file
+  raise ValueError(
+      "get_sentencepiece_model_path was called for a provider that does not "
+      "use a SentencePieceVocabulary."
+  )
