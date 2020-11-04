@@ -1360,7 +1360,7 @@ def get_mixture_or_task(task_or_mixture_name):
 
 def get_subtasks(task_or_mixture):
   """Returns all the Tasks in a Mixture as a list or the Task itself."""
-  if isinstance(task_or_mixture, Task):
+  if isinstance(task_or_mixture, TaskV3):
     return [task_or_mixture]
   else:
     return task_or_mixture.tasks
