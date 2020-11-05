@@ -323,7 +323,7 @@ class FileDataSource(DataSource):
   def __init__(
       self,
       read_file_fn: Callable[[tf.data.Dataset], tf.data.Dataset],
-      split_to_filepattern: Mapping[str, str],
+      split_to_filepattern: Mapping[str, Union[str, Iterable[str]]],
       num_input_examples: Optional[Mapping[str, int]] = None,
   ):
     """FileDataSource constructor.
@@ -369,7 +369,7 @@ class TextLineDataSource(FileDataSource):
 
   def __init__(
       self,
-      split_to_filepattern: Mapping[str, str],
+      split_to_filepattern: Mapping[str, Union[str, Iterable[str]]],
       skip_header_lines: int = 0,
       num_input_examples: Optional[Mapping[str, int]] = None,
   ):
@@ -401,7 +401,7 @@ class TFExampleDataSource(FileDataSource):
 
   def __init__(
       self,
-      split_to_filepattern: Mapping[str, str],
+      split_to_filepattern: Mapping[str, Union[str, Iterable[str]]],
       feature_description: Mapping[str, Union[tf.io.FixedLenFeature,
                                               tf.io.VarLenFeature]],
       reader_cls: Type[tf.data.Dataset] = tf.data.TFRecordDataset,
@@ -410,8 +410,9 @@ class TFExampleDataSource(FileDataSource):
     """TFExampleDataSource constructor.
 
     Args:
-      split_to_filepattern: dict of string (split name) to string (filename or
-        filepattern).
+      split_to_filepattern: dict of string (split name) to either string
+        (filename or filepattern) or list of strings (filenames or
+        filepatterns).
       feature_description: dict, a mapping of string feature keys to
         `tf.io.FixedLenFeature` or `tf.io.VarLenFeature` values.
       reader_cls: `tf.data.Dataset`, a dataset class to read the input files.
