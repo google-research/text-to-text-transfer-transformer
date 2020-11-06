@@ -74,21 +74,6 @@ def mesh_train_dataset_fn(
   return ds
 
 
-def maybe_shuffle_and_subsample_dataset(
-    ds,
-    num_eval_examples=None,
-    shuffle_eval_examples=False,
-    shuffle_buffer_size=t5.data.SHUFFLE_BUFFER_SIZE):
-  """Takes only `num_eval_examples` and shuffles examples if needed."""
-
-  if num_eval_examples is None:
-    return ds
-  if shuffle_eval_examples:
-    ds = ds.shuffle(shuffle_buffer_size, reshuffle_each_iteration=True)
-  ds = ds.take(num_eval_examples)
-  return ds
-
-
 @gin.configurable()
 def mesh_eval_dataset_fn(
     mixture_or_task_name,
@@ -99,7 +84,7 @@ def mesh_eval_dataset_fn(
     use_cached=False,
     pack=False,
     shuffle_eval_examples=False,
-    shuffle_buffer_size=t5.data.SHUFFLE_BUFFER_SIZE):
+    seed=None):
   """Returns all tf.data.Datasets for evaluation on a given mixture.
 
   This uses the format required for utils.run's `eval_dataset_fn` argument in
@@ -121,25 +106,25 @@ def mesh_eval_dataset_fn(
     shuffle_eval_examples: boolean, whether to shuffle eval examples, applied
       only when num_eval_examples is not None. Intended to be able to eval on a
       different eval slice at every iteration.
-    shuffle_buffer_size: integer - the shuffle buffer size if we shuffle
-      eval examples, ideally this should be some large multiple of
-      `num_eval_examples` to ensure good mixing and random batches.
+    seed: tf.int64 scalar tf.Tensor (or None). Used for both the global seed and
+      shuffle seed for tf.data
 
   Returns:
     A list of mesh_tensorflow.transformer.dataset.EvalDataset tuples.
   """
   del vocabulary
 
-  if num_eval_examples is not None and num_eval_examples < 0:
-    num_eval_examples = None
-
   mixture_or_task = t5.data.get_mixture_or_task(mixture_or_task_name)
 
   def _get_dataset_for_single_task(task, sequence_length):
     """Get a tensorflow.data.Dataset for the provided task."""
+    if shuffle_eval_examples and seed is None:
+      logging.warning(("shuffle_seed_examples is true but no seed was ",
+                       "provided. Using a random seed."))
+
     ds = task.get_dataset(
         sequence_length, split=dataset_split,
-        use_cached=use_cached, shuffle=False
+        use_cached=use_cached, shuffle=shuffle_eval_examples, seed=seed,
     )
     eos_keys = set(
         k for k, f in mixture_or_task.output_features.items() if f.add_eos)
@@ -157,8 +142,10 @@ def mesh_eval_dataset_fn(
           pack=pack,
           feature_keys=tuple(task.output_features),
           ensure_eos=eos_keys)
-    ds = maybe_shuffle_and_subsample_dataset(
-        ds, num_eval_examples, shuffle_eval_examples, shuffle_buffer_size)
+
+    if num_eval_examples is not None and num_eval_examples >= 0 :
+      ds = ds.take(num_eval_examples)
+
     return ds
 
   outputs = []
@@ -181,6 +168,10 @@ def mesh_eval_dataset_fn(
             task.metric_fns,
         )
     )
+
+  if not outputs:
+    logging.warning("No %s data found for %s.",
+                    dataset_split, mixture_or_task_name)
 
   return outputs
 

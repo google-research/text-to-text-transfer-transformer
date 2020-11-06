@@ -85,48 +85,10 @@ class MeshDatasetFnsTest(test_utils.FakeMixtureTest):
         mixture_name="uncached_mixture", train=False, use_cached=False,
     )
 
-  def test_maybe_shuffle_and_subsample_dataset_no_shuffle(self):
-    ds = tf.data.Dataset.range(100)
-
-    num_eval_examples = 10
-    shuffle_eval_examples = False
-    num_repeat = 2
-    ds = mesh_transformer.maybe_shuffle_and_subsample_dataset(
-        ds, num_eval_examples, shuffle_eval_examples)
-    ds = ds.repeat(num_repeat)
-
-    list_examples = list(tfds.as_numpy(ds))
-
-    # Assert on the number of examples.
-    self.assertLen(list_examples, num_eval_examples * num_repeat)
-    # Since `shuffle_eval_examples` is false, we will get the same examples
-    # repeated `num_repeat` times.
-    # Ex: [0, 1, 2, 3, 0, 1, 2, 3]
-    self.assertEqual(list_examples, list(range(num_eval_examples)) * num_repeat)
-
-  def test_maybe_shuffle_and_subsample_dataset_shuffle(self):
-    ds = tf.data.Dataset.range(100)
-
-    num_eval_examples = 10
-    shuffle_eval_examples = True
-    num_repeat = 2
-    ds = mesh_transformer.maybe_shuffle_and_subsample_dataset(
-        ds, num_eval_examples, shuffle_eval_examples,
-        num_repeat * num_eval_examples)  # shuffle buffer size.
-    ds = ds.repeat(num_repeat)
-
-    list_examples = list(tfds.as_numpy(ds))
-
-    # With high probability, not every slice of `num_eval_examples` in
-    # `list_examples` will be the same.
-    self.assertNotEqual(list_examples[:num_eval_examples],
-                        list_examples[num_eval_examples:2 * num_eval_examples])
-
   def test_get_sentencepiece_model_path(self):
     self.assertEqual(
         test_utils.sentencepiece_vocab().sentencepiece_model_file,
         mesh_transformer.get_sentencepiece_model_path("cached_mixture")
     )
-
 if __name__ == "__main__":
   absltest.main()
