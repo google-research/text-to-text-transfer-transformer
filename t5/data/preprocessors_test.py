@@ -1291,6 +1291,40 @@ class PreprocessorsTest(tf.test.TestCase):
             },
         ])
 
+  def test_select_random_chunk(self):
+    dataset = tf.data.Dataset.from_tensors({
+        'targets': [0, 1, 2, 3],
+        'inputs': [4, 5, 6, 7]
+    })
+    dataset = prep.select_random_chunk(
+        dataset, feature_key='targets', max_length=4)
+    output = list(dataset.as_numpy_iterator())
+    self.assertSequenceEqual(['targets'], list(output[0].keys()))
+
+  def test_select_random_chunk_additional_features(self):
+    dataset = tf.data.Dataset.from_tensors({
+        'targets': [0, 1, 2, 3],
+        'inputs': [4, 5, 6, 7]
+    })
+    dataset = prep.select_random_chunk(
+        dataset, feature_key='targets', additional_feature_keys=['inputs'],
+        max_length=3)
+    output = list(dataset.as_numpy_iterator())
+    self.assertEqual(1, len(output))
+    output = output[0]
+    self.assertSequenceEqual(['inputs', 'targets'], sorted(list(output.keys())))
+    self.assertAllEqual(output['inputs'] - 4, output['targets'])
+
+  def test_select_random_chunk_different_sizes(self):
+    dataset = tf.data.Dataset.from_tensors({
+        'targets': [0, 1, 2, 3],
+        'inputs': [4, 5]
+    })
+    with self.assertRaises(tf.errors.InvalidArgumentError):
+      prep.select_random_chunk(
+          dataset, feature_key='targets', additional_feature_keys=['inputs'],
+          max_length=4)
+
 
 if __name__ == '__main__':
   absltest.main()

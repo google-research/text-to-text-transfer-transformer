@@ -19,6 +19,7 @@ import functools
 import math
 import re
 import uuid
+from typing import Optional, Mapping, Sequence
 
 from absl import logging
 import babel
@@ -1802,10 +1803,12 @@ def prefix_lm(dataset, sequence_length, output_features):
 
 
 @gin.configurable
-def select_random_chunk(dataset,
-                        max_length=gin.REQUIRED,
-                        feature_key='targets',
-                        **unused_kwargs):
+def select_random_chunk(dataset: tf.data.Dataset,
+                        max_length: Optional[int] = None,
+                        feature_key: str = 'targets',
+                        additional_feature_keys: Optional[Sequence[str]] = None,
+                        sequence_length: Optional[Mapping[str, int]] = None,
+                        **unused_kwargs) -> tf.data.Dataset:
   """Token-preprocessor to extract one span of at most `max_length` tokens.
 
   If the token sequence is longer than `max_length`, then we return a random
@@ -1814,13 +1817,24 @@ def select_random_chunk(dataset,
   This is generally followed by split_tokens.
 
   Args:
-    dataset: a tf.data.Dataset with dictionaries containing the key feature_key.
-    max_length: an integer
-    feature_key: an string
+    dataset: A tf.data.Dataset with dictionaries containing the key feature_key.
+    max_length: Typically specified in gin configs, takes priority over
+      sequence_length.
+    feature_key: Which feature to use from the dataset.
+    additional_feature_keys: Additional features to use. The same chunk will be
+      selected from these features as from the one specified in feature_key,
+      so they should all have the same length.
+    sequence_length: Used if max_length is not specified. Typically passed in
+      by the data pipeline. feature_key will be used to select the length.
 
   Returns:
     a dataset
   """
+  if max_length is None and sequence_length is not None:
+    max_length = sequence_length[feature_key]
+  if max_length is None:
+    raise ValueError('Must specify max_length or sequence_length.')
+
   def _my_fn(x):
     """Select a random chunk of tokens.
 
@@ -1839,7 +1853,13 @@ def select_random_chunk(dataset,
     start = max_length * tf.random.uniform(
         [], maxval=num_segments, dtype=tf.int32)
     end = tf.minimum(start + max_length, n_tokens)
-    return {feature_key: tokens[start:end]}
+    chunk = {feature_key: tokens[start:end]}
+    if additional_feature_keys is not None:
+      for k in additional_feature_keys:
+        with tf.control_dependencies([
+            tf.assert_equal(tf.size(tokens), tf.size(x[k]))]):
+          chunk[k] = x[k][start:end]
+    return chunk
   # Filter empty examples.
   dataset = dataset.filter(lambda x: tf.not_equal(tf.size(x[feature_key]), 0))
   return dataset.map(_my_fn, num_parallel_calls=AUTOTUNE)
