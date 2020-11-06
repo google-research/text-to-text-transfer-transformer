@@ -1292,6 +1292,8 @@ def _log_mixing_proportions(
   """
   def _normalize(l):
     denom = sum(l)
+    if not denom:
+      return l
     return [x / denom for x in l]
   # compute some stats about the mixture
   examples_fraction = _normalize(rates)
