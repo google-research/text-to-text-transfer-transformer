@@ -355,7 +355,7 @@ class TasksTest(test_utils.FakeTaskTest):
     fn_task = TaskRegistry.get("task_no_eos")
     test_utils.verify_task_matches_fake_datasets(fn_task, use_cached=False)
 
-  def test_same_seeds_cached(self):
+  def test_same_seeds_cached_match(self):
     dataset1 = self.cached_task.get_dataset(
         {"inputs": 13, "targets": 13},
         split="train", use_cached=True, shuffle=True, seed=0)
@@ -364,7 +364,7 @@ class TasksTest(test_utils.FakeTaskTest):
         split="train", use_cached=True, shuffle=True, seed=0)
     test_utils.assert_datasets_eq(dataset1, dataset2)
 
-  def test_different_seeds_cached(self):
+  def test_different_seeds_cached_mismatch(self):
     dataset1 = self.cached_task.get_dataset(
         {"inputs": 13, "targets": 13},
         split="train", use_cached=True, shuffle=True, seed=0)
@@ -373,7 +373,7 @@ class TasksTest(test_utils.FakeTaskTest):
         split="train", use_cached=True, shuffle=True, seed=42)
     test_utils.assert_datasets_neq(dataset1, dataset2)
 
-  def test_same_seeds_uncached(self):
+  def test_same_seeds_uncached_match(self):
     dataset1 = self.uncached_task.get_dataset(
         {"inputs": 13, "targets": 13},
         split="train", use_cached=False, shuffle=True, seed=0)
@@ -382,7 +382,7 @@ class TasksTest(test_utils.FakeTaskTest):
         split="train", use_cached=False, shuffle=True, seed=0)
     test_utils.assert_datasets_eq(dataset1, dataset2)
 
-  def test_different_seeds_uncached(self):
+  def test_different_seeds_uncached_mismatch(self):
     dataset1 = self.uncached_task.get_dataset(
         {"inputs": 13, "targets": 13},
         split="train", use_cached=False, shuffle=True, seed=0)
@@ -391,16 +391,17 @@ class TasksTest(test_utils.FakeTaskTest):
         split="train", use_cached=False, shuffle=True, seed=42)
     test_utils.assert_datasets_neq(dataset1, dataset2)
 
-  def test_same_seeds_random_tp_uncached(self):
+  def test_same_seeds_random_tp_uncached_mismatch(self):
+    # Expected *not* to equal due to parallel mapping.
     dataset1 = self.uncached_random_task.get_dataset(
         {"inputs": 13, "targets": 13},
-        split="train", use_cached=False, shuffle=True, seed=0)
+        split="train", use_cached=False, shuffle=True, seed=0).repeat(4)
     dataset2 = self.uncached_random_task.get_dataset(
         {"inputs": 13, "targets": 13},
-        split="train", use_cached=False, shuffle=True, seed=0)
-    test_utils.assert_datasets_eq(dataset1, dataset2)
+        split="train", use_cached=False, shuffle=True, seed=0).repeat(4)
+    test_utils.assert_datasets_neq(dataset1, dataset2)
 
-  def test_different_seeds_random_tp_uncached(self):
+  def test_different_seeds_random_tp_uncached_mismatch(self):
     dataset1 = self.uncached_random_task.get_dataset(
         {"inputs": 13, "targets": 13},
         split="train", use_cached=False, shuffle=True, seed=0)
@@ -409,7 +410,7 @@ class TasksTest(test_utils.FakeTaskTest):
         split="train", use_cached=False, shuffle=True, seed=42)
     test_utils.assert_datasets_neq(dataset1, dataset2)
 
-  def test_no_shuffle_with_seed_cached(self):
+  def test_no_shuffle_with_seed_cached_match(self):
     dataset1 = self.cached_task.get_dataset(
         {"inputs": 13, "targets": 13},
         split="train", use_cached=True, shuffle=False, seed=0)
@@ -418,7 +419,7 @@ class TasksTest(test_utils.FakeTaskTest):
         split="train", use_cached=True, shuffle=False, seed=42)
     test_utils.assert_datasets_eq(dataset1, dataset2)
 
-  def test_no_shuffle_with_seed_uncached(self):
+  def test_no_shuffle_with_seed_uncached_match(self):
     dataset1 = self.uncached_task.get_dataset(
         {"inputs": 13, "targets": 13},
         split="train", use_cached=False, shuffle=False, seed=0)
@@ -427,7 +428,7 @@ class TasksTest(test_utils.FakeTaskTest):
         split="train", use_cached=False, shuffle=False, seed=42)
     test_utils.assert_datasets_eq(dataset1, dataset2)
 
-  def test_no_shuffle_different_seeds_random_tp_uncached(self):
+  def test_no_shuffle_different_seeds_random_tp_uncached_mismatch(self):
     dataset1 = self.uncached_random_task.get_dataset(
         {"inputs": 13, "targets": 13},
         split="train", use_cached=False, shuffle=False, seed=0)

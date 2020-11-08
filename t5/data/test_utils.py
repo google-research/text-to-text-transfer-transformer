@@ -354,7 +354,7 @@ def test_text_preprocessor(dataset):
     })
     return res
 
-  return dataset.map(my_fn)
+  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 
 def _split_tsv_preprocessor(dataset, field_names=("prefix", "suffix")):
@@ -368,7 +368,8 @@ def _split_tsv_preprocessor(dataset, field_names=("prefix", "suffix")):
             field_delim="\t", use_quote_delim=False)
     ))
 
-  return dataset.map(parse_line)
+  return dataset.map(
+      parse_line, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 
 def test_token_preprocessor(dataset, output_features, sequence_length):
@@ -385,22 +386,23 @@ def test_token_preprocessor(dataset, output_features, sequence_length):
         inputs)
     return res
 
-  return dataset.map(my_fn)
+  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 
 def random_token_preprocessor(dataset, output_features, **unused_kwargs):
-  """Randomly select a token from each example."""
+  """Selects a random shift to roll the tokens by for each feature."""
   del output_features
 
   def my_fn(ex):
-    tokens = ex["inputs"]
-    res = ex.copy()
-    n_tokens = tf.size(tokens)
-    random_index = tf.random.uniform([], maxval=n_tokens, dtype=tf.int32)
-    res["inputs"] = [tokens[random_index]]
+    for feat in ["inputs", "targets"]:
+      tokens = ex[feat]
+      res = ex.copy()
+      n_tokens = tf.size(tokens)
+      random_shift = tf.random.uniform([], maxval=n_tokens, dtype=tf.int32)
+      res[feat] = tf.roll(tokens, shift=random_shift, axis=0)
     return res
 
-  return dataset.map(my_fn)
+  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 
 def token_preprocessor_no_sequence_length(dataset, output_features):
