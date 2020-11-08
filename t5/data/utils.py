@@ -140,7 +140,11 @@ class LazyTfdsLoader(object):
         shuffle_files=shuffle_files,
         download=True,
         try_gcs=True,
-        read_config=tfds.ReadConfig(shuffle_seed=seed))
+        read_config=tfds.ReadConfig(
+            shuffle_seed=seed,
+            skip_prefetch=True
+        )
+    )
 
   def load_shard(self, file_instruction, shuffle_files=False, seed=None):
     """Returns a dataset for a single shard of the TFDS TFRecord files."""

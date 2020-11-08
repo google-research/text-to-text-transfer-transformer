@@ -792,6 +792,8 @@ class TaskV3(DatasetProviderBase):
       ds = self.source.get_dataset(split=split, shuffle=shuffle, seed=seed)
       ds = self.preprocess_precache(ds)
 
+    ds = ds.prefetch(tf.data.experimental.AUTOTUNE)
+
     if (not use_cached and self.num_input_examples(split) and
         self.num_input_examples(split) < _MAX_EXAMPLES_TO_MEM_CACHE):
       ds = ds.cache()
@@ -807,7 +809,7 @@ class TaskV3(DatasetProviderBase):
       ds = ds.shuffle(shuffle_buffer_size or self._shuffle_buffer_size,
                       seed=seed)
 
-    return ds
+    return ds.prefetch(tf.data.experimental.AUTOTUNE)
 
   def _get_cached_dataset(self,
                           split: str = tfds.Split.TRAIN,
