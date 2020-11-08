@@ -1309,6 +1309,9 @@ def _log_mixing_proportions(
       mean_targets_length.append(targets_sum / float(stats_examples))
   else:
     def _estimated_mean_length(task, key):
+      if task._cache_step_idx < len(task._preprocessors) < 1:  # pylint:disable=protected-access
+        # There is processing after caching, so we can't rely on the stats.
+        return sequence_length[key]
       return min(sequence_length[key],
                  (task.get_cached_stats("train")[key + "_tokens"] /
                   task.get_cached_stats("train")["examples"]))
