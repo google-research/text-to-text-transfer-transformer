@@ -389,20 +389,17 @@ def test_token_preprocessor(dataset, output_features, sequence_length):
   return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 
-def random_token_preprocessor(dataset, output_features, **unused_kwargs):
+@dataset_utils.map_over_dataset(num_seeds=1)
+def random_token_preprocessor(ex, seeds):
   """Selects a random shift to roll the tokens by for each feature."""
-  del output_features
-
-  def my_fn(ex):
-    for feat in ["inputs", "targets"]:
-      tokens = ex[feat]
-      res = ex.copy()
-      n_tokens = tf.size(tokens)
-      random_shift = tf.random.uniform([], maxval=n_tokens, dtype=tf.int32)
-      res[feat] = tf.roll(tokens, shift=random_shift, axis=0)
-    return res
-
-  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  for feat in ["inputs", "targets"]:
+    tokens = ex[feat]
+    res = ex.copy()
+    n_tokens = tf.size(tokens)
+    random_shift = tf.random.stateless_uniform(
+        [], maxval=n_tokens, dtype=tf.int32, seed=seeds[0])
+    res[feat] = tf.roll(tokens, shift=random_shift, axis=0)
+  return res
 
 
 def token_preprocessor_no_sequence_length(dataset, output_features):

@@ -18,6 +18,7 @@ from absl.testing import absltest
 import gin
 from t5.data import preprocessors as prep
 from t5.data import test_utils
+from t5.data import utils
 from t5.data.dataset_providers import Feature
 import tensorflow.compat.v2 as tf
 
@@ -36,6 +37,7 @@ class PreprocessorsTest(tf.test.TestCase):
     noise_mask = prep.regular_noise_mask(
         length=length,
         noise_density=noise_density,
+        seeds=[(0, 1), (2, 3)],
         min_span_length=span_length,
         max_span_length=span_length)
     num_masked = tf.reduce_sum(tf.cast(noise_mask, tf.int32))
@@ -47,24 +49,24 @@ class PreprocessorsTest(tf.test.TestCase):
       noise_density = 0.5
       noise_mask = prep.random_prefix_noise_mask(
           length=length,
-          noise_density=noise_density)
+          noise_density=noise_density,
+          seeds=[(0, 1)])
       first = noise_mask[0]
       last = noise_mask[-1]
       self.assertTrue(self.evaluate(first))
       self.assertFalse(self.evaluate(last))
 
   def test_random_spans_noise_mask(self):
-    tf.random.set_seed(55)
     length = 32
     noise_density = 0.25
     mean_noise_span_length = 2.0
     # there should be 4 noise spans with a total length of 8.
     noise_mask = prep.random_spans_noise_mask(
-        length, noise_density, mean_noise_span_length)
+        length, noise_density, [(1, 2), (3, 4)], mean_noise_span_length)
     output = self.evaluate(tf.cast(noise_mask, tf.int32))
     expected_output = [
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        1, 1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1]
+        0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1]
     self.assertAllEqual(output, expected_output)
 
   def test_noise_token_to_sentinel(self):
@@ -73,7 +75,7 @@ class PreprocessorsTest(tf.test.TestCase):
     noise_mask = tf.constant([True, True, False, False, True, False])
     expected_output = [999, 999, 12, 13, 999, 15]
     output = self.evaluate(prep.noise_token_to_sentinel(
-        tokens, noise_mask, vocabulary))
+        tokens, noise_mask, vocabulary, ()))
     self.assertAllEqual(output, expected_output)
 
   def test_noise_span_to_sentinel(self):
@@ -82,7 +84,7 @@ class PreprocessorsTest(tf.test.TestCase):
     noise_mask = tf.constant([True, True, False, False, True, False])
     expected_output = [999, 12, 13, 999, 15]
     output = self.evaluate(prep.noise_span_to_sentinel(
-        tokens, noise_mask, vocabulary))
+        tokens, noise_mask, vocabulary, ()))
     self.assertAllEqual(output, expected_output)
 
   def test_nonnoise_span_to_sentinel(self):
@@ -91,7 +93,7 @@ class PreprocessorsTest(tf.test.TestCase):
     noise_mask = tf.constant([True, True, False, False, True, False])
     expected_output = [10, 11, 999, 14, 999]
     output = self.evaluate(prep.nonnoise_span_to_sentinel(
-        tokens, noise_mask, vocabulary))
+        tokens, noise_mask, vocabulary, ()))
     self.assertAllEqual(output, expected_output)
 
   def test_noise_span_to_unique_sentinel(self):
@@ -100,7 +102,7 @@ class PreprocessorsTest(tf.test.TestCase):
     noise_mask = tf.constant([True, True, False, False, True, False])
     expected_output = [999, 12, 13, 998, 15]
     output = self.evaluate(prep.noise_span_to_unique_sentinel(
-        tokens, noise_mask, vocabulary))
+        tokens, noise_mask, vocabulary, ()))
     self.assertAllEqual(output, expected_output)
 
   def test_drop_noise_tokens(self):
@@ -109,7 +111,7 @@ class PreprocessorsTest(tf.test.TestCase):
     noise_mask = tf.constant([True, True, False, False, True, False])
     expected_output = [12, 13, 15]
     output = self.evaluate(prep.drop_noise_tokens(
-        tokens, noise_mask, vocabulary))
+        tokens, noise_mask, vocabulary, ()))
     self.assertAllEqual(output, expected_output)
 
   def test_drop_nonnoise_tokens(self):
@@ -118,7 +120,7 @@ class PreprocessorsTest(tf.test.TestCase):
     noise_mask = tf.constant([True, True, False, False, True, False])
     expected_output = [10, 11, 14]
     output = self.evaluate(prep.drop_nonnoise_tokens(
-        tokens, noise_mask, vocabulary))
+        tokens, noise_mask, vocabulary, ()))
     self.assertAllEqual(output, expected_output)
 
   def test_permute_noise_tokens(self):
@@ -126,41 +128,39 @@ class PreprocessorsTest(tf.test.TestCase):
     vocabulary = test_utils.MockVocabulary({'foo': [10]}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
     noise_mask = tf.constant([True, True, False, False, True, False])
-    expected_output = [11, 14, 12, 13, 10, 15]
+    expected_output = [10, 14, 12, 13, 11, 15]
     output = self.evaluate(prep.permute_noise_tokens(
-        tokens, noise_mask, vocabulary))
+        tokens, noise_mask, vocabulary, [(0, 1)]))
     self.assertAllEqual(output, expected_output)
 
   def test_noise_token_to_gathered_token(self):
-    tf.random.set_seed(55)
     vocabulary = test_utils.MockVocabulary({'foo': [10]}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
     noise_mask = tf.constant([True, True, False, False, True, False])
-    expected_output = [11, 11, 12, 13, 15, 15]
+    expected_output = [13, 14, 12, 13, 10, 15]
     output = self.evaluate(prep.noise_token_to_gathered_token(
-        tokens, noise_mask, vocabulary))
+        tokens, noise_mask, vocabulary, [(55, 56)]))
     self.assertAllEqual(output, expected_output)
 
   def test_noise_token_to_random_token(self):
-    tf.random.set_seed(55)
     vocabulary = test_utils.MockVocabulary({'foo': [10]}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
     noise_mask = tf.constant([True, True, False, False, True, False])
-    expected_output = [811, 309, 12, 13, 451, 15]
+    expected_output = [961, 553, 12, 13, 60, 15]
 
     output = self.evaluate(prep.noise_token_to_random_token(
-        tokens, noise_mask, vocabulary))
+        tokens, noise_mask, vocabulary, seeds=[(55, 56)]))
     self.assertAllEqual(output, expected_output)
 
   def test_noise_token_to_random_token_or_sentinel(self):
-    tf.random.set_seed(55)
     vocabulary = test_utils.MockVocabulary({'foo': [10]}, vocab_size=1000)
     tokens = tf.constant(list(range(10)))
     noise_mask = tf.constant(
         [True, True, False, False, True, False, True, True, True, True])
-    expected_output = [436, 999, 2, 3, 999, 5, 999, 999, 999, 999]
+    expected_output = [999, 348, 2, 3, 108, 5, 999, 999, 999, 999]
     output = self.evaluate(prep.noise_token_to_random_token_or_sentinel(
-        tokens, noise_mask, vocabulary, random_prob=0.2))
+        tokens, noise_mask, vocabulary,
+        seeds=[(55, 56), (57, 58)], random_prob=0.2))
     self.assertAllEqual(output, expected_output)
 
   def test_rekey(self):
@@ -1073,8 +1073,6 @@ class PreprocessorsTest(tf.test.TestCase):
         })
 
   def test_denoise(self):
-    tf.random.set_seed(55)
-
     vocab = test_utils.sentencepiece_vocab()
     target_tokens = vocab.encode('The quick brown fox.')
 
@@ -1094,23 +1092,24 @@ class PreprocessorsTest(tf.test.TestCase):
     # These are the parameters of denoise in the operative config of 'base'.
     # Except noise_density, bumped up from 0.15 to 0.3 in order to demonstrate
     # multiple corrupted spans.
-    denoised_dataset = prep.denoise(
-        og_dataset,
-        output_features,
-        noise_density=0.3,
-        noise_mask_fn=prep.random_spans_noise_mask,
-        inputs_fn=prep.noise_span_to_unique_sentinel,
-        targets_fn=prep.nonnoise_span_to_unique_sentinel)
+    with utils.map_seed_manager(42):
+      denoised_dataset = prep.denoise(
+          og_dataset,
+          output_features,
+          noise_density=0.3,
+          noise_mask_fn=prep.random_spans_noise_mask,
+          inputs_fn=prep.noise_span_to_unique_sentinel,
+          targets_fn=prep.nonnoise_span_to_unique_sentinel)
 
     # Two spans corrupted, [2] and [22, 3, 2, 7, 2], replaced by unique
     # sentinels 25 and 24 respectively.
     assert_dataset(denoised_dataset, [
         {
             'inputs': [
-                3, 25, 20, 4, 3, 2, 8, 13, 2, 3, 2, 23, 7, 19, 24
+                3, 2, 20, 4, 25, 2, 8, 13, 2, 3, 2, 23, 7, 19, 24
             ],
             'targets': [
-                25, 2, 24, 22, 3, 2, 7, 2
+                25, 3, 24, 22, 3, 2, 7, 2
             ],
         },
     ])

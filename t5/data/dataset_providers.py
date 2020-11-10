@@ -670,35 +670,46 @@ class TaskV3(DatasetProviderBase):
         lambda ex: {k: _trim_and_append_eos(k, v) for k, v in ex.items()},
         num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-  def preprocess_precache(self, dataset) -> tf.data.Dataset:
+  def preprocess_precache(
+      self,
+      dataset: tf.data.Dataset,
+      seed: Optional[int] = None
+    ) -> tf.data.Dataset:
     """Runs preprocessing steps before the optional CacheDatasetPlaceholder."""
     if not self.supports_caching:
       return dataset
 
-    return self._preprocess_dataset(
-        dataset,
-        self._preprocessors[:self._cache_step_idx],
-    )
+    with utils.map_seed_manager(seed):
+      return self._preprocess_dataset(
+          dataset,
+          self._preprocessors[:self._cache_step_idx],
+      )
 
   def preprocess_postcache(
       self,
       dataset: tf.data.Dataset,
       sequence_length: Mapping[str, int],
-  ) -> tf.data.Dataset:
+      seed: Optional[int] = None
+    ) -> tf.data.Dataset:
     """Runs preprocessing steps after the optional CacheDatasetPlaceholder.
 
     Args:
       dataset: a tf.data.Dataset
       sequence_length: dict mapping feature key to int length for that feature.
         If None, the features will not be truncated.
+      seed: an optional random seed for deterministic preprocessing.
     Returns:
       a tf.data.Dataset
     """
-    dataset = self._preprocess_dataset(
-        dataset,
-        self._preprocessors[self._cache_step_idx + 1:],
-        sequence_length=sequence_length,
-    )
+    # Skip a sufficient number of seeds to avoid duplicating any from pre-cache
+    # preprocessing.
+    seed = None if seed is None else 42 * self._cache_step_idx
+    with utils.map_seed_manager(seed):
+      dataset = self._preprocess_dataset(
+          dataset,
+          self._preprocessors[self._cache_step_idx + 1:],
+          sequence_length=sequence_length,
+      )
     dataset = self._validate_dataset(
         dataset,
         expected_output_type=tf.int64,
@@ -790,7 +801,7 @@ class TaskV3(DatasetProviderBase):
       ds = self._get_cached_dataset(split, shuffle)
     else:
       ds = self.source.get_dataset(split=split, shuffle=shuffle, seed=seed)
-      ds = self.preprocess_precache(ds)
+      ds = self.preprocess_precache(ds, seed)
 
     ds = ds.prefetch(tf.data.experimental.AUTOTUNE)
 

@@ -391,15 +391,14 @@ class TasksTest(test_utils.FakeTaskTest):
         split="train", use_cached=False, shuffle=True, seed=42)
     test_utils.assert_datasets_neq(dataset1, dataset2)
 
-  def test_same_seeds_random_tp_uncached_mismatch(self):
-    # Expected *not* to equal due to parallel mapping.
+  def test_same_seeds_random_tp_uncached_match(self):
     dataset1 = self.uncached_random_task.get_dataset(
         {"inputs": 13, "targets": 13},
         split="train", use_cached=False, shuffle=True, seed=0).repeat(4)
     dataset2 = self.uncached_random_task.get_dataset(
         {"inputs": 13, "targets": 13},
         split="train", use_cached=False, shuffle=True, seed=0).repeat(4)
-    test_utils.assert_datasets_neq(dataset1, dataset2)
+    test_utils.assert_datasets_eq(dataset1, dataset2)
 
   def test_different_seeds_random_tp_uncached_mismatch(self):
     dataset1 = self.uncached_random_task.get_dataset(

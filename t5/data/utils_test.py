@@ -14,8 +14,8 @@
 
 # Lint as: python3
 """Tests for t5.data.utils."""
-
 from absl.testing import absltest
+import numpy as np
 from t5.data import utils
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
@@ -131,6 +131,20 @@ class UtilsTest(absltest.TestCase):
                      [b"this is a target"])
     self.assertEqual(tfe.features.feature["weight"].float_list.value, [5.0])
 
+  def test_stateless_shuffle(self):
+    value = np.arange(6)
+    expected_output_1 = np.array([0, 3, 4, 2, 1, 5])
+    expected_output_2 = np.array([3, 4, 0, 2, 5, 1])
+    np.testing.assert_array_equal(
+        utils.stateless_shuffle(value, (0, 1)),
+        expected_output_1)
+    np.testing.assert_array_equal(
+        utils.stateless_shuffle(value.reshape((2, 3)), (0, 1)),
+        expected_output_1.reshape((2, 3)))
+    np.testing.assert_array_equal(
+        utils.stateless_shuffle(value, (2, 3)),
+        expected_output_2)
+
   def test_map_over_dataset(self):
     inputs = tf.data.Dataset.range(5)
 
@@ -139,6 +153,34 @@ class UtilsTest(absltest.TestCase):
       return x + 1
 
     self.assertEqual(list(test_fn(inputs).as_numpy_iterator()), [1, 2, 3, 4, 5])
+
+  def test_map_over_dataset_with_seeds(self):
+    inputs = tf.data.Dataset.range(2)
+
+    utils._NEXT_MAP_SEED = 42
+    @utils.map_over_dataset(num_seeds=2)
+    def test_fn(x, seeds=None):
+      return x + seeds
+
+    expected = [
+        np.array([[2985944072, 3810604164], [64669036, 3548694723]]),
+        np.array([[4132877645, 4228622226], [2495033825, 798765318]])
+    ]
+    for exp, act in zip(expected, test_fn(inputs).as_numpy_iterator()):
+      np.testing.assert_array_equal(exp, act)
+
+  def test_map_seed_manager(self):
+    utils._NEXT_MAP_SEED = None
+    self.assertIsNone(utils._NEXT_MAP_SEED)
+    with utils.map_seed_manager(42):
+      self.assertEqual(utils._NEXT_MAP_SEED, 42)
+      with utils.map_seed_manager(410):
+        self.assertEqual(utils._NEXT_MAP_SEED, 410)
+        utils._NEXT_MAP_SEED += 10
+        self.assertEqual(utils._NEXT_MAP_SEED, 420)
+      utils._NEXT_MAP_SEED += 10
+      self.assertEqual(utils._NEXT_MAP_SEED, 52)
+    self.assertIsNone(utils._NEXT_MAP_SEED)
 
 
 if __name__ == "__main__":

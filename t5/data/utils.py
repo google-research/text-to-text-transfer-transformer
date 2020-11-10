@@ -15,6 +15,7 @@
 # Lint as: python3
 """Utilities for data loading and processing."""
 
+import contextlib
 import functools
 import os
 
@@ -249,10 +250,32 @@ def rate_unsupervised(task, value=1e6):
   return value
 
 
+def stateless_shuffle(value, seed):
+  """Randomly shuffles a tensor, statelessly."""
+  flat_value = tf.reshape(value, [-1])
+  indices = tf.argsort(
+      tf.random.stateless_uniform(tf.shape(flat_value), seed=seed)
+  )
+  flat_shuffle = tf.gather(flat_value, indices)
+  return tf.reshape(flat_shuffle, tf.shape(value))
+
+
 # ======================== Decorators =========================================
 
 
-def map_over_dataset(fn):
+_NEXT_MAP_SEED = None
+
+
+@contextlib.contextmanager
+def map_seed_manager(initial_seed=None):
+  global _NEXT_MAP_SEED
+  old_map_seed = _NEXT_MAP_SEED
+  _NEXT_MAP_SEED = initial_seed
+  yield
+  _NEXT_MAP_SEED = old_map_seed
+
+
+def map_over_dataset(fn=None, *, num_seeds=None):
   """Decorator to map decorated function over dataset.
 
   Many preprocessors map a function over a dataset. This decorator helps reduce
@@ -260,15 +283,42 @@ def map_over_dataset(fn):
 
   Args:
     fn: map function
+    num_seeds: optional number of random seeds (pairs of int32) to pass to the
+      mapping function.
 
   Returns:
     Function which takes dataset as first argument.
   """
 
-  @functools.wraps(fn)
-  def wrapped_fn(ds, *args, **kargs):
-    return ds.map(
-        lambda arg: fn(arg, *args, **kargs),
-        num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  def map_without_seeds(fn):
+    @functools.wraps(fn)
+    def wrapped_fn(ds, *args, **kargs):
+      return ds.map(
+          lambda arg: fn(arg, *args, **kargs),
+          num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-  return wrapped_fn
+    return wrapped_fn
+
+  def map_with_seeds(fn):
+    @functools.wraps(fn, assigned=("seeds"))
+    def wrapped_fn(ds, *args, **kwargs):
+      global _NEXT_MAP_SEED
+      if _NEXT_MAP_SEED is None:
+        random_ds_seeds = ((None, None),) * num_seeds
+      else:
+        random_ds_seeds = np.arange(
+            _NEXT_MAP_SEED, _NEXT_MAP_SEED + 2 * num_seeds).reshape(-1, 2)
+        random_ds_seeds = tuple(tuple(s) for s in random_ds_seeds)
+        _NEXT_MAP_SEED += 2 * num_seeds
+      seed_datasets = tf.nest.map_structure(
+          tf.data.experimental.RandomDataset,
+          random_ds_seeds)
+      return tf.data.Dataset.zip((ds, seed_datasets)).map(
+          lambda x, s: fn(x, seeds=s, *args, **kwargs),
+          num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    return wrapped_fn
+
+  if fn is None:
+    return map_with_seeds
+  else:
+    return map_without_seeds(fn)
