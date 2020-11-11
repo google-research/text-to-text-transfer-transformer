@@ -1224,6 +1224,47 @@ class PreprocessorsTest(tf.test.TestCase):
             },
         ])
 
+    # Reverse inputs and targets for supporting the use case when there is
+    # one target, but multiple inputs to select from.
+    dataset = prep.rank_classification(
+        input_ds,
+        inputs_format=['I think {choice1}.', 'I think {choice2}.'],
+        targets_formats='{premise} What is the {question}? X',
+        mode='eval')
+
+    test_utils.assert_dataset(
+        dataset,
+        [
+            {
+                'idx': 0,
+                'targets':
+                    'The farmland needed irrigation. What is the effect? X',
+                'inputs': 'I think a canal was constructed.',
+                'label': 0
+            },
+            {
+                'idx': 0,
+                'targets':
+                    'The farmland needed irrigation. What is the effect? X',
+                'inputs': 'I think the crops grew tall.',
+                'label': 0
+            },
+            {
+                'idx': 1,
+                'targets':
+                    'I decided to stay home last night. What is the cause? X',
+                'inputs': 'I think I wanted to see people.',
+                'label': 1
+            },
+            {
+                'idx': 1,
+                'targets':
+                    'I decided to stay home last night. What is the cause? X',
+                'inputs': 'I think I was too tired.',
+                'label': 1
+            },
+        ])
+
     # label option only
     dataset = prep.rank_classification(
         input_ds,

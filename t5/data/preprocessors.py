@@ -18,7 +18,7 @@ import collections
 import functools
 import math
 import re
-from typing import Optional, Mapping, Sequence
+from typing import Mapping, Optional, Sequence, Union
 import uuid
 
 from absl import logging
@@ -1525,24 +1525,24 @@ def wnli_simple(x, label='wsc:'):
 
 def rank_classification(
     ds,
-    inputs_format,
-    targets_formats,
+    inputs_format: Union[str, Sequence[str]],
+    targets_formats: Union[str, Sequence[str]],
     mode='eval',
     label_key='label'):
   """Create 'inputs' and 'targets' strings for ranking classification.
 
   Intended to be used with `rank_classification` postprocessor and metric.
 
-  Inputs will be formatted the by filling in feature values in the
+  Inputs will be formatted by filling in the feature values in the
   `inputs_format` and `targets_formats` strings.
 
-  In 'eval' mode, a separate example will be produced for each targets format
-  string. These can then be scored to find the one with the highest likelihood.
-  The `rank_classification` postprocessor and metric allow you to evaluate with
-  this technique.
+  In 'eval' mode, a separate example will be produced for each targets / inputs
+  format string. These can then be scored to find the one with the highest
+  likelihood. The `rank_classification` postprocessor and metric allow you to
+  evaluate with this technique.
 
-  In 'train' mode, only the targets format string indexed by the label will be
-  produced.
+  In 'train' mode, only the targets / inputs format string indexed by the label
+  will be produced.
 
   Each input example will also be given a unique, sequential index called 'idx'.
 
@@ -1589,12 +1589,12 @@ def rank_classification(
 
   Args:
     ds: a tf.data.Dataset to preprocess.
-    inputs_format: A string to format with feature values to produce
-      'inputs'. Feature keys should be surrounded by curly braces to be
-      replaced.
-    targets_formats: A list of strings to format with feature values to produce
-      'targets', one for each possible class value. Feature keys should be
-      surrounded by curly braces to be replaced.
+    inputs_format: A string or a list of strings to format with feature values
+      to produce 'inputs'. Feature keys should be surrounded by curly braces to
+      be replaced.
+    targets_formats: A string or a list of strings to format with feature values
+      to produce 'targets', one for each possible class value. Feature keys
+      should be surrounded by curly braces to be replaced.
     mode: A string, one of 'train', 'eval', or 'fewshot_train')
       'train' produces only the correct example based on the label value.
       'eval' produces an example for every possible label value, sequentially.
@@ -1608,7 +1608,30 @@ def rank_classification(
     raise ValueError(
         "Mode must be one of 'train', 'eval', or 'fewshot_train'. "
         f"Got '{mode}'.")
-  num_classes = len(targets_formats)
+
+  # TODO(crazydonkey or adarob): change the argument name from
+  # `inputs_format` to `inputs_formats` after all the fewshot tasks are
+  # checked in.
+  inputs_formats = inputs_format
+
+  if (isinstance(inputs_formats, (list, tuple)) and
+      isinstance(targets_formats, (list, tuple))):
+    if len(inputs_formats) != len(targets_formats):
+      raise ValueError(
+          f'The inputs_formats ({len(inputs_formats)}) and '
+          f'targets_formats ({len(targets_formats)}) are both instances '
+          'of list or tuple, but do not have matching lengths.')
+  elif isinstance(inputs_formats, (list, tuple)):
+    num_classes = len(inputs_formats)
+    targets_formats = [targets_formats] * num_classes
+  elif isinstance(targets_formats, (list, tuple)):
+    num_classes = len(targets_formats)
+    inputs_formats = [inputs_formats] * num_classes
+  else:
+    raise ValueError(
+        'One of the inputs_formats and targets_formats has to '
+        f'be a list or tuple, inputs_formats: {inputs_formats}, '
+        f'target_formats: {targets_formats}.')
 
   def format_features(idx, ex):
     def _format_str(fmt):
@@ -1620,7 +1643,7 @@ def rank_classification(
 
     new_ex = {
         'idx': tf.fill([num_classes], idx),
-        'inputs': tf.fill([num_classes], _format_str(inputs_format)),
+        'inputs': tf.stack([_format_str(fmt) for fmt in inputs_formats]),
         'targets': tf.stack([_format_str(fmt) for fmt in targets_formats]),
         'label': tf.fill([num_classes], ex[label_key]),
     }
