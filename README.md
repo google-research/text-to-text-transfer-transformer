@@ -441,7 +441,7 @@ See [here][released_checkpoints] for a list of additional experimental pre-train
 # How to Cite
 If you extend or use this work, please cite the [paper][paper] where it was introduced:
 
-```
+```bibtex
 @article{2020t5,
   author  = {Colin Raffel and Noam Shazeer and Adam Roberts and Katherine Lee and Sharan Narang and Michael Matena and Yanqi Zhou and Wei Li and Peter J. Liu},
   title   = {Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer},
