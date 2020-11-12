@@ -154,12 +154,31 @@ class UtilsTest(absltest.TestCase):
 
     self.assertEqual(list(test_fn(inputs).as_numpy_iterator()), [1, 2, 3, 4, 5])
 
+  # We disable no-value-for-parameter since the utils.map_over_dataset leads to
+  # a false positive when seeds are provided.
+  # pylint:disable=no-value-for-parameter
+
+  def test_map_over_dataset_with_one_seed(self):
+    inputs = tf.data.Dataset.range(2)
+
+    utils._NEXT_MAP_SEED = 42
+    @utils.map_over_dataset(num_seeds=1)
+    def test_fn(x, seed):
+      return x + seed
+
+    expected = [
+        np.array([2985944072, 3810604164]),
+        np.array([4132877645, 4228622226])
+    ]
+    for exp, act in zip(expected, test_fn(inputs).as_numpy_iterator()):
+      np.testing.assert_array_equal(exp, act)
+
   def test_map_over_dataset_with_seeds(self):
     inputs = tf.data.Dataset.range(2)
 
     utils._NEXT_MAP_SEED = 42
     @utils.map_over_dataset(num_seeds=2)
-    def test_fn(x, seeds=None):
+    def test_fn(x, seeds):
       return x + seeds
 
     expected = [
@@ -168,6 +187,8 @@ class UtilsTest(absltest.TestCase):
     ]
     for exp, act in zip(expected, test_fn(inputs).as_numpy_iterator()):
       np.testing.assert_array_equal(exp, act)
+
+  # pylint:enable=no-value-for-parameter
 
   def test_map_seed_manager(self):
     utils._NEXT_MAP_SEED = None

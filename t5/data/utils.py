@@ -17,6 +17,7 @@
 
 import contextlib
 import functools
+import inspect
 import os
 
 from absl import logging
@@ -268,6 +269,7 @@ _NEXT_MAP_SEED = None
 
 @contextlib.contextmanager
 def map_seed_manager(initial_seed=None):
+  """Contextmanager to control the initial seed used by `map_over_dataset`."""
   global _NEXT_MAP_SEED
   old_map_seed = _NEXT_MAP_SEED
   _NEXT_MAP_SEED = initial_seed
@@ -280,6 +282,15 @@ def map_over_dataset(fn=None, *, num_seeds=None):
 
   Many preprocessors map a function over a dataset. This decorator helps reduce
   boilerplate for this common pattern.
+
+  If `num_seeds` is set to 1, a unique random seed (pair of int32) will be
+  passed to the mapping function with keyword 'seed'.
+  If `num_seeds` is greater than 1, unique random seeds (pairs of int32) will be
+  passed to the mapping function with keyword 'seeds'.
+  These seeds can be generated deterministically by using the `map_seed_manager`
+  to set the seed for the process that generates the individual seeds for each
+  mapping function. These seeds will be set sequentially from the initial seed
+  for each call to `map_over_dataset` where `num_seeds > 0`.
 
   Args:
     fn: map function
@@ -300,7 +311,7 @@ def map_over_dataset(fn=None, *, num_seeds=None):
     return wrapped_fn
 
   def map_with_seeds(fn):
-    @functools.wraps(fn, assigned=("seeds"))
+    @functools.wraps(fn)
     def wrapped_fn(ds, *args, **kwargs):
       global _NEXT_MAP_SEED
       if _NEXT_MAP_SEED is None:
@@ -313,9 +324,20 @@ def map_over_dataset(fn=None, *, num_seeds=None):
       seed_datasets = tf.nest.map_structure(
           tf.data.experimental.RandomDataset,
           random_ds_seeds)
+      if num_seeds == 1:
+        map_fn = lambda x, s: fn(x, seed=s[0], *args, **kwargs)
+      else:
+        map_fn = lambda x, s: fn(x, seeds=s, *args, **kwargs)
       return tf.data.Dataset.zip((ds, seed_datasets)).map(
-          lambda x, s: fn(x, seeds=s, *args, **kwargs),
-          num_parallel_calls=tf.data.experimental.AUTOTUNE)
+          map_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+    # Remove seeds from function signature.
+    sig = inspect.signature(wrapped_fn)
+    wrapped_fn.__signature__ = sig.replace(
+        parameters=tuple(
+            p for p in sig.parameters.values() if p.name not in("seed", "seeds")
+        )
+    )
     return wrapped_fn
 
   if fn is None:

@@ -27,7 +27,9 @@ import gin
 from t5.data import utils
 import tensorflow.compat.v2 as tf
 
-# pylint: disable=g-long-lambda
+# We disable no-value-for-parameter since the utils.map_over_dataset leads to
+# a false positive when seeds are provided.
+# pylint:disable=no-value-for-parameter
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 
 
@@ -446,12 +448,12 @@ def random_split_text(dataset,
     return x[chunk_size * chunk_num:chunk_size * (chunk_num + 1)]
 
   @utils.map_over_dataset(num_seeds=2)
-  def my_fn(x, seeds=None):
+  def my_fn(x, seeds):
     """Split one string into multiple strings.
 
     Args:
       x: a feature dictionary
-      seeds: a int32 Tensor, shaped (2, 2).
+      seeds: an int32 Tensor, shaped (2, 2).
     Returns:
       a feature dictionary
     """
@@ -544,12 +546,12 @@ def fill_in_the_blank(dataset,
     a tf.data.Dataset
   """
   @utils.map_over_dataset(num_seeds=3)
-  def my_fn(x, seeds=None):
+  def my_fn(x, seeds):
     """Generates two preprocessed examples that are roughly inverses.
 
     Args:
       x: an example dict with text pre-split in `words` feature.
-      seeds: a int32 Tensor, shaped (3, 2).
+      seeds: an int32 Tensor, shaped (3, 2).
     Returns:
       an example dict with two inputs and two targets, one for each resulting
       preprocessed example.
@@ -637,7 +639,7 @@ def fill_in_the_blank_sized(
   bins = sorted(size_bins)
 
   @utils.map_over_dataset(num_seeds=2)
-  def my_fn(x, seeds=None):
+  def my_fn(x, seeds):
     """Apply transformation."""
     words = x['words']
     n_words = tf.size(words)
@@ -1167,10 +1169,10 @@ def next_sentence_prediction(dataset,
     return tf.reduce_any(empty)
 
   @utils.map_over_dataset(num_seeds=1)
-  def my_fn(x, seeds=None):
+  def my_fn(x, seed):
     """Function to be applied to each example in dataset."""
     use_neighbors = (
-        tf.random.stateless_uniform(shape=[], seed=seeds[0]) < p_neighbors
+        tf.random.stateless_uniform(shape=[], seed=seed) < p_neighbors
     )
     firsts, seconds = tf.cond(
         use_neighbors,
@@ -1277,30 +1279,20 @@ def _wsc_inputs(x):
       )
 
   # Handle some special cases.
-  return tf.case(
-      [
-          (
-              # The issue here is that the pronoun is 'him,"' in the text.
-              tf.equal(
-                  x['text'],
-                  'The boy continued to whip the pony , and eventually the pony threw him over. John laughed out quite loud. \"Good for him,\" he said. '
-              ),
-              lambda:
-              'The boy continued to whip the pony , and eventually the pony threw him over. John laughed out quite loud. "Good for X ," he said.',
-          ),
-          (
-              # Using the span2_index, we get 'use' instead of 'it'.
-              tf.equal(
-                  x['text'],
-                  'When they had eventually calmed down a bit , and had gotten home, Mr. Farley put the magic pebble in an iron safe . Some day they might want to use it , but really for now, what more could they wish for?'
-              ),
-              lambda:
-              'When they had eventually calmed down a bit , and had gotten home, Mr. Farley put the magic pebble in an iron safe . Some day they might want to use X , but really for now, what more could they wish for?'
-          )
-      ],
-      default=create_input,
-      exclusive=True)
+  if tf.equal(
+      x['text'],
+      'The boy continued to whip the pony , and eventually the pony threw him over. John laughed out quite loud. \"Good for him,\" he said. '
+      ):
+    return 'The boy continued to whip the pony , and eventually the pony threw him over. John laughed out quite loud. "Good for X ," he said.'
 
+  # Using the span2_index, we get 'use' instead of 'it'.
+  if tf.equal(
+      x['text'],
+      'When they had eventually calmed down a bit , and had gotten home, Mr. Farley put the magic pebble in an iron safe . Some day they might want to use it , but really for now, what more could they wish for?'
+      ):
+      return 'When they had eventually calmed down a bit , and had gotten home, Mr. Farley put the magic pebble in an iron safe . Some day they might want to use X , but really for now, what more could they wish for?'
+
+  return create_input()
 
 def wsc_simple(dataset,
                label='wsc:',
@@ -1891,12 +1883,12 @@ def select_random_chunk(dataset: tf.data.Dataset,
     raise ValueError('Must specify max_length or sequence_length.')
 
   @utils.map_over_dataset(num_seeds=1)
-  def _my_fn(x, seeds=None):
+  def _my_fn(x, seed):
     """Select a random chunk of tokens.
 
     Args:
       x: a 1d Tensor
-      seeds: a int32 Tensor, shaped (1, 2).
+      seed: an int32 Tensor, shaped (2).
     Returns:
       a 1d Tensor
     """
@@ -1911,7 +1903,7 @@ def select_random_chunk(dataset: tf.data.Dataset,
         [],
         maxval=num_segments,
         dtype=tf.int32,
-        seed=seeds[0])
+        seed=seed)
     end = tf.minimum(start + max_length, n_tokens)
     chunk = {feature_key: tokens[start:end]}
     if additional_feature_keys is not None:
@@ -2047,7 +2039,7 @@ def trivia_qa_truncate_inputs(dataset, output_features, sequence_length):
   del output_features
 
   @utils.map_over_dataset(num_seeds=1)
-  def my_fn(features, seeds=None):
+  def my_fn(features, seed):
     """Function to map original dataset to the new dataset."""
     inputs = features['inputs']
     targets = features['targets']
@@ -2109,7 +2101,7 @@ def trivia_qa_truncate_inputs(dataset, output_features, sequence_length):
       result, pos_mask = answer_in_context(inputs, targets)
 
       if result:
-        return slice_inputs(inputs, ans_len, pos_mask, seed=seeds[0])
+        return slice_inputs(inputs, ans_len, pos_mask, seed=seed)
       else:
         return tf.constant([], dtype=inputs.dtype)
 
@@ -2195,7 +2187,7 @@ def split_tokens(dataset,
     a dataset
   """
   @utils.map_over_dataset(num_seeds=1)
-  def _split_tokens(x, seeds=None):
+  def _split_tokens(x, seed):
     """Split one token sequence into multiple sequences."""
     tokens = x[feature_key]
     n_tokens = tf.size(tokens)
@@ -2209,7 +2201,7 @@ def split_tokens(dataset,
                   [],
                   minval=math.log(min_tokens_per_segment),
                   maxval=math.log(max_tokens_per_segment),
-                  seed=seeds[0]
+                  seed=seed
               )
           ),
           tf.int32)
@@ -2384,7 +2376,7 @@ def denoise(dataset,
     A preprocessed tf.data.Dataset.
   """
   @utils.map_over_dataset(num_seeds=6)
-  def my_fn(features, seeds=None):
+  def my_fn(features, seeds):
     """Map function."""
     tokens = features['targets']
     vocabulary = output_features['targets'].vocabulary
@@ -2411,7 +2403,7 @@ def iid_noise_mask(length, noise_density, seeds):
   Args:
     length: an int32 scalar
     noise_density: a float - approximate density of output mask
-    seeds: a int32 Tensor, shaped (1, 2)
+    seeds: an int32 Tensor, shaped (1, 2)
 
   Returns:
     a boolean tensor with shape [length]
@@ -2548,7 +2540,7 @@ def random_prefix_noise_mask(length, noise_density, seeds):
   Args:
     length: an int32 scalar
     noise_density: a float - must equal 0.5
-    seeds: a int32 Tensor, shaped (1, 2)
+    seeds: an int32 Tensor, shaped (1, 2)
 
   Returns:
     a boolean tensor with shape [length]
@@ -2775,7 +2767,7 @@ def noise_token_to_random_token(
     tokens: a 1d integer Tensor
     noise_mask: a boolean Tensor with the same shape as tokens
     vocabulary: a vocabulary.Vocabulary
-    seeds: a int32 Tensor, shaped (1, 2)
+    seeds: an int32 Tensor, shaped (1, 2)
     num_reserved_tokens: an integer
   Returns:
     a Tensor with the same shape and dtype as tokens
@@ -2806,7 +2798,7 @@ def noise_token_to_random_token_or_sentinel(
     tokens: a 1d integer Tensor
     noise_mask: a boolean Tensor with the same shape as tokens
     vocabulary: a vocabulary.Vocabulary
-    seeds: a int32 Tensor, shaped (2, 2).
+    seeds: an int32 Tensor, shaped (2, 2).
     random_prob: a float
   Returns:
     a Tensor with the same shape and dtype as tokens

@@ -390,14 +390,14 @@ def test_token_preprocessor(dataset, output_features, sequence_length):
 
 
 @dataset_utils.map_over_dataset(num_seeds=1)
-def random_token_preprocessor(ex, seeds):
+def random_token_preprocessor(ex, seed):
   """Selects a random shift to roll the tokens by for each feature."""
   for feat in ["inputs", "targets"]:
     tokens = ex[feat]
     res = ex.copy()
     n_tokens = tf.size(tokens)
     random_shift = tf.random.stateless_uniform(
-        [], maxval=n_tokens, dtype=tf.int32, seed=seeds[0])
+        [], maxval=n_tokens, dtype=tf.int32, seed=seed)
     res[feat] = tf.roll(tokens, shift=random_shift, axis=0)
   return res
 
