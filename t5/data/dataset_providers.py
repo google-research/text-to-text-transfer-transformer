@@ -449,7 +449,7 @@ class TFExampleDataSource(FileDataSource):
 def print_dataset(dataset):
   """tf.Print dataset fields for debugging purposes."""
   def my_fn(x):
-    return {k: tf.Print(v, [v], k + ": ") for k, v in x.items()}
+    return {k: tf.print(v, [v], k + ": ") for k, v in x.items()}
   return dataset.map(my_fn)
 
 
