@@ -596,6 +596,50 @@ class PreprocessorsTest(tf.test.TestCase):
     _verify_split(100, 1)
     _verify_split(1000, 1)
 
+  def test_split_tokens_additional_features_passthrough(self):
+    original = list(range(2, 102))
+    original_aux = list(range(4, 104))
+    original_passthrough = list(range(20))
+    og_dataset = tf.data.Dataset.from_tensors({
+        'targets': original,
+        'aux': original_aux,
+        'passthrough': original_passthrough
+    })
+    # Verify splits with no max segments.
+    def _verify_split(length, n_expected_outputs):
+      ds = prep.split_tokens(
+          og_dataset, unused_vocabulary=None, max_tokens_per_segment=length,
+          additional_feature_keys=['aux'],
+          passthrough_feature_keys=['passthrough'])
+      outputs = list(test_utils.dataset_as_text(ds))
+      self.assertLen(outputs, n_expected_outputs)
+      reconstructed = []
+      reconstructed_aux = []
+      for ex in outputs[:-1]:
+        t = ex['targets']
+        self.assertLen(t, length)
+        reconstructed.extend(t)
+
+        a = ex['aux']
+        self.assertLen(a, length)
+        reconstructed_aux.extend(a)
+      final_t = outputs[-1]['targets']
+      self.assertLessEqual(len(final_t), length)
+      reconstructed.extend(final_t)
+      self.assertEqual(reconstructed, original)
+
+      final_a = outputs[-1]['aux']
+      self.assertLessEqual(len(final_a), length)
+      reconstructed_aux.extend(final_a)
+      self.assertEqual(reconstructed_aux, original_aux)
+
+      for ex in outputs:
+        self.assertAllEqual(original_passthrough, ex['passthrough'])
+    _verify_split(25, 4)
+    _verify_split(30, 4)
+    _verify_split(100, 1)
+    _verify_split(1000, 1)
+
   def test_trim_tokens_at_front(self):
     sequence_length = {'inputs': 4}
     inputs = tf.data.Dataset.from_tensors(

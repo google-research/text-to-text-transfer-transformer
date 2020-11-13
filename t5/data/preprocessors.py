@@ -1673,10 +1673,7 @@ def parse_tsv(line, field_names=None, field_delim='\t'):
               line,
               record_defaults=[''] * len(field_names),
               field_delim=field_delim,
-              use_quote_delim=False
-          )
-      )
-  )
+              use_quote_delim=False)))
 
 
 @utils.map_over_dataset
@@ -2159,11 +2156,13 @@ def unsupervised(dataset,
 
 
 @gin.configurable
-def split_tokens(dataset,
-                 min_tokens_per_segment=None,
-                 max_tokens_per_segment=gin.REQUIRED,
-                 feature_key='targets',
-                 **unused_kwargs):
+def split_tokens(dataset: tf.data.Dataset,
+                 min_tokens_per_segment: Optional[int] = None,
+                 max_tokens_per_segment: int = gin.REQUIRED,
+                 feature_key: str = 'targets',
+                 additional_feature_keys: Optional[Sequence[str]] = None,
+                 passthrough_feature_keys: Optional[Sequence[str]] = None,
+                 **unused_kwargs) -> tf.data.Dataset:
   """Split examples into multiple examples each.
 
   The intended use case is to break up long examples for use in unsupervised
@@ -2182,6 +2181,9 @@ def split_tokens(dataset,
     max_tokens_per_segment: an integer, the maximum number of tokens in each
       segment. Only the final segment may be shorter.
     feature_key: a string, the feature to split
+    additional_feature_keys: Additional features to split. The same chunk size
+      will be used, so they should be the same size as feature_key.
+    passthrough_feature_keys: Featues to pass through without any splitting.
 
   Returns:
     a dataset
@@ -2214,12 +2216,28 @@ def split_tokens(dataset,
         ,
         tf.int32)
     padding = num_segments * length - tf.size(tokens)
-    tokens = tf.pad(tokens, [[0, padding]])
-    return tf.reshape(tokens, [-1, length])
+    padded = tf.pad(tokens, [[0, padding]])
+    outputs = {feature_key: tf.reshape(padded, [-1, length])}
+    if additional_feature_keys is not None:
+      for k in additional_feature_keys:
+        with tf.control_dependencies([
+            tf.assert_equal(tf.size(tokens), tf.size(x[k]))]):
+          padded = tf.pad(x[k], [[0, padding]])
+          outputs[k] = tf.reshape(padded, [-1, length])
+    if passthrough_feature_keys:
+      for k in passthrough_feature_keys:
+        outputs[k] = tf.tile(x[k][tf.newaxis, :], [num_segments, 1])
+    return outputs
 
   @utils.map_over_dataset
   def _strip_padding(x):
-    return {feature_key: tf.boolean_mask(x, tf.cast(x, tf.bool))}
+    output = {}
+    for k, v in x.items():
+      if passthrough_feature_keys and k in passthrough_feature_keys:
+        output[k] = v
+      else:
+        output[k] = tf.boolean_mask(v, tf.cast(v, tf.bool))
+    return output
 
   # Filter empty examples.
   dataset = dataset.filter(lambda x: tf.not_equal(tf.size(x[feature_key]), 0))
@@ -2229,22 +2247,25 @@ def split_tokens(dataset,
 
 
 @gin.configurable
-def split_tokens_to_inputs_length(dataset, sequence_length, **unused_kwargs):
+def split_tokens_to_inputs_length(dataset, sequence_length, **kwargs):
   return split_tokens(dataset,
-                      max_tokens_per_segment=sequence_length['inputs'])
+                      max_tokens_per_segment=sequence_length['inputs'],
+                      **kwargs)
 
 
 @gin.configurable
-def split_tokens_to_targets_length(dataset, sequence_length, **unused_kwargs):
+def split_tokens_to_targets_length(dataset, sequence_length, **kwargs):
   return split_tokens(dataset,
-                      max_tokens_per_segment=sequence_length['targets'])
+                      max_tokens_per_segment=sequence_length['targets'],
+                      **kwargs)
 
 
 @gin.configurable
-def split_tokens_to_random_length(dataset, sequence_length, **unused_kwargs):
+def split_tokens_to_random_length(dataset, sequence_length, **kwargs):
   return split_tokens(dataset,
                       min_tokens_per_segment=8,
-                      max_tokens_per_segment=sequence_length['inputs'])
+                      max_tokens_per_segment=sequence_length['inputs'],
+                      **kwargs)
 
 
 @gin.configurable
