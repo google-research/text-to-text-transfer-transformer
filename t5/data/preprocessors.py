@@ -1528,6 +1528,10 @@ def rank_classification(
   Inputs will be formatted by filling in the feature values in the
   `inputs_format` and `targets_formats` strings.
 
+  Nested features can be accessed by concatenating the features using forward
+  slash. For eg: if sub-sub-key is nested under sub-key, which is nested under
+  key, then sub-sub-key can be accessed using key/sub-key/sub-sub-key.
+
   In 'eval' mode, a separate example will be produced for each targets / inputs
   format string. These can then be scored to find the one with the highest
   likelihood. The `rank_classification` postprocessor and metric allow you to
@@ -1627,10 +1631,16 @@ def rank_classification(
 
   def format_features(idx, ex):
     def _format_str(fmt):
-      keys = set(re.findall(r'{(\w+)}', fmt))
+      keys = set(re.findall(r'{(\S+)}', fmt))
       s = fmt
       for k in keys:
-        s = tf.strings.regex_replace(s, '{%s}' % k, ex[k])
+        value = ex
+        for subkey in k.split('/'):
+          value = value[subkey]
+        tf.debugging.assert_type(value, tf.string,
+          'Final value of nested key has to be a tf.string. Currently type: %s,'
+          % (str(type(value.dtype))))
+        s = tf.strings.regex_replace(s, '{%s}' % k, value)
       return s
 
     new_ex = {

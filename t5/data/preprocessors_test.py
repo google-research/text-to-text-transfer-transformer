@@ -1375,6 +1375,105 @@ class PreprocessorsTest(tf.test.TestCase):
             },
         ])
 
+  def test_nested_key_rank_classification(self):
+    input_ds = tf.data.Dataset.from_tensors({
+            'answerKey': 0,
+            'fact1': 'creating paper requires cutting down trees',
+            'question': {
+                'choice_A': 'forests',
+                'choice_B': 'canyons',
+                'sub_question' : {
+                  'stem': 'What is the ultimate source of greeting cards?'
+                }
+            }
+    })
+
+    # all options
+    dataset = prep.rank_classification(
+        input_ds,
+        inputs_format='{fact1}. {question/sub_question/stem} X 0',
+        targets_formats=[
+            'Correct Answer: {question/choice_A} X 1 Incorrect Answer: {question/choice_B} X 1',
+            'Correct Answer: {question/choice_B} X 1 Incorrect Answer: {question/choice_A} X 1',
+        ],
+        mode='fewshot_train',
+        label_key='answerKey')
+
+    test_utils.assert_dataset(
+        dataset,
+        [
+            {
+                'idx': 0,
+                'inputs':
+                  'creating paper requires cutting down trees. What is the ultimate source of greeting cards? X 0',
+                'targets':
+                  'Correct Answer: forests X 1 Incorrect Answer: canyons X 1',
+                'label': 0,
+            },
+            {
+                'idx': 0,
+                'inputs':
+                  'creating paper requires cutting down trees. What is the ultimate source of greeting cards? X 0',
+                'targets':
+                  'Correct Answer: forests X 1 Incorrect Answer: canyons X 1',
+                'label': 0,
+            },
+        ])
+
+    dataset = prep.rank_classification(
+        input_ds,
+        inputs_format='{fact1}. {question/sub_question/stem} X 0',
+        targets_formats=[
+            'Correct Answer: {question/choice_A} X 1 Incorrect Answer: {question/choice_B} X 1',
+            'Correct Answer: {question/choice_B} X 1 Incorrect Answer: {question/choice_A} X 1',
+        ],
+        mode='train',
+        label_key='answerKey')
+
+    test_utils.assert_dataset(
+        dataset,
+        [
+            {
+                'idx': 0,
+                'inputs':
+                  'creating paper requires cutting down trees. What is the ultimate source of greeting cards? X 0',
+                'targets':
+                  'Correct Answer: forests X 1 Incorrect Answer: canyons X 1',
+                'label': 0,
+            },
+        ])
+
+    dataset = prep.rank_classification(
+        input_ds,
+        inputs_format='{fact1}. {question/sub_question/stem} X 0',
+        targets_formats=[
+            'Correct Answer: {question/choice_A} X 1',
+            'Correct Answer: {question/choice_B} X 1',
+        ],
+        mode='eval',
+        label_key='answerKey')
+
+    test_utils.assert_dataset(
+        dataset,
+        [
+            {
+                'idx': 0,
+                'inputs':
+                  'creating paper requires cutting down trees. What is the ultimate source of greeting cards? X 0',
+                'targets':
+                  'Correct Answer: forests X 1',
+                'label': 0,
+            },
+            {
+                'idx': 0,
+                'inputs':
+                  'creating paper requires cutting down trees. What is the ultimate source of greeting cards? X 0',
+                'targets':
+                  'Correct Answer: canyons X 1',
+                'label': 0,
+            },
+        ])
+
   def test_select_random_chunk(self):
     dataset = tf.data.Dataset.from_tensors({
         'targets': [0, 1, 2, 3],
