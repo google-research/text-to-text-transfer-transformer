@@ -1305,6 +1305,8 @@ def _log_mixing_proportions(
   """
   def _normalize(l):
     denom = sum(l)
+    if not denom:
+      return l
     return [x / denom for x in l]
   # compute some stats about the mixture
   examples_fraction = _normalize(rates)
@@ -1316,7 +1318,9 @@ def _log_mixing_proportions(
       inputs_sum = 0
       targets_sum = 0
       for ex in tfds.as_numpy(dataset.take(stats_examples)):
-        inputs_sum += ex["inputs"].size
+        # Some tasks, like LMs, don't have inputs.
+        if "inputs" in ex:
+          inputs_sum += ex["inputs"].size
         targets_sum += ex["targets"].size
       mean_inputs_length.append(inputs_sum / float(stats_examples))
       mean_targets_length.append(targets_sum / float(stats_examples))
@@ -1325,9 +1329,13 @@ def _log_mixing_proportions(
       if task._cache_step_idx < len(task._preprocessors) - 1:  # pylint:disable=protected-access
         # There is processing after caching, so we can't rely on the stats.
         return sequence_length[key]
-      return min(sequence_length[key],
-                 (task.get_cached_stats("train")[key + "_tokens"] /
-                  task.get_cached_stats("train")["examples"]))
+      # Some tasks, like LMs, don't have inputs.
+      if key + "_tokens" in task.get_cached_stats("train"):
+        return min(sequence_length[key],
+                   (task.get_cached_stats("train")[key + "_tokens"] /
+                    task.get_cached_stats("train")["examples"]))
+      else:
+        return 0
 
     mean_inputs_length = [_estimated_mean_length(task, "inputs")
                           for task in tasks]
