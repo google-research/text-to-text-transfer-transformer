@@ -18,7 +18,7 @@ import collections
 import functools
 import math
 import re
-from typing import Mapping, Optional, Sequence, Union
+from typing import Callable, Mapping, Optional, Sequence, Union
 import uuid
 
 from absl import logging
@@ -31,6 +31,8 @@ import tensorflow.compat.v2 as tf
 # a false positive when seeds are provided.
 # pylint:disable=no-value-for-parameter
 AUTOTUNE = tf.data.experimental.AUTOTUNE
+
+FeatureType = Mapping[str, tf.Tensor]
 
 
 @utils.map_over_dataset
@@ -1294,6 +1296,7 @@ def _wsc_inputs(x):
 
   return create_input()
 
+
 def wsc_simple(dataset,
                label='wsc:',
                correct_referent_only=False):
@@ -1516,17 +1519,121 @@ def wnli_simple(x, label='wsc:'):
 
 
 def rank_classification(
-    ds,
-    inputs_format: Union[str, Sequence[str]],
+    ds: tf.data.Dataset,
+    inputs_fn: Callable[[FeatureType], tf.Tensor],
+    targets_fn: Callable[[FeatureType], tf.Tensor],
+    mode: str = 'eval',
+    label_key: str = 'label'
+) -> tf.data.Dataset:
+  """Prepare dataset for rank classification scoring.
+
+  Intended to be used with `rank_classification` postprocessor and metric.
+
+  `inputs_fn` and `targets_fn` must return the 'inputs' and 'targets' features,
+  respectively, for each possible class label given the raw example features.
+
+  In 'train' mode, only the inputs / targets indexed by the label(s) will be
+  produced. In 'eval' mode, all inputs / targets will be produced.
+
+  Each input example will also be given a unique, sequential index called 'idx'.
+
+  For example, with mode set to 'eval', given the input:
+
+  {
+    'inputs': ['The farmland needed ', 'The farmland wanted '],
+    'targets': ['water', 'cows'],
+    'label': 0,
+  }
+
+  the preprocessor would return:
+  [{
+      'idx': 0,
+      'inputs': 'The farmland needed ',
+      'targets': 'water',
+      'is_correct': True
+   },
+   {
+     'idx': 0,
+     'inputs': 'The farmland wanted ',
+     'targets': 'cows',
+     'is_correct': False
+   }]
+
+  With mode set to 'train', it would return only the first example,
+  since it uses the correct label.
+
+  With mode set to 'fewshot_eval', it would return both examples in a single
+  batch.
+
+  Args:
+    ds: a tf.data.Dataset to preprocess.
+    inputs_fn: a callable that returns the 'inputs' features for each label
+      given the input example.
+    targets_fn: a callable that returns the 'targets' features for each label
+      given the input example.
+    mode: A string, one of 'train' or'eval
+      'train' produces only the correct example(s) based on the label value(s).
+      'eval' produces an example for every possible class value, sequentially.
+      'fewshot_eval' produces an example for every possible class value,
+        batched together for each input example.
+    label_key: A string, the feature key for the integer label value(s).
+  Returns:
+    A tf.data.Dataset containing 'idx', inputs', 'targets', and 'is_correct'.
+  """
+  if mode not in ('train', 'eval', 'fewshot_eval'):
+    raise ValueError(
+        "Mode must be one of 'train', 'eval', or 'fewshot_eval'. "
+        f"Got '{mode}'.")
+
+  def make_examples(idx, ex):
+    labels = tf.cast(ex[label_key], tf.int32)
+    if not labels.shape.rank:
+      labels = tf.expand_dims(labels, axis=0)
+
+    inputs = inputs_fn(ex)
+    targets = targets_fn(ex)
+
+    tf.debugging.assert_equal(
+        tf.size(inputs), tf.size(targets),
+        '`inputs_fn` and `targets_fn` must return the same size tensors.')
+    num_classes = tf.shape(inputs)[0]
+
+    tf.debugging.assert_less(
+        labels, num_classes,
+        'Label values must be less than the number of classes.')
+
+    is_correct = tf.cast(
+        tf.math.reduce_sum(tf.one_hot(labels, num_classes), axis=0), tf.bool)
+
+    return {
+        'idx': tf.fill([num_classes], idx),
+        'inputs': inputs,
+        'targets': targets,
+        'is_correct': is_correct
+    }
+
+  ds = ds.enumerate()
+  ds = ds.map(make_examples, num_parallel_calls=AUTOTUNE)
+  if mode != 'fewshot_eval':
+    ds = ds.unbatch()
+  if mode == 'train':
+    ds = ds.filter(lambda ex: ex['is_correct'])
+  return ds
+
+
+def rank_classification_formatter(
+    ds: tf.data.Dataset,
+    inputs_formats: Union[str, Sequence[str]],
     targets_formats: Union[str, Sequence[str]],
-    mode='eval',
-    label_key='label'):
+    mode: str = 'eval',
+    label_key: str = 'label'
+) -> tf.data.Dataset:
   """Create 'inputs' and 'targets' strings for ranking classification.
 
   Intended to be used with `rank_classification` postprocessor and metric.
 
   Inputs will be formatted by filling in the feature values in the
-  `inputs_format` and `targets_formats` strings.
+  `inputs_formats` and `targets_formats` strings.
 
   Nested features can be accessed by concatenating the features using forward
   slash. For eg: if sub-sub-key is nested under sub-key, which is nested under
@@ -1537,8 +1644,9 @@ def rank_classification(
   likelihood. The `rank_classification` postprocessor and metric allow you to
   evaluate with this technique.
 
-  In 'train' mode, only the targets / inputs format string indexed by the label
-  will be produced.
+  In 'train' mode, only the targets / inputs format string indexed by the
+  label(s) will be produced. In 'eval' mode, all inputs / targets will be
+  produced.
 
   Each input example will also be given a unique, sequential index called 'idx'.
 
@@ -1568,48 +1676,37 @@ def rank_classification(
      'idx': 0,
      'inputs': 'The farmland needed irrigation. What is the effect? X',
      'targets': 'I think a canal was constructed.',
-     'label': 0
+     'is_correct': True
    },
    {
      'idx': 0,
      'inputs': 'The farmland needed irrigation. What is the effect? X',
      'targets': 'I think the crops grew tall.',
-     'label': 0
+     'is_correct': False
    }]
 
   With `mode='train'`, it would return only the first example,
   since it uses the correct label.
 
-  With `mode='fewshot_train'`, it would return only the first example twice,
-  since it uses the correct label.
+  With `mode='fewshot_eval'`, it would return both examples in a single batch.
 
   Args:
     ds: a tf.data.Dataset to preprocess.
-    inputs_format: A string or a list of strings to format with feature values
+    inputs_formats: A string or a list of strings to format with feature values
       to produce 'inputs'. Feature keys should be surrounded by curly braces to
       be replaced.
     targets_formats: A string or a list of strings to format with feature values
       to produce 'targets', one for each possible class value. Feature keys
       should be surrounded by curly braces to be replaced.
     mode: A string, one of 'train', 'eval', or 'fewshot_train')
-      'train' produces only the correct example based on the label value.
-      'eval' produces an example for every possible label value, sequentially.
-      'fewshot_train' produces only the correct example, but repeats it to
-         match the number of classes.
-    label_key: A string, the feature key for the integer label value.
+      'train' produces only the correct example(s) based on the label value(s).
+      'eval' produces an example for every possible class value, sequentially.
+      'fewshot_eval': produces an example for every possible class value,
+        batched together for each input example.
+    label_key: A string, the feature key for the integer label value(s).
   Returns:
-    A tf.data.Dataset containing 'idx', inputs', 'targets', and 'label'.
+    A tf.data.Dataset containing 'idx', inputs', 'targets', and 'is_correct'.
   """
-  if mode not in ('train', 'eval', 'fewshot_train'):
-    raise ValueError(
-        "Mode must be one of 'train', 'eval', or 'fewshot_train'. "
-        f"Got '{mode}'.")
-
-  # TODO(crazydonkey or adarob): change the argument name from
-  # `inputs_format` to `inputs_formats` after all the fewshot tasks are
-  # checked in.
-  inputs_formats = inputs_format
-
   if (isinstance(inputs_formats, (list, tuple)) and
       isinstance(targets_formats, (list, tuple))):
     if len(inputs_formats) != len(targets_formats):
@@ -1629,38 +1726,33 @@ def rank_classification(
         f'be a list or tuple, inputs_formats: {inputs_formats}, '
         f'target_formats: {targets_formats}.')
 
-  def format_features(idx, ex):
-    def _format_str(fmt):
-      keys = set(re.findall(r'{(\S+)}', fmt))
-      s = fmt
-      for k in keys:
-        value = ex
-        for subkey in k.split('/'):
-          value = value[subkey]
-        tf.debugging.assert_type(value, tf.string,
-          'Final value of nested key has to be a tf.string. Currently type: %s,'
-          % (str(type(value.dtype))))
-        s = tf.strings.regex_replace(s, '{%s}' % k, value)
-      return s
+  def _format_str(features, fmt):
+    keys = set(re.findall(r'{(\S+)}', fmt))
+    s = fmt
+    for k in keys:
+      value = features
+      for subkey in k.split('/'):
+        value = value[subkey]
+      if not isinstance(value, tf.Tensor):
+        raise ValueError(
+            f'Final value of key \'{k}\' must be a tf.string. '
+            f'Got: {type(value).__name__}')
+      tf.debugging.assert_type(
+          value, tf.string,
+          f'Final value of key \'{k}\' must be a tf.string. '
+          f'Got: {value.dtype.name}')
+      s = tf.strings.regex_replace(s, '{%s}' % k, value)
+    return s
 
-    new_ex = {
-        'idx': tf.fill([num_classes], idx),
-        'inputs': tf.stack([_format_str(fmt) for fmt in inputs_formats]),
-        'targets': tf.stack([_format_str(fmt) for fmt in targets_formats]),
-        'label': tf.fill([num_classes], ex[label_key]),
-    }
-    if 'train' in mode:
-      new_ex = {
-          k: tf.fill(
-              [num_classes if mode == 'fewshot_train' else 1], v[ex[label_key]])
-          for k, v in new_ex.items()
-      }
-    return new_ex
+  def _apply_formats(features, fmts):
+    return [_format_str(features, fmt) for fmt in fmts]
 
-  ds = ds.enumerate()
-  ds = ds.map(format_features, num_parallel_calls=AUTOTUNE)
-  ds = ds.unbatch()
-  return ds
+  return rank_classification(
+      ds,
+      inputs_fn=functools.partial(_apply_formats, fmts=inputs_formats),
+      targets_fn=functools.partial(_apply_formats, fmts=targets_formats),
+      mode=mode,
+      label_key=label_key)
 
 
 @utils.map_over_dataset

@@ -124,8 +124,8 @@ class PostprocessorsTest(absltest.TestCase):
   def test_rank_classification(self):
     self.assertEqual(
         postprocessors.rank_classification(
-            "blah", example={"label": 1}, is_target=True),
-        1)
+            "blah", example={"is_correct": False, "idx": 10}, is_target=True),
+        (10, False))
     self.assertEqual(
         postprocessors.rank_classification(-13.4),
         -13.4)

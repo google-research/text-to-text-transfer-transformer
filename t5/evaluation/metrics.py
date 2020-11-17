@@ -21,8 +21,10 @@ Functions should assume all text inputs are unicode strings.
 """
 
 import collections
-
+import itertools
 import re
+from typing import Iterable, Optional, Tuple
+
 from absl import logging
 import numpy as np
 import sacrebleu
@@ -292,7 +294,7 @@ def multirc_f1_over_all_answers(targets, predictions):
 
 def auc(targets, predictions, targets_threshold=None):
   """Compute Area Under the ROC and PR curves.
-  
+
   ROC - Receiver Operating Characteristic
   PR  - Precision and Recall
 
@@ -345,7 +347,10 @@ def sklearn_metrics_wrapper(metric_str,
   return fn
 
 
-def rank_classification(targets, predictions, num_classes=2):
+def rank_classification(
+    targets: Tuple[int, bool],
+    predictions: Iterable[float],
+    num_classes: Optional[int] = None):
   """Computes standard metrics classification based on log likelihood ranking.
 
   This metric is intended to be used along with the `rank_classification`
@@ -353,23 +358,55 @@ def rank_classification(targets, predictions, num_classes=2):
   for every possible label, and the label with the best score is selected as the
   prediction.
 
+  In the case of multiple labels, a prediction matching any will be considered
+  correct.
+
   Args:
-    targets: list of int, the true label value for eached aligned "prediction"
-      score.
+    targets: list of tuples, the 'idx' and 'is_correct' fields from ground truth
+      examples.
     predictions: list of float, a flat list of log likelihood scores for each
       possible label for each example.
-    num_classes: int, the number of possible classes for the label.
+    num_classes: int or None, the number of possible classes for the label or
+      None if the number of classes vary.
   Returns:
     Accuracy, f1, and AUC scores.
   """
   assert len(targets) == len(predictions)
+
+  if not num_classes:
+    # Assuming variable classes. Can only compute accuracy.
+    num_correct = 0
+    total = 0
+    for _, grp in itertools.groupby(
+        zip(targets, predictions), lambda x: x[0][0]):
+      exs, log_likelihoods = zip(*grp)
+      prediction = np.argmax(log_likelihoods)
+      num_correct += exs[prediction][1]
+      total += 1
+    return {
+        "accuracy": 100 * num_correct / total
+    }
+
   assert len(targets) % num_classes == 0
-
-  labels = np.array(targets[::num_classes])
-  labels_onehot = np.eye(num_classes)[labels]
-
+  labels_indicator = np.array(
+      [is_correct for _, is_correct in targets]).reshape((-1, num_classes))
   log_likelihoods = np.array(predictions, np.float32).reshape((-1, num_classes))
   predictions = log_likelihoods.argmax(-1)
+
+  if np.any(labels_indicator.sum(axis=-1) > 1):
+    # multiple-answer case
+    logging.info(
+        "Multiple labels detected. Predictions matching any label will be "
+        "considered correct.")
+    num_examples = len(labels_indicator)
+    return {
+        "accuracy": (
+            100 *
+            labels_indicator[np.arange(num_examples), predictions].sum() /
+            num_examples)
+    }
+
+  predictions_indicator = np.eye(num_classes)[predictions]
 
   def exp_normalize(x):
     b = x.max(-1)[:, np.newaxis]
@@ -378,15 +415,20 @@ def rank_classification(targets, predictions, num_classes=2):
   probs = exp_normalize(log_likelihoods)
 
   if num_classes > 2:
-    metrics = mean_multiclass_f1(num_classes)(labels, predictions)
+    metrics = mean_multiclass_f1(num_classes)(
+        labels_indicator, predictions_indicator)
   else:
-    metrics = {"f1": 100 * sklearn.metrics.f1_score(labels, predictions)}
+    metrics = {
+        "f1": 100 * sklearn.metrics.f1_score(
+            labels_indicator.argmax(-1), predictions)
+    }
   metrics.update(
       {
           "auc-roc": 100 * sklearn.metrics.roc_auc_score(
-              labels_onehot, probs, multi_class="ovr"),
+              labels_indicator, probs, multi_class="ovr"),
           "auc-pr": 100 * sklearn.metrics.average_precision_score(
-              labels_onehot, probs),
-          "accuracy": 100 * sklearn.metrics.accuracy_score(labels, predictions),
+              labels_indicator, probs),
+          "accuracy": 100 * sklearn.metrics.accuracy_score(
+              labels_indicator, predictions_indicator),
       })
   return metrics

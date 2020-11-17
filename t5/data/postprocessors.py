@@ -115,10 +115,9 @@ def wsc_simple(prediction, example=None, is_target=False):
   return int(predicted_referent)
 
 
-def rank_classification(
-    score, example=None, is_target=False, label_key="label"):
+def rank_classification(score, example=None, is_target=False):
   """A postprocessor for the `rank_classification` preprocessor and metric."""
   if is_target:
-    return example[label_key]
+    return (example["idx"], example["is_correct"])
   else:
     return score

@@ -14,6 +14,8 @@
 
 """Tests for from t5.preprocessors."""
 
+import functools
+
 from absl.testing import absltest
 import gin
 from t5.data import preprocessors as prep
@@ -1194,6 +1196,147 @@ class PreprocessorsTest(tf.test.TestCase):
     self.assertGreater(len(input_lengths), 1)
 
   def test_rank_classification(self):
+    dataset = tf.data.Dataset.from_tensors({
+        'left': 'the sky is blue',
+        'right': 'cats are so cute',
+        'label_idx': 1,
+    })
+    preprocessor = functools.partial(
+        prep.rank_classification,
+        dataset,
+        inputs_fn=lambda features: [features['right'], features['left']],
+        targets_fn=lambda features: ['class 0', 'class 1'],
+        label_key='label_idx')
+
+    test_utils.assert_dataset(
+        preprocessor(mode='train'),
+        [
+            {
+                'idx': 0,
+                'inputs': 'the sky is blue',
+                'targets': 'class 1',
+                'is_correct': True,
+            }
+        ])
+
+    test_utils.assert_dataset(
+        preprocessor(mode='eval'),
+        [
+            {
+                'idx': 0,
+                'inputs': 'cats are so cute',
+                'targets': 'class 0',
+                'is_correct': False,
+            },
+            {
+                'idx': 0,
+                'inputs': 'the sky is blue',
+                'targets': 'class 1',
+                'is_correct': True,
+            }
+        ])
+
+    test_utils.assert_dataset(
+        preprocessor(mode='fewshot_eval'),
+        [
+            {
+                'idx': [0, 0],
+                'inputs': ['cats are so cute', 'the sky is blue'],
+                'targets': ['class 0', 'class 1'],
+                'is_correct': [False, True]
+            },
+        ])
+
+  def test_rank_classification_multilabel(self):
+    dataset = tf.data.Dataset.from_tensors({
+        'left': 'the sky is blue',
+        'right': 'cats are so cute',
+        'label_idx': [1, 2],
+    })
+
+    preprocessor = functools.partial(
+        prep.rank_classification,
+        dataset,
+        inputs_fn=lambda features: [features['right'], features['left'], 'X'],
+        targets_fn=lambda features: ['class 0', 'class 1', 'class 2'],
+        label_key='label_idx')
+
+    test_utils.assert_dataset(
+        preprocessor(mode='train'),
+        [
+            {
+                'idx': 0,
+                'inputs': 'the sky is blue',
+                'targets': 'class 1',
+                'is_correct': True,
+            },
+            {
+                'idx': 0,
+                'inputs': 'X',
+                'targets': 'class 2',
+                'is_correct': True,
+            },
+        ])
+
+    test_utils.assert_dataset(
+        preprocessor(mode='eval'),
+        [
+            {
+                'idx': 0,
+                'inputs': 'cats are so cute',
+                'targets': 'class 0',
+                'is_correct': False,
+            },
+            {
+                'idx': 0,
+                'inputs': 'the sky is blue',
+                'targets': 'class 1',
+                'is_correct': True,
+            },
+            {
+                'idx': 0,
+                'inputs': 'X',
+                'targets': 'class 2',
+                'is_correct': True,
+            },
+        ])
+
+    test_utils.assert_dataset(
+        preprocessor(mode='fewshot_eval'),
+        [
+            {
+                'idx': [0, 0, 0],
+                'inputs': ['cats are so cute', 'the sky is blue', 'X'],
+                'targets': ['class 0', 'class 1', 'class 2'],
+                'is_correct': [False, True, True]
+            },
+        ])
+
+  def test_rank_classification_errors(self):
+    dataset = tf.data.Dataset.from_tensors({
+        'left': 'the sky is blue',
+        'right': 'cats are so cute',
+        'label': [0, 2],
+    })
+
+    with self.assertRaisesRegex(
+        tf.errors.InvalidArgumentError,
+        '.*`inputs_fn` and `targets_fn` must return the same size tensors.*'):
+      list(prep.rank_classification(
+          dataset,
+          inputs_fn=lambda features: tf.stack([features['right']]),
+          targets_fn=lambda features: tf.stack(['class 0', 'class 1'])))
+
+    with self.assertRaisesRegex(
+        tf.errors.InvalidArgumentError,
+        'Label values must be less than the number of classes.'):
+      list(prep.rank_classification(
+          dataset,
+          inputs_fn=
+          lambda features: tf.stack([features['right'], features['left']]),
+          targets_fn=lambda features: tf.stack(['class 0', 'class 1'])))
+
+  def test_rank_classification_formatter(self):
     input_examples = [
         {
             'premise': 'The farmland needed irrigation.',
@@ -1229,9 +1372,9 @@ class PreprocessorsTest(tf.test.TestCase):
         })
 
     # all options
-    dataset = prep.rank_classification(
+    dataset = prep.rank_classification_formatter(
         input_ds,
-        inputs_format='{premise} What is the {question}? X',
+        inputs_formats='{premise} What is the {question}? X',
         targets_formats=['I think {choice1}.', 'I think {choice2}.'],
         mode='eval')
 
@@ -1243,36 +1386,36 @@ class PreprocessorsTest(tf.test.TestCase):
                 'inputs':
                     'The farmland needed irrigation. What is the effect? X',
                 'targets': 'I think a canal was constructed.',
-                'label': 0
+                'is_correct': True
             },
             {
                 'idx': 0,
                 'inputs':
                     'The farmland needed irrigation. What is the effect? X',
                 'targets': 'I think the crops grew tall.',
-                'label': 0
+                'is_correct': False
             },
             {
                 'idx': 1,
                 'inputs':
                     'I decided to stay home last night. What is the cause? X',
                 'targets': 'I think I wanted to see people.',
-                'label': 1
+                'is_correct': False
             },
             {
                 'idx': 1,
                 'inputs':
                     'I decided to stay home last night. What is the cause? X',
                 'targets': 'I think I was too tired.',
-                'label': 1
+                'is_correct': True
             },
         ])
 
     # Reverse inputs and targets for supporting the use case when there is
     # one target, but multiple inputs to select from.
-    dataset = prep.rank_classification(
+    dataset = prep.rank_classification_formatter(
         input_ds,
-        inputs_format=['I think {choice1}.', 'I think {choice2}.'],
+        inputs_formats=['I think {choice1}.', 'I think {choice2}.'],
         targets_formats='{premise} What is the {question}? X',
         mode='eval')
 
@@ -1284,35 +1427,35 @@ class PreprocessorsTest(tf.test.TestCase):
                 'targets':
                     'The farmland needed irrigation. What is the effect? X',
                 'inputs': 'I think a canal was constructed.',
-                'label': 0
+                'is_correct': True
             },
             {
                 'idx': 0,
                 'targets':
                     'The farmland needed irrigation. What is the effect? X',
                 'inputs': 'I think the crops grew tall.',
-                'label': 0
+                'is_correct': False
             },
             {
                 'idx': 1,
                 'targets':
                     'I decided to stay home last night. What is the cause? X',
                 'inputs': 'I think I wanted to see people.',
-                'label': 1
+                'is_correct': False
             },
             {
                 'idx': 1,
                 'targets':
                     'I decided to stay home last night. What is the cause? X',
                 'inputs': 'I think I was too tired.',
-                'label': 1
+                'is_correct': True
             },
         ])
 
-    # label option only
-    dataset = prep.rank_classification(
+    # train mode
+    dataset = prep.rank_classification_formatter(
         input_ds,
-        inputs_format='{premise} What is the {question}? X',
+        inputs_formats='{premise} What is the {question}? X',
         targets_formats=['I think {choice1}.', 'I think {choice2}.'],
         mode='train')
 
@@ -1324,131 +1467,74 @@ class PreprocessorsTest(tf.test.TestCase):
                 'inputs':
                     'The farmland needed irrigation. What is the effect? X',
                 'targets': 'I think a canal was constructed.',
-                'label': 0
+                'is_correct': True
             },
             {
                 'idx': 1,
                 'inputs':
                     'I decided to stay home last night. What is the cause? X',
                 'targets': 'I think I was too tired.',
-                'label': 1
+                'is_correct': True
             },
         ])
 
-    # label option only, repeated
-    dataset = prep.rank_classification(
+    # fewshot_eval mode
+    dataset = prep.rank_classification_formatter(
         input_ds,
-        inputs_format='{premise} What is the {question}? X',
+        inputs_formats='{premise} What is the {question}? X',
         targets_formats=['I think {choice1}.', 'I think {choice2}.'],
-        mode='fewshot_train')
+        mode='fewshot_eval')
 
     test_utils.assert_dataset(
         dataset,
         [
             {
-                'idx': 0,
-                'inputs':
+                'idx': [0, 0],
+                'inputs': [
                     'The farmland needed irrigation. What is the effect? X',
-                'targets': 'I think a canal was constructed.',
-                'label': 0
-            },
-            {
-                'idx': 0,
-                'inputs':
                     'The farmland needed irrigation. What is the effect? X',
-                'targets': 'I think a canal was constructed.',
-                'label': 0
+                ],
+                'targets': [
+                    'I think a canal was constructed.',
+                    'I think the crops grew tall.',
+                ],
+                'is_correct': [True, False]
             },
             {
-                'idx': 1,
-                'inputs':
+                'idx': [1, 1],
+                'inputs': [
                     'I decided to stay home last night. What is the cause? X',
-                'targets': 'I think I was too tired.',
-                'label': 1
-            },
-            {
-                'idx': 1,
-                'inputs':
                     'I decided to stay home last night. What is the cause? X',
-                'targets': 'I think I was too tired.',
-                'label': 1
+                ],
+                'targets': [
+                    'I think I wanted to see people.',
+                    'I think I was too tired.',
+                ],
+                'is_correct': [False, True]
             },
         ])
 
-  def test_nested_key_rank_classification(self):
+  def test_nested_key_rank_classification_formatter(self):
     input_ds = tf.data.Dataset.from_tensors({
-            'answerKey': 0,
-            'fact1': 'creating paper requires cutting down trees',
-            'question': {
-                'choice_A': 'forests',
-                'choice_B': 'canyons',
-                'sub_question' : {
-                  'stem': 'What is the ultimate source of greeting cards?'
-                }
+        'answerKey': 0,
+        'fact1': 'creating paper requires cutting down trees',
+        'question': {
+            'choice_A': 'forests',
+            'choice_B': 'canyons',
+            'sub_question': {
+                'stem': 'What is the ultimate source of greeting cards?'
             }
+        }
     })
 
-    # all options
-    dataset = prep.rank_classification(
+    dataset = prep.rank_classification_formatter(
         input_ds,
-        inputs_format='{fact1}. {question/sub_question/stem} X 0',
+        inputs_formats='{fact1}. {question/sub_question/stem} X 0',
         targets_formats=[
-            'Correct Answer: {question/choice_A} X 1 Incorrect Answer: {question/choice_B} X 1',
-            'Correct Answer: {question/choice_B} X 1 Incorrect Answer: {question/choice_A} X 1',
-        ],
-        mode='fewshot_train',
-        label_key='answerKey')
-
-    test_utils.assert_dataset(
-        dataset,
-        [
-            {
-                'idx': 0,
-                'inputs':
-                  'creating paper requires cutting down trees. What is the ultimate source of greeting cards? X 0',
-                'targets':
-                  'Correct Answer: forests X 1 Incorrect Answer: canyons X 1',
-                'label': 0,
-            },
-            {
-                'idx': 0,
-                'inputs':
-                  'creating paper requires cutting down trees. What is the ultimate source of greeting cards? X 0',
-                'targets':
-                  'Correct Answer: forests X 1 Incorrect Answer: canyons X 1',
-                'label': 0,
-            },
-        ])
-
-    dataset = prep.rank_classification(
-        input_ds,
-        inputs_format='{fact1}. {question/sub_question/stem} X 0',
-        targets_formats=[
-            'Correct Answer: {question/choice_A} X 1 Incorrect Answer: {question/choice_B} X 1',
-            'Correct Answer: {question/choice_B} X 1 Incorrect Answer: {question/choice_A} X 1',
-        ],
-        mode='train',
-        label_key='answerKey')
-
-    test_utils.assert_dataset(
-        dataset,
-        [
-            {
-                'idx': 0,
-                'inputs':
-                  'creating paper requires cutting down trees. What is the ultimate source of greeting cards? X 0',
-                'targets':
-                  'Correct Answer: forests X 1 Incorrect Answer: canyons X 1',
-                'label': 0,
-            },
-        ])
-
-    dataset = prep.rank_classification(
-        input_ds,
-        inputs_format='{fact1}. {question/sub_question/stem} X 0',
-        targets_formats=[
-            'Correct Answer: {question/choice_A} X 1',
-            'Correct Answer: {question/choice_B} X 1',
+            'Correct Answer: {question/choice_A} X 1 Incorrect Answer: '
+            '{question/choice_B} X 1',
+            'Correct Answer: {question/choice_B} X 1 Incorrect Answer: '
+            '{question/choice_A} X 1',
         ],
         mode='eval',
         label_key='answerKey')
@@ -1459,20 +1545,41 @@ class PreprocessorsTest(tf.test.TestCase):
             {
                 'idx': 0,
                 'inputs':
-                  'creating paper requires cutting down trees. What is the ultimate source of greeting cards? X 0',
+                    'creating paper requires cutting down trees. What is the '
+                    'ultimate source of greeting cards? X 0',
                 'targets':
-                  'Correct Answer: forests X 1',
-                'label': 0,
+                    'Correct Answer: forests X 1 Incorrect Answer: canyons X 1',
+                'is_correct': True,
             },
             {
                 'idx': 0,
                 'inputs':
-                  'creating paper requires cutting down trees. What is the ultimate source of greeting cards? X 0',
+                    'creating paper requires cutting down trees. What is the '
+                    'ultimate source of greeting cards? X 0',
                 'targets':
-                  'Correct Answer: canyons X 1',
-                'label': 0,
+                    'Correct Answer: canyons X 1 Incorrect Answer: forests X 1',
+                'is_correct': False,
             },
         ])
+
+    with self.assertRaisesRegex(
+        ValueError,
+        'Final value of key \'question/sub_question\' must be a tf.string. '
+        'Got: dict'):
+      prep.rank_classification_formatter(
+          input_ds,
+          inputs_formats='{fact1}. {question/sub_question} X 0',
+          targets_formats=['test1', 'test2'],
+          mode='eval',
+          label_key='answerKey')
+
+    with self.assertRaises(TypeError):
+      prep.rank_classification_formatter(
+          input_ds,
+          inputs_formats='{fact1}. {answerKey} X 0',
+          targets_formats=['test1', 'test2'],
+          mode='eval',
+          label_key='answerKey')
 
   def test_select_random_chunk(self):
     dataset = tf.data.Dataset.from_tensors({

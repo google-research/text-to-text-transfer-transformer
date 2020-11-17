@@ -257,39 +257,69 @@ class MetricsTest(test_utils.BaseMetricsTest):
 
   def test_rank_classification(self):
 
+    # num_classes = 2
     self.assertDictClose(
         metrics.rank_classification(
-            [0, 0,
-             1, 1,
-             0, 0,
-             0, 0],
+            [(0, True), (0, False),
+             (1, False), (1, True),
+             (0, True), (0, False),
+             (0, True), (0, False),],
             [0.1, 0.5,
              1.0, 1.1,
              0.3, 0.1,
-             0.6, 0.5]),
+             0.6, 0.5],
+            num_classes=2),
         {
             "accuracy": 75.,
-            "f1": 66.6666667,
+            "auc-pr": 70.8333333,
             "auc-roc": 66.6666667,
-            "auc-pr": 70.8333333
+            "f1": 66.6666667,
         })
 
+    # num_classes = 3
     self.assertDictClose(
         metrics.rank_classification(
-            [1, 1, 1,
-             0, 0, 0,
-             2, 2, 2],
+            [(0, False), (0, True), (0, False),  # 1
+             (1, True), (1, False), (1, False),  # 0
+             (2, False), (2, False), (2, True)],  # 2
             [0.1, 0.5, 0.0,
              -2, -1, -3,
              3.0, 3.1, 3.2],
             num_classes=3),
         {
             "accuracy": 66.6666667,
-            "mean_3class_f1": 55.5555556,
+            "auc-pr": 61.1111111,
             "auc-roc": 50.0,
-            "auc-pr": 61.1111111
+            "mean_3class_f1": 55.5555556,
         })
 
+    # num_classes = 3, multi-label
+    self.assertDictClose(
+        metrics.rank_classification(
+            [(0, False), (0, True), (0, False),  # 1
+             (1, True), (1, False), (1, True),  # 0, 2
+             (2, False), (2, True), (2, True)],  # 1, 2
+            [0.1, 0.5, 0.0,
+             -2, -1, -3,
+             3.0, 3.1, 3.2],
+            num_classes=3),
+        {
+            "accuracy": 66.6666667,
+        })
+
+    # num_classes = None, multi-answer
+    self.assertDictClose(
+        metrics.rank_classification(
+            [(0, False), (0, True),  # 1
+             (1, True), (1, False), (1, True),  # 0, 3
+             (2, True)],  # 1
+            [0.1, 0.5,
+             -2, -1, -3,
+             3.0],
+            num_classes=None),
+        {
+            "accuracy": 66.6666667,
+        })
 
 if __name__ == "__main__":
   absltest.main()
