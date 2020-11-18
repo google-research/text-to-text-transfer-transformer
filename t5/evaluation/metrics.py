@@ -30,7 +30,10 @@ import numpy as np
 import sacrebleu
 import scipy.stats
 import sklearn.metrics
+import string
 from t5.evaluation import qa_utils
+from collections import Counter
+from typing import List
 
 from rouge_score import rouge_scorer
 from rouge_score import scoring
@@ -432,3 +435,60 @@ def rank_classification(
               labels_indicator, predictions_indicator),
       })
   return metrics
+
+
+def _coqa_tokenize(input: str) -> List[str]:
+  """Normalize English text and tokenize into words based on spaces.
+
+  Adapted from official evaluation tokenization at
+  https://stanfordnlp.github.io/coqa/.
+
+  Args:
+    input: string.
+
+  Returns:
+    Tokenization of normalized text as List[str]
+  """
+
+  def remove_articles(text):
+    regex = re.compile(r"\b(a|an|the)\b", re.UNICODE)
+    return re.sub(regex, " ", text)
+
+  def normalize_whitespace(text):
+    return " ".join(text.split())
+
+  def remove_punc(text):
+    exclude = set(string.punctuation)
+    return "".join(ch for ch in text if ch not in exclude)
+
+  return normalize_whitespace(remove_articles(remove_punc(
+      input.lower()))).split()
+
+
+def _sequence_f1(target_tokens: List[str],
+                 prediction_tokens: List[str]) -> float:
+  """Given target and prediction tokens, return token-wise F1 score."""
+
+  if len(target_tokens) == 0 or len(prediction_tokens) == 0:
+    return int(target_tokens == prediction_tokens)
+
+  common_token_counts = Counter(target_tokens) & Counter(prediction_tokens)
+  sum_common = sum(common_token_counts.values())
+  if sum_common == 0:
+    return 0
+
+  precision = 1.0 * sum_common / len(prediction_tokens)
+  recall = 1.0 * sum_common / len(target_tokens)
+  f1 = (2 * precision * recall) / (precision + recall)
+  return f1
+
+
+def coqa_f1(targets: List[List[str]], predictions: List[str]) -> dict:
+  """Return mean sequence F1 score over all QA turns."""
+  f1s = []
+  for (t, p) in zip(targets, predictions):
+    assert len(t) == 1
+    target_tokens = _coqa_tokenize(t[0])
+    prediction_tokens = _coqa_tokenize(p)
+    f1s.append(_sequence_f1(target_tokens, prediction_tokens))
+  return {"f1": np.mean(np.array(f1s))}

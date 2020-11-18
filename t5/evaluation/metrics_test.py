@@ -279,12 +279,21 @@ class MetricsTest(test_utils.BaseMetricsTest):
     # num_classes = 3
     self.assertDictClose(
         metrics.rank_classification(
-            [(0, False), (0, True), (0, False),  # 1
-             (1, True), (1, False), (1, False),  # 0
-             (2, False), (2, False), (2, True)],  # 2
-            [0.1, 0.5, 0.0,
-             -2, -1, -3,
-             3.0, 3.1, 3.2],
+            [
+                # 1
+                (0, False),
+                (0, True),
+                (0, False),
+                # 0
+                (1, True),
+                (1, False),
+                (1, False),
+                # 2
+                (2, False),
+                (2, False),
+                (2, True)
+            ],
+            [0.1, 0.5, 0.0, -2, -1, -3, 3.0, 3.1, 3.2],
             num_classes=3),
         {
             "accuracy": 66.6666667,
@@ -320,6 +329,28 @@ class MetricsTest(test_utils.BaseMetricsTest):
         {
             "accuracy": 66.6666667,
         })
+
+  def test_coqa_tokenize(self):
+    self.assertEqual(metrics._coqa_tokenize("Maru the cat"), ["maru", "cat"])
+    self.assertEqual(metrics._coqa_tokenize("Maru  cat"), ["maru", "cat"])
+    self.assertEqual(metrics._coqa_tokenize("Maru the cat."), ["maru", "cat"])
+
+  def test_sequence_f1(self):
+    self.assertEqual(metrics._sequence_f1([], []), 1.0)
+    self.assertEqual(metrics._sequence_f1([], ["cat"]), 0.0)
+    self.assertEqual(metrics._sequence_f1(["cat"], []), 0.0)
+    self.assertEqual(metrics._sequence_f1(["dog"], ["cat"]), 0.0)
+    self.assertAlmostEqual(metrics._sequence_f1(["cat", "dog"], ["cat"]), 2 / 3)
+    self.assertAlmostEqual(metrics._sequence_f1(["cat"], ["cat", "dog"]), 2 / 3)
+
+  def test_coqa_f1(self):
+    self.assertDictClose(
+        metrics.coqa_f1([["jump box"], ["maru"]], ["jump", "cat"]),
+        {"f1": 1 / 3})
+    self.assertDictClose(
+        metrics.coqa_f1([["jump the box"], ["maru"]], ["jump", "cat"]),
+        {"f1": 1 / 3})
+
 
 if __name__ == "__main__":
   absltest.main()
