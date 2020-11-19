@@ -214,7 +214,7 @@ def _assert_compare_to_fake_dataset(
         fake_examples[n][key] = ex[key][:_SEQUENCE_LENGTH[key]]
 
   expected_output_shapes = {
-      "inputs": [None], "targets": [None],
+      "inputs": [13], "targets": [13],
       "inputs_plaintext": [], "targets_plaintext": []}
   if split == "validation":
     expected_output_shapes.update(

@@ -664,6 +664,7 @@ class TaskV3(DatasetProviderBase):
         v = v[:sequence_length[feat]]
       elif self.output_features[feat].add_eos:
         v = tf.concat([v, [1]], axis=0)
+      v.set_shape([sequence_length[feat]])
       return v
 
     return dataset.map(
@@ -809,7 +810,7 @@ class TaskV3(DatasetProviderBase):
         self.num_input_examples(split) < _MAX_EXAMPLES_TO_MEM_CACHE):
       ds = ds.cache()
 
-   # Post tokenization processing.
+    # Post tokenization processing.
     ds = self.preprocess_postcache(ds, sequence_length=sequence_length)
     ds = self._trim_and_ensure_eos(ds, sequence_length=sequence_length)
     ds = maybe_print_dataset(ds)
