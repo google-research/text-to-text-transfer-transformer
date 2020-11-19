@@ -1954,6 +1954,7 @@ def select_random_chunk(dataset: tf.data.Dataset,
                         feature_key: str = 'targets',
                         additional_feature_keys: Optional[Sequence[str]] = None,
                         sequence_length: Optional[Mapping[str, int]] = None,
+                        uniform_random_start: bool = False,
                         **unused_kwargs) -> tf.data.Dataset:
   """Token-preprocessor to extract one span of at most `max_length` tokens.
 
@@ -1972,6 +1973,10 @@ def select_random_chunk(dataset: tf.data.Dataset,
       so they should all have the same length.
     sequence_length: Used if max_length is not specified. Typically passed in
       by the data pipeline. feature_key will be used to select the length.
+    uniform_random_start: If True, will select a starting point in
+      [-max_length + 1, n_tokens). If False, will select one of a set of chunks
+      offset by max_length. Both of these starting points try to ensure each
+      token has an equal probability of being included.
 
   Returns:
     a dataset
@@ -1993,17 +1998,27 @@ def select_random_chunk(dataset: tf.data.Dataset,
     """
     tokens = x[feature_key]
     n_tokens = tf.size(tokens)
-    num_segments = tf.cast(
-        tf.math.ceil(
-            tf.cast(n_tokens, tf.float32) / tf.cast(max_length, tf.float32)
-        ),
-        tf.int32)
-    start = max_length * tf.random.stateless_uniform(
-        [],
-        maxval=num_segments,
-        dtype=tf.int32,
-        seed=seed)
-    end = tf.minimum(start + max_length, n_tokens)
+    if uniform_random_start:
+      start = tf.random.stateless_uniform(
+          [],
+          minval=-max_length + 1,  # pylint:disable=invalid-unary-operand-type
+          maxval=n_tokens,
+          dtype=tf.int32,
+          seed=seed)
+      end = tf.minimum(start + max_length, n_tokens)
+      start = tf.maximum(start, 0)
+    else:
+      num_segments = tf.cast(
+          tf.math.ceil(
+              tf.cast(n_tokens, tf.float32) / tf.cast(max_length, tf.float32)
+          ),
+          tf.int32)
+      start = max_length * tf.random.stateless_uniform(
+          [],
+          maxval=num_segments,
+          dtype=tf.int32,
+          seed=seed)
+      end = tf.minimum(start + max_length, n_tokens)
     chunk = {feature_key: tokens[start:end]}
     if additional_feature_keys is not None:
       for k in additional_feature_keys:

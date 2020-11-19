@@ -1589,7 +1589,23 @@ class PreprocessorsTest(tf.test.TestCase):
     dataset = prep.select_random_chunk(
         dataset, feature_key='targets', max_length=4)
     output = list(dataset.as_numpy_iterator())
-    self.assertSequenceEqual(['targets'], list(output[0].keys()))
+    self.assertEqual(1, len(output))
+    output = output[0]
+    self.assertSequenceEqual(['targets'], list(output.keys()))
+    self.assertGreater(len(output['targets']), 0)
+
+  def test_select_random_chunk_uniform_start(self):
+    dataset = tf.data.Dataset.from_tensors({
+        'targets': [0, 1, 2, 3],
+        'inputs': [4, 5, 6, 7]
+    })
+    dataset = prep.select_random_chunk(
+        dataset, feature_key='targets', max_length=4, uniform_random_start=True)
+    output = list(dataset.as_numpy_iterator())
+    self.assertEqual(1, len(output))
+    output = output[0]
+    self.assertSequenceEqual(['targets'], list(output.keys()))
+    self.assertGreater(len(output['targets']), 0)
 
   def test_select_random_chunk_additional_features(self):
     dataset = tf.data.Dataset.from_tensors({
