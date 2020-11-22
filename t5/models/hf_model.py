@@ -87,6 +87,8 @@ import time
 from absl import logging
 import mesh_tensorflow.transformer.dataset as transformer_dataset
 import t5.data
+from t5.evaluation.eval_utils import run_eval
+from t5.models import utils
 from t5.models.t5_model import T5Model
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
@@ -96,7 +98,11 @@ import torch.utils.tensorboard
 CHECKPOINT_FILE_FORMAT = "model-{}.checkpoint"
 
 
-def tokens_to_batches(dataset, sequence_length, batch_size, output_features):
+def tokens_to_batches(dataset,
+                      sequence_length,
+                      batch_size,
+                      output_features,
+                      mixture_or_task=None):
   """Convert a dataset of token sequences to batches of padded/masked examples.
 
   Args:
@@ -104,16 +110,25 @@ def tokens_to_batches(dataset, sequence_length, batch_size, output_features):
     sequence_length: dict of int, a dict mapping feature name to length.
     batch_size: int, the number of padded sequences in each batch.
     output_features: list of str, features to include in the dataset.
+    mixture_or_task: a Task or Mixture object, used to correctly specify eos if
+      provided. If none, eos is always added at the end of the sequence.
 
   Returns:
     A generator that produces batches of numpy examples.
   """
+
+  if mixture_or_task:
+    eos_keys = set(
+        k for k, f in mixture_or_task.output_features.items() if f.add_eos)
+  else:
+    eos_keys = True
+
   dataset = transformer_dataset.pack_or_pad(
       dataset,
       sequence_length,
       pack=False,
       feature_keys=output_features,
-      ensure_eos=True,
+      ensure_eos=eos_keys,
   )
 
   def _map_fn(ex):
@@ -132,33 +147,30 @@ def tokens_to_batches(dataset, sequence_length, batch_size, output_features):
   return tfds.as_numpy(dataset)
 
 
-def get_dataset(mixture_or_task_name, sequence_length, split, batch_size):
-  """Get a generator of numpy examples for a given Task or Mixture.
+def _get_dataset(mixture_or_task_or_name,
+                 sequence_length,
+                 split,
+                 shuffle=True):
+  """Get a tf.data.Dataset for a given Task or Mixture.
 
   Args:
-    mixture_or_task_name: str, the name of the Mixture or Task to train on.
+    mixture_or_task_or_name: Task or Mixture or str, the name of the Mixture or
+      Task to train on or the Tasks or Mixture object itself.
       Must be pre-registered in the global `t5.data.TaskRegistry` or
       `t5.data.MixtureRegistry.`
     sequence_length: dict of int, a dict mapping feature name to length.
     split: str or `tensorflow_datasets.Split`, the data split to load.
-    batch_size: int, the number of padded sequences in each batch.
+    shuffle: boolean, whether to shuffle the dataset.
 
   Returns:
     A generator that produces batches of numpy examples.
   """
-  task = t5.data.get_mixture_or_task(mixture_or_task_name)
-  ds = task.get_dataset(sequence_length, split)
-  return tokens_to_batches(
-      ds, sequence_length, batch_size, tuple(task.output_features)
-  )
+  if isinstance(mixture_or_task_or_name, str):
+    task = t5.data.get_mixture_or_task(mixture_or_task_or_name)
+  else:
+    task = mixture_or_task_or_name
 
-
-def write_lines_to_file(lines, filename):
-  """Write each line to filename, replacing the file if it exists."""
-  if tf.io.gfile.exists(filename):
-    tf.io.gfile.remove(filename)
-  with tf.io.gfile.GFile(filename, "w") as output_file:
-    output_file.write("\n".join([str(l) for l in lines]))
+  return task.get_dataset(sequence_length, split, shuffle=shuffle)
 
 
 class HfPyTorchModel(T5Model):
@@ -305,7 +317,10 @@ class HfPyTorchModel(T5Model):
        num_warmup_steps=100)`.
     """
     self._model.train()
-    ds = get_dataset(mixture_or_task_name, sequence_length, split, batch_size)
+    ds = _get_dataset(mixture_or_task_name, sequence_length, split)
+    task = t5.data.get_mixture_or_task(mixture_or_task_name)
+    ds = tokens_to_batches(ds, sequence_length, batch_size,
+                           tuple(task.output_features), task)
     # Repeat dataset forever
     ds = itertools.cycle(ds)
     optimizer = optimizer(self._model.parameters())
@@ -351,6 +366,7 @@ class HfPyTorchModel(T5Model):
       checkpoint_steps=None,
       summary_dir=None,
       split="validation",
+      compute_sequence_length=False,
       **generate_kwargs,
   ):
     """Evaluate the model on the given Mixture or Task.
@@ -376,104 +392,45 @@ class HfPyTorchModel(T5Model):
       summary_dir: str, path to write TensorBoard events file summaries for
         eval. If None, use model_dir/{split}_eval.
       split: str, the mixture/task split to evaluate on.
+      compute_sequence_length: bool, automatically compute sequence length
+        during eval mode.
       **generate_kwargs: Additional keyword arguments to pass to
         `transformers.PretrainedModel.generate()`, for example to change the
         decoding strategy. See the documentation for
         `transformers.PretrainedModel.generate()` for options.
     """
-    mixture_or_task = t5.data.get_mixture_or_task(mixture_or_task_name)
-    vocab = mixture_or_task.output_features["targets"].vocabulary
 
-    if isinstance(mixture_or_task, t5.data.Mixture):
-      tasks = mixture_or_task.tasks
-    elif isinstance(mixture_or_task, t5.data.Task):
-      tasks = [mixture_or_task]
+    def _predict_from_tasks(tasks, vocabulary, checkpoint_step, sequence_length,
+                            datasets, **unused_kwargs):
 
-    for task in tasks:
-      if split not in task.splits:
-        logging.info(
-            "Task %s has no '%s' split; skipping eval.", task.name, split
-        )
-    tasks = [task for task in tasks if split in task.splits]
+      if isinstance(vocabulary, tuple):
+        vocab = vocabulary[1]
 
-    summary_dir = summary_dir or os.path.join(self._model_dir, f"{split}_eval")
-    tf.io.gfile.makedirs(summary_dir)
-
-    def _unbatch(batch):
-      """Converts a dict of lists to a list of dicts of singletons."""
-      return [dict(zip(batch, t)) for t in zip(*batch.values())]
-
-    # Pre-load in all of the targets once before doing eval
-    cached_targets = {}
-    cached_examples = {}
-    for task in tasks:
-      if task.metric_fns:
-        ds = get_dataset(task.name, sequence_length, split, batch_size)
-        # Create list of postprocessed text targets
-        batches = list(ds)
-        if not batches:
-          raise ValueError(f"The '{split}' split of {task.name} is empty.")
-        # "Unbatch" the dataset
-        examples = [ex for b in batches for ex in _unbatch(b)]  # pylint:disable=g-complex-comprehension
-        targets = [
-            task.postprocess_fn(  # pylint:disable=g-complex-comprehension
-                tf.compat.as_text(ex["targets_plaintext"]),
-                example=ex,
-                is_target=True
-            ) for ex in examples
-        ]
-        targets_filename = os.path.join(summary_dir, f"{task.name}_targets")
-        write_lines_to_file(targets, targets_filename)
-
-        inputs_filename = os.path.join(summary_dir, f"{task.name}_inputs")
-        inputs = [ex["inputs_plaintext"] for ex in examples]
-        write_lines_to_file(inputs, inputs_filename)
-
-        cached_targets[task.name] = targets
-        cached_examples[task.name] = batches
-
-    def _eval_current_model():
+      if checkpoint_step != self._step:
+        self.load_checkpoint(checkpoint_step)
       self._model.eval()
+      outputs = []
       for task in tasks:
-        ds = cached_examples[task.name]
-        targets = cached_targets[task.name]
-        predictions = []
+        if compute_sequence_length:
+          ds = _get_dataset(task.name, sequence_length, split, shuffle=False)
+        else:
+          ds = datasets[task.name]
+
+        ds = list(tokens_to_batches(
+            ds, sequence_length, batch_size, tuple(task.output_features), task))
         for batch in ds:
           predicted_tokens = self._model.generate(
               input_ids=self.to_tensor(batch["inputs"]), **generate_kwargs
           )
           predicted_tokens = predicted_tokens.cpu().numpy().tolist()
-          predictions.extend(
-              [
-                  task.postprocess_fn(vocab.decode(p), example=ex)
-                  for p, ex in zip(predicted_tokens, _unbatch(batch))
-              ]
-          )
+          predictions = [vocab.decode(p) for p in predicted_tokens]
 
-        if len(targets) != len(predictions):
-          raise ValueError(
-              f"#targets ({len(targets)}) != #predictions ({len(predictions)})"
-          )
+          outputs.extend(predictions)
 
-        predictions_file = os.path.join(
-            summary_dir, f"{task.name}_{self._step}_predictions"
-        )
-        write_lines_to_file(predictions, predictions_file)
-
-        for metric_fn in task.metric_fns:
-          scores = metric_fn(targets, predictions)
-          for metric_name, metric_value in scores.items():
-            tag = f"eval/{task.name}/{metric_name}"
-            self._writer.add_scalar(tag, metric_value, self._step)
-            logging.info(
-                "%s at step %d: %.3f", tag, self._step, metric_value
-            )
-
-        self._writer.flush()
+      return outputs
 
     if checkpoint_steps is None:
-      _eval_current_model()
-      return
+      checkpoint_steps = [self._step]
     elif isinstance(checkpoint_steps, int):
       checkpoint_steps = [checkpoint_steps]
     elif checkpoint_steps == "all":
@@ -482,9 +439,19 @@ class HfPyTorchModel(T5Model):
       raise ValueError(
           f"checkpoint_steps must be None, int or list; got {checkpoint_steps}"
       )
-    for checkpoint_step in checkpoint_steps:
-      self.load_checkpoint(checkpoint_step)
-      _eval_current_model()
+
+    summary_dir = summary_dir or os.path.join(self._model_dir, f"{split}_eval")
+    tf.io.gfile.makedirs(summary_dir)
+
+    run_eval(
+        mixture_or_task_name=mixture_or_task_name,
+        predict_or_score_fn=_predict_from_tasks,
+        checkpoint_steps=checkpoint_steps,
+        dataset_fn=functools.partial(_get_dataset, shuffle=False),
+        summary_dir=summary_dir,
+        split=split,
+        sequence_length=None if compute_sequence_length else sequence_length,
+        batch_size=batch_size)
 
   def predict(
       self,
@@ -566,7 +533,7 @@ class HfPyTorchModel(T5Model):
       logging.info("%s\n  -> %s", inp, pred)
 
     if output_file is not None:
-      write_lines_to_file(predictions, output_file)
+      utils.write_lines_to_file(predictions, output_file)
 
   def finetune(
       self,

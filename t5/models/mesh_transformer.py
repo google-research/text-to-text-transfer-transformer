@@ -20,8 +20,8 @@ import warnings
 from absl import logging
 import gin
 import mesh_tensorflow.transformer.dataset as transformer_dataset
-
 import t5.data
+from t5.models import utils as model_utils
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
 
@@ -143,7 +143,7 @@ def mesh_eval_dataset_fn(
           feature_keys=tuple(task.output_features),
           ensure_eos=eos_keys)
 
-    if num_eval_examples is not None and num_eval_examples >= 0 :
+    if num_eval_examples is not None and num_eval_examples >= 0:
       ds = ds.take(num_eval_examples)
 
     return ds
@@ -207,20 +207,7 @@ def get_vocabulary(mixture_or_task_name):
     Either a single t5.data.vocabularies.Vocabulary or a tuple of
     t5.data.vocabularies.Vocabulary for inputs and targets.
   """
-  provider = t5.data.get_mixture_or_task(mixture_or_task_name)
-  features = provider.output_features
-  if "inputs" in features and "targets" in features:
-    return (features["inputs"].vocabulary, features["targets"].vocabulary)
-  else:
-    feature_values = list(features.values())
-    vocabulary = feature_values[0].vocabulary
-    for feature in feature_values[1:]:
-      if feature.vocabulary != vocabulary:
-        raise ValueError(
-            "No feature_name was provided to get_vocabulary, but "
-            "output_features have different vocabularies."
-        )
-    return vocabulary
+  return model_utils.get_vocabulary(mixture_or_task_name)
 
 
 @gin.configurable()
