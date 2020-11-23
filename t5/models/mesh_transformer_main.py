@@ -236,7 +236,7 @@ def main(_):
           checkpoint_step=checkpoint_steps,
           beam_size=FLAGS.export_beam_size,
           temperature=FLAGS.export_temperature,
-          score_mode=(FLAGS.mode == "export_score"))
+          eval_with_score=(FLAGS.mode == "export_score"))
     else:
       raise ValueError("--mode flag must be set when using Model API.")
   else:
