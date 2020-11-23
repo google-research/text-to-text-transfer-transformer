@@ -531,4 +531,4 @@ class MtfModel(T5Model):
         estimator, export_dir, vocabulary,
         self._sequence_length, self._model_type, batch_size=self.batch_size,
         checkpoint_path=os.path.join(self._model_dir, model_ckpt),
-        eval_with_score=eval_with_score)
+        score_mode=eval_with_score)
