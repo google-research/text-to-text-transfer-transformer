@@ -224,6 +224,11 @@ def _assert_compare_to_fake_dataset(
       expected_output_shapes,
       {k: v.shape.as_list() for k, v in ds.element_spec.items()})
 
+  expected_output_dtypes = {k: f.dtype for k, f in features.items()}
+  _pyunit_proxy.assertDictContainsSubset(
+      expected_output_dtypes,
+      {k: v.dtype for k, v in ds.element_spec.items()})
+
   actual_examples = _get_comparable_examples_from_ds(ds)
   expected_examples = [
       tuple(sorted(ex.items())) for ex in fake_examples]

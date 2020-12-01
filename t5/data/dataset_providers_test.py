@@ -352,8 +352,23 @@ class TasksTest(test_utils.FakeTaskTest):
     test_utils.add_task(
         "task_no_eos", test_utils.get_fake_dataset, output_features=features
     )
-    fn_task = TaskRegistry.get("task_no_eos")
-    test_utils.verify_task_matches_fake_datasets(fn_task, use_cached=False)
+    eos_task = TaskRegistry.get("task_no_eos")
+    test_utils.verify_task_matches_fake_datasets(eos_task, use_cached=False)
+
+  def test_dtype(self):
+    default_vocab = test_utils.sentencepiece_vocab()
+    features = {
+        "inputs":
+            # defaults to int32
+            dataset_providers.Feature(vocabulary=default_vocab),
+        "targets":
+            dataset_providers.Feature(dtype=tf.int64, vocabulary=default_vocab),
+    }
+    test_utils.add_task(
+        "task_dtypes", test_utils.get_fake_dataset, output_features=features
+    )
+    dtype_task = TaskRegistry.get("task_dtypes")
+    test_utils.verify_task_matches_fake_datasets(dtype_task, use_cached=False)
 
   def test_same_seeds_cached_match(self):
     dataset1 = self.cached_task.get_dataset(

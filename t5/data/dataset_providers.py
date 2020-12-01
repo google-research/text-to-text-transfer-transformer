@@ -27,6 +27,7 @@ import re
 from typing import Any, Callable, Iterable, Mapping, Optional, Sequence, Tuple, Type, Union
 
 from absl import logging
+import dataclasses
 import gin
 from t5.data import utils
 from t5.data.preprocessors import tokenize as tokenize_preprocessor
@@ -42,32 +43,17 @@ _MAX_EXAMPLES_TO_MEM_CACHE = 10000
 SHUFFLE_BUFFER_SIZE = 1000
 
 
-class Feature(object):
+@dataclasses.dataclass(frozen=True)
+class Feature:
   """A container for attributes of output features of data providers."""
+  vocabulary: Union[Callable[[], Vocabulary], Vocabulary]
+  add_eos: bool = True
+  required: bool = True
+  dtype: tf.DType = tf.int32
 
-  def __init__(
-      self,
-      vocabulary: Union[Callable[[], Vocabulary], Vocabulary],
-      add_eos: bool = True,
-      required: bool = True):
-    """Create a Feature instance.
-
-    Args:
-      vocabulary: vocabularies.Vocabulary object to use for tokenization, or a
-        callable function returning a vocabulary
-      add_eos: bool, whether an EOS token should be added to this Feature.
-      required: Whether or not this feature must exist in the final outputs of
-        the Task.
-    """
-    self._vocabulary = vocabulary
-    self.add_eos = add_eos
-    self.required = required
-
-  @property
-  def vocabulary(self) -> Vocabulary:
-    if callable(self._vocabulary):
-      self._vocabulary = self._vocabulary()
-    return self._vocabulary
+  def __post_init__(self):
+    if callable(self.vocabulary):
+      object.__setattr__(self, "vocabulary", self.vocabulary())
 
 
 class DatasetProviderBase(object):
@@ -649,25 +635,28 @@ class TaskV3(DatasetProviderBase):
           num_parallel_calls=tf.data.experimental.AUTOTUNE)
     return dataset
 
-  def _trim_and_ensure_eos(
+  def _cast_trim_and_ensure_eos(
       self,
       dataset: tf.data.Dataset,
       sequence_length: Mapping[str, int]
     ) -> tf.data.Dataset:
-    """Trim and append EOS=1 token to model features."""
-    def _trim_and_append_eos(feat, v):
-      if feat not in self.output_features:
+    """Cast, trim and append EOS=1 token to model features."""
+    def _cast_trim_and_append_eos(k: str, v: tf.Tensor) -> tf.Tensor:
+      if k not in self.output_features:
         return v
-      if sequence_length and self.output_features[feat].add_eos:
-        v = tf.concat([v[:sequence_length[feat]-1], [1]], axis=0)
-      elif sequence_length:
-        v = v[:sequence_length[feat]]
-      elif self.output_features[feat].add_eos:
+      feat = self.output_features[k]
+      max_len = sequence_length[k] if sequence_length else None
+      v = tf.cast(v, feat.dtype)
+      if max_len and feat.add_eos:
+        v = tf.concat([v[:max_len-1], [1]], axis=0)
+      elif max_len:
+        v = v[:max_len]
+      elif feat.add_eos:
         v = tf.concat([v, [1]], axis=0)
       return v
 
     return dataset.map(
-        lambda ex: {k: _trim_and_append_eos(k, v) for k, v in ex.items()},
+        lambda ex: {k: _cast_trim_and_append_eos(k, v) for k, v in ex.items()},
         num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
   def preprocess_precache(
@@ -811,7 +800,7 @@ class TaskV3(DatasetProviderBase):
 
    # Post tokenization processing.
     ds = self.preprocess_postcache(ds, sequence_length=sequence_length)
-    ds = self._trim_and_ensure_eos(ds, sequence_length=sequence_length)
+    ds = self._cast_trim_and_ensure_eos(ds, sequence_length=sequence_length)
     ds = maybe_print_dataset(ds)
 
     if shuffle:
@@ -1196,13 +1185,18 @@ class Mixture(DatasetProviderBase):
     # so we can just get the output_features for the 0th task
     return self.tasks[0].output_features
 
-  def _check_same_vocabularies(self) -> None:
-    """Throw an Exception if features across tasks have different vocabs."""
+  def _check_compatible_features(self) -> None:
+    """Throw Exception if features across tasks have different vocabs or dtypes.
+    """
     for name, feature in self.tasks[0].output_features.items():
       for task in self.tasks[1:]:
         if task.output_features[name].vocabulary != feature.vocabulary:
           raise ValueError(
               "Features across tasks in a mixture must use the same vocabulary."
+          )
+        if task.output_features[name].dtype != feature.dtype:
+          raise ValueError(
+              "Features across tasks in a mixture must use the same dtype."
           )
 
   def get_dataset(
@@ -1229,7 +1223,7 @@ class Mixture(DatasetProviderBase):
         with a "_plaintext" suffix added to the key.
       compute_stats_empirically: a boolean - does not work on TPU
     """
-    self._check_same_vocabularies()
+    self._check_compatible_features()
     tasks = []
     for task in self.tasks:
       if split not in task.splits:
