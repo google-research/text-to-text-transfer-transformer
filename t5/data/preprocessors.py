@@ -1522,8 +1522,8 @@ def rank_classification(
     ds: tf.data.Dataset,
     inputs_fn: Callable[[FeatureType], tf.Tensor],
     targets_fn: Callable[[FeatureType], tf.Tensor],
+    is_correct_fn: Callable[[FeatureType], tf.Tensor],
     mode: str = 'eval',
-    label_key: str = 'label'
 ) -> tf.data.Dataset:
   """Prepare dataset for rank classification scoring.
 
@@ -1531,21 +1531,30 @@ def rank_classification(
 
   `inputs_fn` and `targets_fn` must return the 'inputs' and 'targets' features,
   respectively, for each possible class label given the raw example features.
+  'is_correct_fn' must return the 'is_correct' feature, a boolean for whether
+  each label is correct.
 
-  In 'train' mode, only the inputs / targets indexed by the label(s) will be
-  produced. In 'eval' mode, all inputs / targets will be produced.
+  In 'train' mode, only the inputs / targets marked correct will be produced.
+  In 'eval' mode, all inputs / targets will be produced.
+  In 'fewshot_eval', all inputs / targets will be produced as a single batch.
 
   Each input example will also be given a unique, sequential index called 'idx'.
 
-  For example, with mode set to 'eval', given the input:
+  For example, consider the following arguments:
+
+  inputs_fn=lambda ex: ex['prefix'],
+  targets_fn=lambda ex: ex['suffix'],
+  is_correct_fn=lambda ex: tf.one_hot(ex['label'])
+
+  Given the following example:
 
   {
-    'inputs': ['The farmland needed ', 'The farmland wanted '],
-    'targets': ['water', 'cows'],
+    'prefix': ['The farmland needed ', 'The farmland wanted '],
+    'suffix': ['water', 'cows'],
     'label': 0,
   }
-
   the preprocessor would return:
+
   [{
       'idx': 0,
       'inputs': 'The farmland needed ',
@@ -1560,10 +1569,8 @@ def rank_classification(
    }]
 
   With mode set to 'train', it would return only the first example,
-  since it uses the correct label.
-
-  With mode set to 'fewshot_eval', it would return both examples in a single
-  batch.
+  since it uses the correct label. With mode set to 'fewshot_eval', it would
+  return both examples in a single batch.
 
   Args:
     ds: a tf.data.Dataset to preprocess.
@@ -1571,12 +1578,13 @@ def rank_classification(
       given the input example.
     targets_fn: a callable that returns the 'targets' features for each label
       given the input example.
+    is_correct_fn: a callable that returns the 'label' feature. May be an int32
+      scalar or 1-D Tensor.
     mode: A string, one of 'train' or'eval
       'train' produces only the correct example(s) based on the label value(s).
       'eval' produces an example for every possible class value, sequentially.
       'fewshot_eval' produces an example for every possible class value,
         batched together for each input example.
-    label_key: A string, the feature key for the integer label value(s).
   Returns:
     A tf.data.Dataset containing 'idx', inputs', 'targets', and 'is_correct'.
   """
@@ -1586,27 +1594,17 @@ def rank_classification(
         f"Got '{mode}'.")
 
   def make_examples(idx, ex):
-    labels = tf.cast(ex[label_key], tf.int32)
-    if not labels.shape.rank:
-      labels = tf.expand_dims(labels, axis=0)
-
     inputs = inputs_fn(ex)
     targets = targets_fn(ex)
+    is_correct = tf.cast(is_correct_fn(ex), tf.bool)
 
     tf.debugging.assert_equal(
-        tf.size(inputs), tf.size(targets),
-        '`inputs_fn` and `targets_fn` must return the same size tensors.')
-    num_classes = tf.shape(inputs)[0]
-
-    tf.debugging.assert_less(
-        labels, num_classes,
-        'Label values must be less than the number of classes.')
-
-    is_correct = tf.cast(
-        tf.math.reduce_sum(tf.one_hot(labels, num_classes), axis=0), tf.bool)
+        tf.size(is_correct), [tf.size(inputs), tf.size(targets)],
+        '`inputs_fn`, `targets_fn`, and `is_correct_fn` must return the same '
+        'size tensors.')
 
     return {
-        'idx': tf.fill([num_classes], idx),
+        'idx': tf.fill(tf.shape(is_correct), idx),
         'inputs': inputs,
         'targets': targets,
         'is_correct': is_correct
@@ -1747,12 +1745,19 @@ def rank_classification_formatter(
   def _apply_formats(features, fmts):
     return [_format_str(features, fmt) for fmt in fmts]
 
+  def _is_correct_fn(ex):
+    labels = ex[label_key]
+    is_correct = tf.one_hot(labels, num_classes, on_value=True, off_value=False)
+    if labels.shape.rank:
+      is_correct = tf.math.reduce_any(is_correct, axis=0)
+    return is_correct
+
   return rank_classification(
       ds,
       inputs_fn=functools.partial(_apply_formats, fmts=inputs_formats),
       targets_fn=functools.partial(_apply_formats, fmts=targets_formats),
-      mode=mode,
-      label_key=label_key)
+      is_correct_fn=_is_correct_fn,
+      mode=mode)
 
 
 @utils.map_over_dataset
