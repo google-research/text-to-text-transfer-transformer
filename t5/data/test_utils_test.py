@@ -31,10 +31,22 @@ class TestUtilsTest(absltest.TestCase):
 
     # Equal
     assert_dataset(first_dataset, {'key1': [b'val1'], 'key2': [b'val2']})
+    assert_dataset(first_dataset, {'key1': [b'val1'], 'key2': [b'val2']},
+                   expected_dtypes={'key1': tf.string})
 
     # Unequal value
     with self.assertRaises(AssertionError):
       assert_dataset(first_dataset, {'key1': [b'val1'], 'key2': [b'val2x']})
+
+    # Wrong dtype
+    with self.assertRaises(AssertionError):
+      assert_dataset(first_dataset, {'key1': [b'val1'], 'key2': [b'val2']},
+                     expected_dtypes={'key1': tf.int32})
+
+    # Additional key, value
+    with self.assertRaises(AssertionError):
+      assert_dataset(first_dataset,
+                     {'key1': [b'val1'], 'key2': [b'val2'], 'key3': [b'val3']})
 
     # Additional key, value
     with self.assertRaises(AssertionError):

@@ -20,6 +20,7 @@ import copy
 import os
 import shutil
 import sys
+from typing import Any, Mapping, Optional, Sequence, Union
 
 from absl import flags
 from absl import logging
@@ -264,19 +265,23 @@ def dataset_as_text(ds):
     yield {k: _maybe_as_text(v) for k, v in ex.items()}
 
 
-def assert_dataset(dataset, expected):
+def assert_dataset(
+    dataset: tf.data.Dataset,
+    expected: Union[Mapping[str, Any], Sequence[Mapping[str, Any]]],
+    expected_dtypes: Optional[Mapping[str, tf.DType]] = None):
   """Tests whether the entire dataset == expected or [expected].
 
   Args:
-    dataset: a tfds dataset
+    dataset: a tf.data dataset
     expected: either a single example, or a list of examples. Each example is a
       dictionary.
+    expected_dtypes: an optional mapping from feature key to expected dtype.
   """
 
   if not isinstance(expected, list):
     expected = [expected]
-  dataset = list(tfds.as_numpy(dataset))
-  _pyunit_proxy.assertEqual(len(dataset), len(expected))
+  actual = list(tfds.as_numpy(dataset))
+  _pyunit_proxy.assertEqual(len(actual), len(expected))
 
   def _compare_dict(actual_dict, expected_dict):
     _pyunit_proxy.assertEqual(
@@ -290,11 +295,15 @@ def assert_dataset(dataset, expected):
       np.testing.assert_array_equal(
           actual_value, _maybe_as_bytes(expected_dict[key]), key)
 
-  for actual_ex, expected_ex in zip(dataset, expected):
+  for actual_ex, expected_ex in zip(actual, expected):
     _compare_dict(actual_ex, expected_ex)
 
+  if expected_dtypes:
+    actual_dtypes = {k: dataset.element_spec[k].dtype for k in expected_dtypes}
+    _pyunit_proxy.assertDictEqual(expected_dtypes, actual_dtypes)
 
-def assert_datasets_eq(dataset1, dataset2):
+
+def assert_datasets_eq(dataset1: tf.data.Dataset, dataset2: tf.data.Dataset):
   """Assert that two tfds datasets are equal."""
 
   dataset1 = list(tfds.as_numpy(dataset1))

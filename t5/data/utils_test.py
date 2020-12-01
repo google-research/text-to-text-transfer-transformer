@@ -14,8 +14,12 @@
 
 # Lint as: python3
 """Tests for t5.data.utils."""
+from typing import Mapping, Sequence
+
 from absl.testing import absltest
+from absl.testing import parameterized
 import numpy as np
+from t5.data import test_utils
 from t5.data import utils
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
@@ -23,6 +27,7 @@ import tensorflow_datasets as tfds
 tf.compat.v1.enable_eager_execution()
 
 mock = absltest.mock
+assert_dataset = test_utils.assert_dataset
 
 
 class AnyArg(object):
@@ -115,7 +120,7 @@ class LazyTfdsLoaderTest(absltest.TestCase):
       ds.files(split="test")
 
 
-class UtilsTest(absltest.TestCase):
+class UtilsTest(parameterized.TestCase):
 
   def test_dict_to_tfexample(self):
     tfe = utils.dict_to_tfexample({
@@ -203,6 +208,112 @@ class UtilsTest(absltest.TestCase):
       self.assertEqual(utils._NEXT_MAP_SEED, 52)
     self.assertIsNone(utils._NEXT_MAP_SEED)
 
+  def test_trim_and_pad_dataset(self):
+    x = [{"inputs": [7, 8, 5, 6, 1], "targets": [3, 9, 1], "idx": [0]},
+         {"inputs": [8, 4, 9, 3, 5, 7, 9, 1], "targets": [4, 1], "idx": [1, 2]}]
+    ds = create_default_dataset(x, feature_names=("inputs", "targets", "idx"))
+    padded_ds = utils.trim_and_pad_dataset(
+        ds,
+        feature_lengths={"inputs": 7, "targets": 3})
+    expected = [
+        {
+            "inputs": [7, 8, 5, 6, 1, 0, 0],
+            "targets": [3, 9, 1],
+            "idx": [0],
+        },
+        {
+            # EOS is trimmed
+            "inputs": [8, 4, 9, 3, 5, 7, 9],
+            "targets": [4, 1, 0],
+            "idx": [1, 2],
+        }
+    ]
+    assert_dataset(
+        padded_ds, expected, {"inputs": tf.int32, "targets": tf.int32})
+
+  _PACK_PARAMETERS = ({"use_custom_ops": False},)
+
+  @parameterized.parameters(*_PACK_PARAMETERS)
+  def test_trim_and_pack_dataset(self, use_custom_ops):
+    x = [{"inputs": [7, 8, 5, 1], "targets": [3, 9, 1], "idx": [0]},
+         {"inputs": [8, 4, 9, 3, 1], "targets": [4, 1], "idx": [1]}]
+    ds = create_default_dataset(x, feature_names=("inputs", "targets", "idx"))
+    packed_ds = utils.trim_and_pack_dataset(
+        ds,
+        feature_lengths={"inputs": 10, "targets": 7},
+        use_custom_ops=use_custom_ops)
+
+    expected = {
+        "inputs": [7, 8, 5, 1, 8, 4, 9, 3, 1, 0],
+        "inputs_segment_id": [1, 1, 1, 1, 2, 2, 2, 2, 2, 0],
+        "inputs_position": [0, 1, 2, 3, 0, 1, 2, 3, 4, 0],
+        "targets": [3, 9, 1, 4, 1, 0, 0],
+        "targets_position": [0, 1, 2, 0, 1, 0, 0],
+        "targets_segment_id": [1, 1, 1, 2, 2, 0, 0],
+    }
+    assert_dataset(
+        packed_ds, expected, {"inputs": tf.int32, "targets": tf.int32})
+
+  @parameterized.parameters(*_PACK_PARAMETERS)
+  def test_trim_and_pack_dataset_no_eos(self, use_custom_ops):
+    x = [{"inputs": [7, 8, 5], "targets": [3, 9]},
+         {"inputs": [8, 4, 9, 3], "targets": [4]}]
+    ds = create_default_dataset(x)
+    packed_ds = utils.trim_and_pack_dataset(
+        ds,
+        feature_lengths={"inputs": 8, "targets": 5},
+        use_custom_ops=use_custom_ops)
+
+    # Packing still works without the eos.
+    expected = {
+        "inputs": [7, 8, 5, 8, 4, 9, 3, 0],
+        "inputs_segment_id": [1, 1, 1, 2, 2, 2, 2, 0],
+        "inputs_position": [0, 1, 2, 0, 1, 2, 3, 0],
+        "targets": [3, 9, 4, 0, 0],
+        "targets_position": [0, 1, 0, 0, 0],
+        "targets_segment_id": [1, 1, 2, 0, 0],
+    }
+    assert_dataset(
+        packed_ds, expected, {"inputs": tf.int32, "targets": tf.int32})
+
+  @parameterized.parameters(*_PACK_PARAMETERS)
+  def test_trim_and_pack_dataset_long_seq(self, use_custom_ops):
+    x = [{"inputs": [7, 8, 5, 6, 9, 4, 1], "targets": [3, 9, 1]},
+         {"inputs": [8, 4, 9, 3, 5, 7, 9, 1], "targets": [4, 1]}]
+    ds = create_default_dataset(x)
+    packed_ds = utils.trim_and_pack_dataset(
+        ds,
+        feature_lengths={"inputs": 7, "targets": 3},
+        use_custom_ops=use_custom_ops)
+    expected = [{
+        "inputs": [7, 8, 5, 6, 9, 4, 1],
+        "inputs_segment_id": [1, 1, 1, 1, 1, 1, 1],
+        "inputs_position": [0, 1, 2, 3, 4, 5, 6],
+        "targets": [3, 9, 1],
+        "targets_position": [0, 1, 2],
+        "targets_segment_id": [1, 1, 1],
+    }, {
+        # EOS is trimmed
+        "inputs": [8, 4, 9, 3, 5, 7, 9],
+        "inputs_segment_id": [1, 1, 1, 1, 1, 1, 1],
+        "inputs_position": [0, 1, 2, 3, 4, 5, 6],
+        "targets": [4, 1, 0],
+        "targets_position": [0, 1, 0],
+        "targets_segment_id": [1, 1, 0],
+    }]
+    assert_dataset(
+        packed_ds, expected, {"inputs": tf.int32, "targets": tf.int32})
+
+
+def create_default_dataset(
+    x: Sequence[Mapping[str, int]],
+    feature_names: Sequence[str] = ("inputs", "targets")) -> tf.data.Dataset:
+  output_types = {feature_name: tf.int32 for feature_name in feature_names}
+  output_shapes = {feature_name: [None] for feature_name in feature_names}
+
+  ds = tf.data.Dataset.from_generator(
+      lambda: x, output_types=output_types, output_shapes=output_shapes)
+  return ds
 
 if __name__ == "__main__":
   absltest.main()

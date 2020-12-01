@@ -19,6 +19,7 @@ import contextlib
 import functools
 import inspect
 import os
+from typing import Mapping
 
 from absl import logging
 import gin
@@ -218,6 +219,313 @@ def print_dataset(dataset):
   return dataset.map(my_fn)
 
 
+def stateless_shuffle(value, seed):
+  """Randomly shuffles a tensor, statelessly."""
+  flat_value = tf.reshape(value, [-1])
+  indices = tf.argsort(
+      tf.random.stateless_uniform(tf.shape(flat_value), seed=seed)
+  )
+  flat_shuffle = tf.gather(flat_value, indices)
+  return tf.reshape(flat_shuffle, tf.shape(value))
+
+
+def trim_and_pad_dataset(
+    dataset: tf.data.Dataset,
+    feature_lengths: Mapping[str, int]
+) -> tf.data.Dataset:
+  """Trim and pad first dimension of features to `feature_lengths`.
+
+  Args:
+    dataset: tf.data.Dataset, the dataset to trimp/pad examples in.
+    feature_lengths: map from feature key to final length. Other features will
+      be returned unchanged.
+  Returns:
+    Trimmed/padded tf.data.Dataset.
+  """
+  def _trim_and_pad(k: str, t: tf.Tensor) -> tf.Tensor:
+    """Trim/pad to the first axis of `t` to be of size `length`."""
+    if k not in feature_lengths:
+      return t
+    length_k = feature_lengths[k]
+    t = t[:length_k]
+    pad_amt = length_k - tf.shape(t)[0]
+    padded_t = tf.pad(t, [(0, pad_amt)] + [(0, 0)] * (len(t.shape) - 1))
+    padded_t.set_shape([length_k] + t.shape.as_list()[1:])
+    return padded_t
+
+  return dataset.map(
+      lambda x: {k: _trim_and_pad(k, t) for k, t in x.items()},
+      num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+
+def _strip_packed_feature_key(key: str) -> str:
+  strip_suffix = lambda k, s: k[:-len(s)] if k.endswith(s) else k
+  return strip_suffix(strip_suffix(key, "_position"), "_segment_id")
+
+
+def trim_and_pack_dataset(
+    dataset: tf.data.Dataset,
+    feature_lengths: Mapping[str, int],
+    use_custom_ops: bool = False
+) -> tf.data.Dataset:
+  """Creates a 'packed' version of a dataset on-the-fly.
+
+  Modified from the tensor2tensor library.
+
+  This is meant to replace the irritation of having to create a separate
+  "packed" version of a dataset to train efficiently on TPU.
+
+  Each example in the output dataset represents several examples in the
+  input dataset.
+
+  For each key in the input dataset that also exists in `feature_lengths`, two
+  additional keys are created:
+    <key>_segment_id: an int32 tensor identifying the parts
+       representing the original example.
+    <key>_position: an int32 tensor identifying the position within the original
+       example.
+
+  Features that are not in `feature_lengths` will be removed.
+
+  Example:
+    Two input examples get combined to form an output example.
+    The input examples are:
+    {"inputs": [8, 7, 1, 0], "targets":[4, 1, 0], "idx": 0}
+    {"inputs": [2, 3, 4, 1], "targets":[5, 6, 1], "idx": 1}
+    The output example is:
+    {
+                   "inputs": [8, 7, 1, 2, 3, 4, 1, 0, 0, 0]
+      "inputs_segment_id": [1, 1, 1, 2, 2, 2, 2, 0, 0, 0]
+          "inputs_position": [0, 1, 2, 0, 1, 2, 3, 0, 0, 0]
+                  "targets": [4, 1, 5, 6, 1, 0, 0, 0, 0, 0]
+     "targets_segment_id": [1, 1, 2, 2, 2, 0, 0, 0, 0, 0]
+         "targets_position": [0, 1, 0, 1, 2, 0, 0, 0, 0, 0]
+    }
+
+    0 represents padding in both the inputs and the outputs.
+
+    Sequences in the incoming examples are truncated to length in
+    `feature_lengths`, and the sequences in the output examples all have this
+    fixed (padded) length. Features not in `features_length` (i.e, "idx") are
+    removed.
+
+  Args:
+    dataset: a tf.data.Dataset
+    feature_lengths: map from feature key to final length. Other features will
+      be discarded.
+    use_custom_ops: a boolean - custom ops are faster but require a custom-built
+      binary, which is not currently possible on cloud-tpu.
+
+  Returns:
+    a tf.data.Dataset
+  """
+  element_spec = dataset.element_spec
+  # Make sure that the dataset contains all keys in `feature_lengths`.
+  for k in feature_lengths:
+    if k not in element_spec:
+      raise ValueError(
+          f"Feature '{k}' not found in dataset. Available keys are "
+          f"{list(element_spec.keys())}")
+    if not element_spec[k].shape.is_compatible_with(tf.TensorShape([None])):
+      raise ValueError(
+          f"Features to be packed must be one-dimensional. '{k}' is not.'")
+  # Warn if there are any additional keys that will be removed.
+  additional_keys = set(element_spec) - set(feature_lengths)
+  if additional_keys:
+    logging.warn(
+        "Features not in `features_length` will be removed during packing: %s",
+        additional_keys)
+
+  ds = dataset.map(
+      lambda x: {k: x[k][:l] for k, l in feature_lengths.items()},
+      num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+  # Setting batch_size=length ensures that the concatenated sequences (if they
+  # have length >=1) are sufficient to fill at least one packed example.
+  batch_size = max(feature_lengths.values())
+  ds = ds.padded_batch(
+      batch_size, padded_shapes={k: [-1] for k in feature_lengths})
+
+  if use_custom_ops and len(feature_lengths) <= 2:
+    ds = _pack_with_custom_ops(ds, feature_lengths)
+  else:
+    ds = _pack_with_tf_ops(ds, feature_lengths)
+
+  # Set the Tensor shapes correctly since they get lost in the process.
+  def _set_shape(x):
+    for k, v in x.items():
+      v.set_shape([feature_lengths[_strip_packed_feature_key(k)]])
+    return x
+  return ds.map(_set_shape, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+
+def _pack_with_tf_ops(
+    dataset: tf.data.Dataset,
+    feature_lengths: Mapping[str, int]
+) -> tf.data.Dataset:
+  """Helper-function for packing a dataset which has already been batched.
+
+  See trim_and_pack_dataset()
+
+  Uses tf.while_loop. Slow.
+
+  Args:
+    dataset: a dataset containing padded batches of examples.
+    feature_lengths: mapping from feature key to packed length.
+
+  Returns:
+    a dataset.
+  """
+  empty_example = {}
+  for k in feature_lengths:
+    for suff in ("", "_position"):
+      empty_example[k + suff] = tf.zeros([0], dtype=tf.int32)
+      empty_example[k + suff].set_shape([None])
+  keys_etc = empty_example.keys()
+
+  def _write_packed_example(partial, outputs):
+    new_partial = empty_example.copy()
+    new_outputs = {}
+    for k in keys_etc:
+      new_outputs[k] = outputs[k].write(
+          outputs[k].size(),
+          tf.pad(partial[k],
+                 [[0, feature_lengths[_strip_packed_feature_key(k)] -
+                   tf.size(partial[k])]]))
+    return new_partial, new_outputs
+
+  def pack_batch(x: Mapping[str, tf.Tensor]) -> Mapping[str, tf.Tensor]:
+    """Internal function to map over.
+
+    Consumes a batch of input examples and produces a variable number of output
+    examples.
+
+    Args:
+      x: a single example
+    Returns:
+      a tf.data.Dataset
+    """
+    keys = list(feature_lengths)
+    partial = empty_example.copy()
+    first_key, *_ = keys
+    dynamic_batch_size = tf.shape(x[first_key])[0]
+    outputs = {}
+    for k in keys:
+      outputs[k] = tf.TensorArray(
+          tf.int32, size=0, dynamic_size=True,
+          element_shape=[feature_lengths[k]])
+      outputs[k + "_position"] = tf.TensorArray(
+          tf.int32, size=0, dynamic_size=True,
+          element_shape=[feature_lengths[k]])
+
+    for i in tf.range(0, dynamic_batch_size):
+      tf.autograph.experimental.set_loop_options(
+          shape_invariants=[
+              (partial, {k: tf.TensorShape([None]) for k in keys_etc}),
+              (outputs, {k: tf.TensorShape(None) for k in keys_etc})]
+      )
+
+      can_append = True
+      one_example = {}
+      for k in keys:
+        val = tf.cast(x[k][i], tf.int32)
+        val = val[:tf.reduce_sum(tf.cast(tf.not_equal(val, 0), tf.int32))]
+        one_example[k] = val
+      for k in keys:
+        can_append = tf.logical_and(
+            can_append,
+            tf.less_equal(
+                tf.size(partial[k]) + tf.size(one_example[k]),
+                feature_lengths[k]))
+
+      if not can_append:
+        partial, outputs = _write_packed_example(partial, outputs)
+
+      new_partial = {}
+      for k in keys:
+        new_seq = one_example[k][:feature_lengths[k]]
+        new_seq_len = tf.size(new_seq)
+        new_partial[k] = tf.concat([partial[k], new_seq], 0)
+        new_partial[k + "_position"] = tf.concat(
+            [partial[k + "_position"],
+             tf.range(new_seq_len, dtype=tf.int32)], 0)
+      partial = new_partial
+
+    partial, outputs = _write_packed_example(partial, outputs)
+    packed = {k: outputs[k].stack() for k in keys_etc}
+    for k in keys:
+      packed[k + "_segment_id"] = (
+          tf.cumsum(
+              tf.cast(tf.equal(packed[k + "_position"], 0), tf.int32), axis=1) *
+          tf.cast(tf.not_equal(packed[k], 0), tf.int32))
+    return packed
+  dataset = dataset.map(
+      pack_batch, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  return dataset.unbatch()
+
+
+def _pack_with_custom_ops(
+    dataset: tf.data.Dataset,
+    feature_lengths: Mapping[str, int]
+) -> tf.data.Dataset:
+  """Helper-function for packing a dataset which has already been batched.
+
+  See trim_and_pack_dataset()
+
+  Relies on custom ops which require a custom compiled binary.
+  Faster than _pack_with_tf_ops(), and denser packing.
+
+  Args:
+    dataset: a dataset containing padded batches of examples.
+    feature_lengths: mapping from feature key to packed length.
+
+  Returns:
+    a dataset.
+  """
+  # TODO(adarob): Move ops into this library and fix int64 issue.
+  from tensor2tensor.data_generators.ops import pack_sequences_ops  # pylint: disable=g-import-not-at-top
+  keys = list(feature_lengths)
+  if len(keys) == 1:
+    k1, = keys
+    k2 = k1
+  elif len(keys) == 2:
+    k1, k2 = keys
+  else:
+    raise ValueError(f"Packing op requires 1 or 2 keys. Got {len(keys)}")
+
+  def custom_pack_batch(x):
+    """Map-function."""
+    (k1_packed, k1_segmengation, k1_position,
+     k2_packed, k2_segment_id, k2_position) = (
+         pack_sequences_ops.pack_sequences2(
+             # cast to int64 for compatibility with custom ops
+             tf.cast(x[k1], tf.int64),
+             tf.cast(x[k2], tf.int64),
+             feature_lengths[k1],
+             feature_lengths[k2]))
+    packed = {
+        k1: k1_packed,
+        k1 + "_segment_id": k1_segmengation,
+        k1 + "_position": k1_position,
+    }
+    if len(keys) == 2:
+      packed.update({
+          k2: k2_packed,
+          k2 + "_segment_id": k2_segment_id,
+          k2 + "_position": k2_position,
+      })
+
+    # cast back to int32
+    for k, v in packed.items():
+      packed[k] = tf.cast(v, tf.int32)
+
+    return packed
+  dataset = dataset.map(
+      custom_pack_batch, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  dataset = dataset.unbatch()
+  return dataset
+
+
 # ========================= Mixing Rate Functions ==============================
 
 
@@ -249,16 +557,6 @@ def rate_unsupervised(task, value=1e6):
   """Gin-configurable mixing rate for the unsupervised co-training task."""
   del task
   return value
-
-
-def stateless_shuffle(value, seed):
-  """Randomly shuffles a tensor, statelessly."""
-  flat_value = tf.reshape(value, [-1])
-  indices = tf.argsort(
-      tf.random.stateless_uniform(tf.shape(flat_value), seed=seed)
-  )
-  flat_shuffle = tf.gather(flat_value, indices)
-  return tf.reshape(flat_shuffle, tf.shape(value))
 
 
 # ======================== Decorators =========================================
