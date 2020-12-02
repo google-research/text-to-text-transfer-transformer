@@ -1596,6 +1596,20 @@ class PreprocessorsTest(tf.test.TestCase):
     self.assertSequenceEqual(['targets'], list(output.keys()))
     self.assertGreater(len(output['targets']), 0)
 
+  def test_select_random_chunk_passthrough(self):
+    dataset = tf.data.Dataset.from_tensors({
+        'targets': [0, 1, 2, 3],
+        'inputs': [4, 5, 6, 7],
+        'notes': 'hi',
+    })
+    dataset = prep.select_random_chunk(
+        dataset, feature_key='targets', max_length=4,
+        additional_passthrough_keys=['notes'])
+    output = list(dataset.as_numpy_iterator())
+    output = output[0]
+    self.assertSequenceEqual(['targets', 'notes'], list(output.keys()))
+    self.assertStringEqual('hi', output['notes'])
+
   def test_select_random_chunk_uniform_start(self):
     dataset = tf.data.Dataset.from_tensors({
         'targets': [0, 1, 2, 3],

@@ -1958,6 +1958,8 @@ def select_random_chunk(dataset: tf.data.Dataset,
                         max_length: Optional[int] = None,
                         feature_key: str = 'targets',
                         additional_feature_keys: Optional[Sequence[str]] = None,
+                        additional_passthrough_keys: Optional[
+                            Sequence[str]] = None,
                         sequence_length: Optional[Mapping[str, int]] = None,
                         uniform_random_start: bool = False,
                         **unused_kwargs) -> tf.data.Dataset:
@@ -1976,6 +1978,7 @@ def select_random_chunk(dataset: tf.data.Dataset,
     additional_feature_keys: Additional features to use. The same chunk will be
       selected from these features as from the one specified in feature_key,
       so they should all have the same length.
+    additional_passthrough_keys: Additional keys to pass through unchanged.
     sequence_length: Used if max_length is not specified. Typically passed in
       by the data pipeline. feature_key will be used to select the length.
     uniform_random_start: If True, will select a starting point in
@@ -2030,6 +2033,9 @@ def select_random_chunk(dataset: tf.data.Dataset,
         with tf.control_dependencies([
             tf.assert_equal(tf.size(tokens), tf.size(x[k]))]):
           chunk[k] = x[k][start:end]
+    if additional_passthrough_keys is not None:
+      for k in additional_passthrough_keys:
+        chunk[k] = x[k]
     return chunk
   # Filter empty examples.
   dataset = dataset.filter(lambda x: tf.not_equal(tf.size(x[feature_key]), 0))
