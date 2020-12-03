@@ -456,6 +456,7 @@ def add_tfds_task(
     text_preprocessor=test_text_preprocessor,
     token_preprocessor=None,
     splits=None):
+  """Adds task to the registry and returns it."""
   TaskRegistry.add(
       name,
       dataset_providers.TfdsTask,
@@ -465,6 +466,7 @@ def add_tfds_task(
       output_features=dataset_providers.Feature(sentencepiece_vocab()),
       metric_fns=[],
       splits=splits)
+  return TaskRegistry.get(name)
 
 
 def add_task(
@@ -474,6 +476,7 @@ def add_task(
     token_preprocessor=None,
     splits=("train", "validation"),
     **kwargs):
+  """Adds task to the registry and returns it."""
   if "output_features" not in kwargs:
     kwargs["output_features"] = dataset_providers.Feature(sentencepiece_vocab())
   TaskRegistry.add(
@@ -484,14 +487,17 @@ def add_task(
       token_preprocessor=token_preprocessor,
       metric_fns=[],
       **kwargs)
+  return TaskRegistry.get(name)
 
 
 def clear_tasks():
   TaskRegistry._REGISTRY = {}  # pylint:disable=protected-access
+  TaskRegistry._MEMOIZED_PROVIDERS = {}  # pylint:disable=protected-access
 
 
 def clear_mixtures():
   MixtureRegistry._REGISTRY = {}  # pylint:disable=protected-access
+  MixtureRegistry._MEMOIZED_PROVIDERS = {}  # pylint:disable=protected-access
 
 
 def mark_completed(cache_dir, task_name):

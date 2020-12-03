@@ -16,7 +16,6 @@
 
 from typing import Mapping, Sequence
 from unittest import mock
-from t5.data import dataset_providers
 from t5.data import feature_converters
 from t5.data import test_utils
 import tensorflow.compat.v2 as tf
