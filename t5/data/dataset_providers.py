@@ -24,7 +24,7 @@ import inspect
 import json
 import os
 import re
-from typing import Any, Callable, Iterable, Mapping, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Callable, Iterable, Mapping, MutableMapping, Optional, Sequence, Tuple, Type, Union
 
 from absl import logging
 import dataclasses
@@ -34,6 +34,7 @@ from t5.data.preprocessors import tokenize as tokenize_preprocessor
 from t5.data.vocabularies import Vocabulary
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
+import typing_extensions
 
 
 _DEFAULT_FEATURE_KEYS = ["inputs", "targets"]
@@ -56,17 +57,15 @@ class Feature:
       object.__setattr__(self, "vocabulary", self.vocabulary())
 
 
-class DatasetProviderBase(object):
+class DatasetProviderBase(metaclass=abc.ABCMeta):
   """Abstract base for classes that provide a tf.data.Dataset."""
-
-  __metaclass__ = abc.ABCMeta
 
   @abc.abstractproperty
   def output_features(self) -> Mapping[str, Feature]:
     raise NotImplementedError
 
   @abc.abstractproperty
-  def splits(self) -> Iterable[str]:
+  def splits(self) -> Sequence[str]:
     raise NotImplementedError
 
   @abc.abstractmethod
@@ -88,10 +87,12 @@ class DatasetProviderBase(object):
 class DatasetProviderRegistry(object):
   """Base for registry of data providers.
 
-  Child classes must implement a _REGISTRY dict.
+  Subclasses must wrap `get` method to override the return type for pytype.
+  TODO(adarob): Remove the need to override `get`.
   """
-
-  _PROVIDER_TYPE = DatasetProviderBase
+  # Class variables must be defined in subclasses.
+  _REGISTRY: MutableMapping[str, DatasetProviderBase]
+  _PROVIDER_TYPE: Type[DatasetProviderBase]
 
   @classmethod
   def add(cls, name, provider_cls, *provider_args, **provider_kwargs):
@@ -149,8 +150,6 @@ class DataSource(DatasetProviderBase):
   those overidden below.
   """
 
-  __metaclass__ = abc.ABCMeta
-
   def __init__(
       self,
       splits: Iterable[str],
@@ -160,7 +159,7 @@ class DataSource(DatasetProviderBase):
         dict(num_input_examples) if num_input_examples is not None else None)
 
   @property
-  def splits(self) -> Iterable[str]:
+  def splits(self) -> Sequence[str]:
     return self._splits
 
   @property
@@ -169,7 +168,7 @@ class DataSource(DatasetProviderBase):
     raise NotImplementedError
 
   @abc.abstractmethod
-  def list_shards(self, split: str) -> Iterable[str]:
+  def list_shards(self, split: str) -> Sequence[str]:
     """Returns string identifiers of input shards."""
     raise NotImplementedError
 
@@ -192,10 +191,35 @@ class DataSource(DatasetProviderBase):
     """
     raise NotImplementedError
 
-  def num_input_examples(self, split: str) -> int:
+  def num_input_examples(self, split: str) -> Optional[int]:
     if self._num_input_examples is None:
       return None
     return self._num_input_examples[split]
+
+
+def _validate_args(fn, expected_pos_args):
+  """Ensure function has exactly expected positional args."""
+  argspec = inspect.getfullargspec(fn)
+  expected_pos_args = tuple(expected_pos_args)
+  actual_args = tuple(argspec.args)
+  if actual_args[:len(expected_pos_args)] != expected_pos_args:
+    raise ValueError(
+        "'%s' must have positional args %s, got: %s" % (
+            fn.__name__, expected_pos_args, actual_args))
+  actual_pos_args = tuple(
+      argspec.args[:-len(argspec.defaults)]
+      if argspec.defaults else argspec.args)
+  if actual_pos_args != expected_pos_args[:len(actual_pos_args)]:
+    raise ValueError(
+        "'%s' may only have positional args %s, got: %s" % (
+            fn.__name__, expected_pos_args, actual_pos_args))
+
+
+class DatasetFnCallable(typing_extensions.Protocol):
+
+  def __call__(
+      self, split: str, shuffle_files: bool, seed: Optional[int] = None
+  ) -> tf.data.Dataset: ...
 
 
 class FunctionSource(DataSource):
@@ -203,7 +227,7 @@ class FunctionSource(DataSource):
 
   def __init__(
       self,
-      dataset_fn: Callable[[str, bool, Optional[int]], tf.data.Dataset],
+      dataset_fn: DatasetFnCallable,
       splits: Iterable[str],
       num_input_examples: Optional[Mapping[str, int]] = None
   ):
@@ -236,7 +260,7 @@ class FunctionSource(DataSource):
       ds = self._dataset_fn(split=split, shuffle_files=shuffle, seed=seed)
     return ds
 
-  def list_shards(self, split: str) -> Iterable[str]:
+  def list_shards(self, split: str) -> Sequence[str]:
     return [split]
 
 
@@ -299,7 +323,7 @@ class TfdsDataSource(DataSource):
     """Overrides since we can't call `info.splits` until after init."""
     return self.tfds_dataset.size(split)
 
-  def list_shards(self, split: str) -> Iterable[str]:
+  def list_shards(self, split: str) -> Sequence[str]:
     return self.tfds_dataset.files(split)
 
 
@@ -346,7 +370,7 @@ class FileDataSource(DataSource):
         block_length=16,
         num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-  def list_shards(self, split: str) -> Iterable[str]:
+  def list_shards(self, split: str) -> Sequence[str]:
     return tf.io.gfile.glob(self._split_to_filepattern[split])
 
 
@@ -546,20 +570,20 @@ class TaskV3(DatasetProviderBase):
     return self._output_features
 
   @property
-  def splits(self) -> Iterable[str]:
+  def splits(self) -> Sequence[str]:
     return self.source.splits
 
   @property
   def source(self) -> DataSource:
     return self._source
 
-  def num_input_examples(self, split: str) -> int:
+  def num_input_examples(self, split: str) -> Optional[int]:
     return self.source.num_input_examples(split)
 
   def _preprocess_dataset(
       self,
       dataset: tf.data.Dataset,
-      preprocessors: Iterable[Callable[..., tf.data.Dataset]],
+      preprocessors: Sequence[Callable[..., tf.data.Dataset]],
       sequence_length: Optional[Mapping[str, int]] = None) -> tf.data.Dataset:
     """Sequentially applies preprocessors."""
     for prep_fn in preprocessors:
@@ -1075,12 +1099,17 @@ class TFExampleTask(Task):
 
 
 class TaskRegistry(DatasetProviderRegistry):
+  """Registry of Tasks."""
   _REGISTRY = {}
   _PROVIDER_TYPE = TaskV3
 
   @classmethod
   def add(cls, name, task_cls=Task, **kwargs):
-    super(TaskRegistry, cls).add(name, task_cls, name, **kwargs)
+    super().add(name, task_cls, name, **kwargs)
+
+  @classmethod
+  def get(cls, name) -> TaskV3:
+    return super().get(name)
 
 
 # ================================ Mixtures ====================================
@@ -1090,7 +1119,7 @@ class Mixture(DatasetProviderBase):
   def __init__(
       self,
       name: str,
-      tasks: Union[Iterable[str], Iterable[Tuple[str, int]]],
+      tasks: Union[Sequence[str], Sequence[Tuple[str, int]]],
       default_rate: Union[float, Callable[[TaskV3], float]] = None):
     """Mixture constructor.
 
@@ -1132,7 +1161,7 @@ class Mixture(DatasetProviderBase):
         self._tasks.append(TaskRegistry.get(task_name))
         self._task_to_rate[task_name] = rate
       else:
-        self._sub_mixtures.append(MixtureRegistry.get(task_name))
+        self._sub_mixtures.append(MixtureRegistry.get(task_name))  # pytype:disable=name-error
         self._task_to_rate[task_name] = rate
 
     if len(set(tuple(t.output_features) for t in self.tasks)) != 1:
@@ -1145,7 +1174,7 @@ class Mixture(DatasetProviderBase):
     return self._name
 
   @property
-  def tasks(self) -> Iterable[TaskV3]:
+  def tasks(self) -> Sequence[TaskV3]:
     sub_tasks = (mix.tasks for mix in self._sub_mixtures)
     return list(sorted(set(sum(sub_tasks, self._tasks)), key=lambda t: t.name))
 
@@ -1173,11 +1202,11 @@ class Mixture(DatasetProviderBase):
     return sum(t.num_input_examples(split) for t in self.tasks)
 
   @property
-  def splits(self) -> Iterable[str]:
+  def splits(self) -> Sequence[str]:
     splits = set()
     for task in self.tasks:
       splits.update(task.splits)
-    return splits
+    return tuple(splits)
 
   @property
   def output_features(self) -> Mapping[str, Feature]:
@@ -1353,12 +1382,17 @@ def _log_mixing_proportions(
 
 
 class MixtureRegistry(DatasetProviderRegistry):
+  """Registry of Mixtures."""
   _REGISTRY = {}
   _PROVIDER_TYPE = Mixture
 
   @classmethod
   def add(cls, name, tasks, default_rate=None):
-    super(MixtureRegistry, cls).add(name, Mixture, name, tasks, default_rate)
+    super().add(name, Mixture, name, tasks, default_rate)
+
+  @classmethod
+  def get(cls, name) -> Mixture:
+    return super().get(name)
 
 
 def get_mixture_or_task(task_or_mixture_name):
@@ -1383,21 +1417,3 @@ def get_subtasks(task_or_mixture):
     return [task_or_mixture]
   else:
     return task_or_mixture.tasks
-
-
-def _validate_args(fn, expected_pos_args):
-  """Ensure function has exactly expected positional args."""
-  argspec = inspect.getfullargspec(fn)
-  expected_pos_args = tuple(expected_pos_args)
-  actual_args = tuple(argspec.args)
-  if actual_args[:len(expected_pos_args)] != expected_pos_args:
-    raise ValueError(
-        "'%s' must have positional args %s, got: %s" % (
-            fn.__name__, expected_pos_args, actual_args))
-  actual_pos_args = tuple(
-      argspec.args[:-len(argspec.defaults)]
-      if argspec.defaults else argspec.args)
-  if actual_pos_args != expected_pos_args[:len(actual_pos_args)]:
-    raise ValueError(
-        "'%s' may only have positional args %s, got: %s" % (
-            fn.__name__, expected_pos_args, actual_pos_args))

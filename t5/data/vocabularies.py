@@ -21,7 +21,7 @@ import tensorflow.compat.v2 as tf
 
 
 @gin.configurable
-class Vocabulary(object):
+class Vocabulary(metaclass=abc.ABCMeta):
   """Base class for all vocabularies."""
 
   def __init__(self, extra_ids=0):

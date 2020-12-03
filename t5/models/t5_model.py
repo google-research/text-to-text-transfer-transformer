@@ -18,10 +18,8 @@
 import abc
 
 
-class T5Model(object):
+class T5Model(metaclass=abc.ABCMeta):
   """Abstract Base class for T5 Model API."""
-
-  __metaclass__ = abc.ABCMeta
 
   @abc.abstractmethod
   def train(self, mixture_or_task_name, steps):

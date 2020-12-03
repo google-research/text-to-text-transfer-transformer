@@ -271,9 +271,11 @@ class MtfModel(T5Model):
             mixture_or_task_name=task.name,
             sequence_length=sequence_length,
             dataset_split=split)[0].dataset_fn()
-        ds = ds.map(utils.filter_features)
+        ds = ds.map(
+            utils.filter_features,
+            num_parallel_calls=tf.data.experimental.AUTOTUNE)
         combined_ds = ds if not combined_ds else combined_ds.concatenate(ds)
-      combined_ds = combined_ds.batch(self.batch_size, drop_remainder=False)
+      combined_ds = combined_ds.batch(self.batch_size, drop_remainder=False)  # pytype:disable=attribute-error
       # Pad the final batch.
       combined_ds = transformer_dataset.trim_and_pad_dataset(
           combined_ds, length=self.batch_size)

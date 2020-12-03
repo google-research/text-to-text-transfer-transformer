@@ -23,17 +23,15 @@ Functions should assume all text inputs are unicode strings.
 import collections
 import itertools
 import re
-from typing import Iterable, Optional, Tuple
+import string
+from typing import Mapping, Optional, Sequence, Tuple
 
 from absl import logging
 import numpy as np
 import sacrebleu
 import scipy.stats
 import sklearn.metrics
-import string
 from t5.evaluation import qa_utils
-from collections import Counter
-from typing import List
 
 from rouge_score import rouge_scorer
 from rouge_score import scoring
@@ -351,8 +349,8 @@ def sklearn_metrics_wrapper(metric_str,
 
 
 def rank_classification(
-    targets: Tuple[int, bool],
-    predictions: Iterable[float],
+    targets: Sequence[Tuple[int, bool]],
+    predictions: Sequence[float],
     num_classes: Optional[int] = None):
   """Computes standard metrics classification based on log likelihood ranking.
 
@@ -437,14 +435,14 @@ def rank_classification(
   return metrics
 
 
-def _coqa_tokenize(input: str) -> List[str]:
+def _coqa_tokenize(inp: str) -> Sequence[str]:
   """Normalize English text and tokenize into words based on spaces.
 
   Adapted from official evaluation tokenization at
   https://stanfordnlp.github.io/coqa/.
 
   Args:
-    input: string.
+    inp: string.
 
   Returns:
     Tokenization of normalized text as List[str]
@@ -461,18 +459,19 @@ def _coqa_tokenize(input: str) -> List[str]:
     exclude = set(string.punctuation)
     return "".join(ch for ch in text if ch not in exclude)
 
-  return normalize_whitespace(remove_articles(remove_punc(
-      input.lower()))).split()
+  return normalize_whitespace(remove_articles(remove_punc(inp.lower()))).split()
 
 
-def _sequence_f1(target_tokens: List[str],
-                 prediction_tokens: List[str]) -> float:
+def _sequence_f1(target_tokens: Sequence[str],
+                 prediction_tokens: Sequence[str]) -> float:
   """Given target and prediction tokens, return token-wise F1 score."""
 
-  if len(target_tokens) == 0 or len(prediction_tokens) == 0:
+  if not (target_tokens or prediction_tokens):
     return int(target_tokens == prediction_tokens)
 
-  common_token_counts = Counter(target_tokens) & Counter(prediction_tokens)
+  common_token_counts = (
+      collections.Counter(target_tokens) &
+      collections.Counter(prediction_tokens))
   sum_common = sum(common_token_counts.values())
   if sum_common == 0:
     return 0
@@ -483,7 +482,9 @@ def _sequence_f1(target_tokens: List[str],
   return f1
 
 
-def coqa_f1(targets: List[List[str]], predictions: List[str]) -> dict:
+def coqa_f1(
+    targets: Sequence[Sequence[str]], predictions: Sequence[str]
+) -> Mapping[str, float]:
   """Return mean sequence F1 score over all QA turns."""
   f1s = []
   for (t, p) in zip(targets, predictions):

@@ -18,15 +18,16 @@ import collections
 import functools
 import os
 
-from typing import Any, Callable, Iterable, Mapping, Optional, Sequence, Tuple, Type, Union
-
+from typing import Any, Callable, Iterable, Mapping, MutableSequence, Optional, Sequence, Union
 
 from absl import logging
 import numpy as np
 import pandas as pd
 import t5.data
+from t5.models import mesh_transformer
 from t5.models import utils as model_utils
 import tensorflow.compat.v1 as tf
+import typing_extensions
 
 
 class Metric(object):
@@ -241,15 +242,23 @@ def log_csv(df, metric_names=None, output_file=None):
       f.write(csv_string + max_row + "\n" + idx_row)
 
 
-# TODO(sharannarang): Consider creating a T5PredictFn class for the
-# predict_and_score_fn since it's pretty complicated and confusing.
+class PredictOrScoreFnCallable(typing_extensions.Protocol):
+  """Signature for `predict_or_score_fn` passed to `run_eval`."""
+
+  def __call__(
+      self,
+      checkpoint_step: int,
+      vocabulary: Any,
+      tasks: Sequence[t5.data.Task],
+      examples: Sequence[Mapping[str, Mapping[str, str]]],
+      datasets: Mapping[str, tf.data.Dataset],
+      sequence_length: Union[None, Mapping[str, int]]
+  ) -> MutableSequence[Union[str, float]]: ...
+
+
 def run_eval(
     mixture_or_task_name: str,
-    predict_or_score_fn: Callable[[
-        int, Any, Sequence[t5.data.Task],
-        Sequence[Mapping[str, Mapping[str, str]]],
-        Sequence[Mapping[str, tf.data.Dataset]],
-        Union[None, Mapping[str, int]]], Sequence[Union[str, float]]],
+    predict_or_score_fn: PredictOrScoreFnCallable,
     checkpoint_steps: Iterable[int],
     dataset_fn: Optional[Callable[
         [t5.data.Task, Mapping[str, int], int, str, Optional[bool]],
@@ -297,7 +306,8 @@ def run_eval(
 
   if not dataset_fn:
     def _get_task_eval_dataset(task, sequence_length, split):
-      eval_datasets = t5.models.mesh_transformer.mesh_eval_dataset_fn(
+      # TODO(sharannarang): Replace with more general function.
+      eval_datasets = mesh_transformer.mesh_eval_dataset_fn(
           sequence_length=sequence_length,
           dataset_split=split,
           mixture_or_task_name=task.name,
@@ -383,9 +393,9 @@ def run_eval(
             logging.info("%s at step %d: %.3f", tag, step, metric_value)
             if summary_dir:
               summary.value.add(tag=tag, simple_value=metric_value)
-              summary_writer.add_summary(summary, step)
+              summary_writer.add_summary(summary, step)  # pytype: disable=attribute-error
         if summary_dir:
-          summary_writer.flush()
+          summary_writer.flush()  # pytype: disable=attribute-error
 
     # Only padding should remain.
     if batch_size:
