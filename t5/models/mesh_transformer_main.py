@@ -132,14 +132,6 @@ FLAGS = flags.FLAGS
 
 
 def main(_):
-  if FLAGS.module_import:
-    for module in FLAGS.module_import:
-      importlib.import_module(module)
-
-  if FLAGS.t5_tfds_data_dir:
-    t5.data.set_tfds_data_dir_override(FLAGS.t5_tfds_data_dir)
-  t5.data.add_global_cache_dirs(FLAGS.additional_task_cache_dirs)
-
   # Add search path for gin files stored in package.
   gin.add_config_file_search_path(
       pkg_resources.resource_filename(__name__, "gin"))
@@ -157,7 +149,17 @@ def main(_):
     logging.info(
         "No write access to model directory. Skipping command logging.")
 
+  # Load gin before doing anything else in case the following steps are
+  # configurable.
   utils.parse_gin_defaults_and_flags()
+
+  if FLAGS.module_import:
+    for module in FLAGS.module_import:
+      importlib.import_module(module)
+
+  if FLAGS.t5_tfds_data_dir:
+    t5.data.set_tfds_data_dir_override(FLAGS.t5_tfds_data_dir)
+  t5.data.add_global_cache_dirs(FLAGS.additional_task_cache_dirs)
 
   if FLAGS.use_model_api:
     model = mtf_model.MtfModel(
