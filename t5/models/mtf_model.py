@@ -33,8 +33,11 @@ from t5.models.t5_model import T5Model
 import tensorflow.compat.v1 as tf
 
 
-def _operative_config_path(model_dir):
-  return os.path.join(model_dir, "operative_config.gin")
+def _parse_operative_config(model_dir):
+  with gin.unlock_config():
+    gin.parse_config_file(
+        os.path.join(model_dir, "operative_config.gin"),
+        skip_unknown=t5.models.mesh_transformer.DEPRECATED_GIN_REFERENCES)
 
 
 @gin.configurable
@@ -326,8 +329,7 @@ class MtfModel(T5Model):
       compute_sequence_length: bool, automatically compute maximum sequence
         length to use during eval mode.
     """
-    with gin.unlock_config():
-      gin.parse_config_file(_operative_config_path(self._model_dir))
+    _parse_operative_config(self._model_dir)
 
     summary_dir = summary_dir or os.path.join(self._model_dir,
                                               "{}_eval".format(split))
@@ -372,8 +374,7 @@ class MtfModel(T5Model):
           pretrained_model_dir)
     else:
       checkpoint_step = pretrained_checkpoint_step
-    with gin.unlock_config():
-      gin.parse_config_file(_operative_config_path(pretrained_model_dir))
+    _parse_operative_config(pretrained_model_dir)
 
     model_ckpt = "model.ckpt-" + str(checkpoint_step)
     self.train(mixture_or_task_name, checkpoint_step + finetune_steps,
@@ -409,8 +410,8 @@ class MtfModel(T5Model):
     if checkpoint_steps == -1:
       checkpoint_steps = utils.get_latest_checkpoint_from_dir(self._model_dir)
 
+    _parse_operative_config(self._model_dir)
     with gin.unlock_config():
-      gin.parse_config_file(_operative_config_path(self._model_dir))
       gin.bind_parameter("Bitransformer.decode.beam_size", beam_size)
       gin.bind_parameter("Bitransformer.decode.temperature", temperature)
 
@@ -464,8 +465,8 @@ class MtfModel(T5Model):
     if checkpoint_steps == -1:
       checkpoint_steps = utils.get_latest_checkpoint_from_dir(self._model_dir)
 
+    _parse_operative_config(self._model_dir)
     with gin.unlock_config():
-      gin.parse_config_file(_operative_config_path(self._model_dir))
       gin.parse_config(self._gin_bindings)
 
     if vocabulary is None:
@@ -518,8 +519,8 @@ class MtfModel(T5Model):
     """
     if checkpoint_step == -1:
       checkpoint_step = utils.get_latest_checkpoint_from_dir(self._model_dir)
+    _parse_operative_config(self._model_dir)
     with gin.unlock_config():
-      gin.parse_config_file(_operative_config_path(self._model_dir))
       gin.bind_parameter("Bitransformer.decode.beam_size", beam_size)
       gin.bind_parameter("Bitransformer.decode.temperature", temperature)
 

@@ -15,7 +15,6 @@
 """Functions for providing data to Mesh TF transformer."""
 
 import functools
-import warnings
 
 from absl import logging
 import gin
@@ -24,6 +23,17 @@ import t5.data
 from t5.models import utils as model_utils
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
+
+
+DEPRECATED_GIN_REFERENCES = (
+    "configurable_vocabulary",
+    "get_sentencepiece_model_path",
+    "num_parallel_calls",
+    "SentencePieceVocabulary",
+    "t5.data.sentencepiece_vocabulary.SentencePieceVocabulary",
+    "t5.models.mesh_transformer.get_sentencepiece_model_path",
+    "Vocabulary",
+)
 
 
 @gin.configurable()
@@ -196,7 +206,7 @@ def tsv_dataset_fn(
 
 
 @gin.configurable()
-def get_vocabulary(mixture_or_task_name):
+def get_vocabulary(mixture_or_task_name=None):
   """Get the appropriate value for the utils.run.vocabulary argument.
 
   Args:
@@ -208,42 +218,3 @@ def get_vocabulary(mixture_or_task_name):
     t5.data.vocabularies.Vocabulary for inputs and targets.
   """
   return model_utils.get_vocabulary(mixture_or_task_name)
-
-
-@gin.configurable()
-def get_sentencepiece_model_path(mixture_or_task_name):
-  """Return the SentencePiece model path for a given mixture or task.
-
-  DEPRECATED. Please pass the vocabulary directly to utils.run instead.
-
-  Args:
-    mixture_or_task_name: string, an identifier for a Mixture or Task in the
-      appropriate registry. Must be specified via gin.
-
-  Returns:
-    Path to a SentencePiece model file.
-  """
-  warnings.warn(
-      "get_sentencepiece_model_path is deprecated. Please pass the mixture or "
-      "task vocabulary directly to the Mesh TensorFlow Transformer instead."
-  )
-  vocabulary = get_vocabulary(mixture_or_task_name)
-  if isinstance(vocabulary, t5.data.SentencePieceVocabulary):
-    return vocabulary.sentencepiece_model_file
-  elif (
-      isinstance(vocabulary, tuple) and
-      all(isinstance(v, t5.data.SentencePieceVocabulary) for v in vocabulary)
-  ):
-    sentencepiece_model_files = set(
-        v.sentencepiece_model_file for v in vocabulary)
-    if len(sentencepiece_model_files) > 1:
-      raise ValueError(
-          "get_sentencepiece_model_path was called for a provider that does "
-          "not use the same SentencePieceVocabulary for all features."
-      )
-    (sentencepiece_model_file,) = sentencepiece_model_files
-    return sentencepiece_model_file
-  raise ValueError(
-      "get_sentencepiece_model_path was called for a provider that does not "
-      "use a SentencePieceVocabulary."
-  )

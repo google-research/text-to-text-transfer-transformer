@@ -2961,12 +2961,3 @@ def noise_token_to_random_token_or_sentinel(
           tokens, noise_mask, vocabulary, seeds=seeds[1:]),
       noise_token_to_sentinel(
           tokens, noise_mask, vocabulary, seeds=()))
-
-
-# ==========================Deprecated=========================================
-
-
-@gin.configurable
-def num_parallel_calls(deterministic=False):
-  """DEPRECATED: Cannot be removed to preserve gin backward compatibility."""
-  raise NotImplementedError('`num_paralell_calls` is deprecated. Do not use.')

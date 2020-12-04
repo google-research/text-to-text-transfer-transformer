@@ -85,10 +85,5 @@ class MeshDatasetFnsTest(test_utils.FakeMixtureTest):
         mixture_name="uncached_mixture", train=False, use_cached=False,
     )
 
-  def test_get_sentencepiece_model_path(self):
-    self.assertEqual(
-        test_utils.sentencepiece_vocab().sentencepiece_model_file,
-        mesh_transformer.get_sentencepiece_model_path("cached_mixture")
-    )
 if __name__ == "__main__":
   absltest.main()
