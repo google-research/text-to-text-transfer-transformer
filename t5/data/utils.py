@@ -44,8 +44,6 @@ def get_default_vocabulary():
       DEFAULT_SPM_PATH, DEFAULT_EXTRA_IDS)
 
 
-
-
 def set_tfds_data_dir_override(tfds_data_dir):
   global _TFDS_DATA_DIR_OVERRIDE
   _TFDS_DATA_DIR_OVERRIDE = tfds_data_dir

@@ -27,7 +27,6 @@ import tensorflow_text as tf_text
 import sentencepiece as sentencepiece_processor
 
 
-@gin.configurable
 class SentencePieceVocabulary(vocabularies.Vocabulary):
   """Wrapper for nlp/sentencepiece encoder.
 

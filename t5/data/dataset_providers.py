@@ -47,14 +47,10 @@ SHUFFLE_BUFFER_SIZE = 1000
 @dataclasses.dataclass(frozen=True)
 class Feature:
   """A container for attributes of output features of data providers."""
-  vocabulary: Union[Callable[[], Vocabulary], Vocabulary]
+  vocabulary: Vocabulary
   add_eos: bool = True
   required: bool = True
   dtype: tf.DType = tf.int32
-
-  def __post_init__(self):
-    if callable(self.vocabulary):
-      object.__setattr__(self, "vocabulary", self.vocabulary())
 
 
 class DatasetProviderBase(metaclass=abc.ABCMeta):

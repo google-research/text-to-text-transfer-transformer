@@ -16,11 +16,9 @@
 """Abstract Vocabulary."""
 
 import abc
-import gin
 import tensorflow.compat.v2 as tf
 
 
-@gin.configurable
 class Vocabulary(metaclass=abc.ABCMeta):
   """Base class for all vocabularies."""
 
@@ -52,7 +50,6 @@ class Vocabulary(metaclass=abc.ABCMeta):
     return self._extra_ids
 
 
-@gin.configurable
 class ByteVocabulary(Vocabulary):
   """Byte level vocabulary.
 
