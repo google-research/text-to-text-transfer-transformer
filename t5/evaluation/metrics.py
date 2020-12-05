@@ -24,7 +24,7 @@ import collections
 import itertools
 import re
 import string
-from typing import Mapping, Optional, Sequence, Tuple
+from typing import Dict, Mapping, Optional, Sequence, Tuple, Union
 
 from absl import logging
 import numpy as np
@@ -212,13 +212,16 @@ def spearman_corrcoef(targets, predictions):
               100 * scipy.stats.spearmanr(targets, predictions)[0]}
 
 
-def mean_multiclass_f1(num_classes):
+def mean_multiclass_f1(num_classes, **metric_fn_kwargs):
   """Computes the unweighted average of the F1 per class."""
   return sklearn_metrics_wrapper(
       "fbeta_score",
       metric_dict_str="mean_%dclass_f1" % num_classes,
       metric_post_process_fn=lambda x: 100 * x,
-      beta=1, labels=range(num_classes), average="macro")
+      beta=1,
+      labels=range(num_classes),
+      average="macro",
+      **metric_fn_kwargs)
 
 
 def exact_match(targets, predictions):
@@ -349,9 +352,9 @@ def sklearn_metrics_wrapper(metric_str,
 
 
 def rank_classification(
-    targets: Sequence[Tuple[int, bool]],
+    targets: Sequence[Tuple[int, bool, float]],
     predictions: Sequence[float],
-    num_classes: Optional[int] = None):
+    num_classes: Optional[int] = None) -> Dict[str, Union[float, int]]:
   """Computes standard metrics classification based on log likelihood ranking.
 
   This metric is intended to be used along with the `rank_classification`
@@ -363,16 +366,24 @@ def rank_classification(
   correct.
 
   Args:
-    targets: list of tuples, the 'idx' and 'is_correct' fields from ground truth
-      examples.
+    targets: list of tuples, the 'idx', 'is_correct' and 'weight' fields from
+      ground truth examples.
     predictions: list of float, a flat list of log likelihood scores for each
       possible label for each example.
     num_classes: int or None, the number of possible classes for the label or
       None if the number of classes vary.
+
   Returns:
     Accuracy, f1, and AUC scores.
+
+  Raises:
+    ValueError: if `targets` is not a sequence of 3-tuples.
   """
   assert len(targets) == len(predictions)
+  if len(targets[0]) != 3:
+    raise ValueError(
+        "`targets` should contain three elements. Only %d are provided." %
+        len(targets[0]))
 
   if not num_classes:
     # Assuming variable classes. Can only compute accuracy.
@@ -382,15 +393,18 @@ def rank_classification(
         zip(targets, predictions), lambda x: x[0][0]):
       exs, log_likelihoods = zip(*grp)
       prediction = np.argmax(log_likelihoods)
-      num_correct += exs[prediction][1]
-      total += 1
+      weights = exs[prediction][2]
+      num_correct += exs[prediction][1] * weights
+      total += weights
     return {
         "accuracy": 100 * num_correct / total
     }
 
   assert len(targets) % num_classes == 0
-  labels_indicator = np.array(
-      [is_correct for _, is_correct in targets]).reshape((-1, num_classes))
+  labels_indicator = np.array([is_correct for _, is_correct, _ in targets
+                              ]).reshape((-1, num_classes))
+  weights = np.array([weight for _, _, weight in targets]).reshape(
+      (-1, num_classes))[:, 0]
   log_likelihoods = np.array(predictions, np.float32).reshape((-1, num_classes))
   predictions = log_likelihoods.argmax(-1)
 
@@ -401,10 +415,9 @@ def rank_classification(
         "considered correct.")
     num_examples = len(labels_indicator)
     return {
-        "accuracy": (
-            100 *
-            labels_indicator[np.arange(num_examples), predictions].sum() /
-            num_examples)
+        "accuracy": (100 * np.average(
+            labels_indicator[np.arange(num_examples), predictions],
+            weights=weights))
     }
 
   predictions_indicator = np.eye(num_classes)[predictions]
@@ -416,22 +429,27 @@ def rank_classification(
   probs = exp_normalize(log_likelihoods)
 
   if num_classes > 2:
-    metrics = mean_multiclass_f1(num_classes)(
-        labels_indicator, predictions_indicator)
+    metrics = mean_multiclass_f1(
+        num_classes, sample_weight=weights)(labels_indicator,
+                                            predictions_indicator)
   else:
     metrics = {
-        "f1": 100 * sklearn.metrics.f1_score(
-            labels_indicator.argmax(-1), predictions)
+        "f1":
+            100 * sklearn.metrics.f1_score(
+                labels_indicator.argmax(-1), predictions, sample_weight=weights)
     }
-  metrics.update(
-      {
-          "auc-roc": 100 * sklearn.metrics.roc_auc_score(
-              labels_indicator, probs, multi_class="ovr"),
-          "auc-pr": 100 * sklearn.metrics.average_precision_score(
-              labels_indicator, probs),
-          "accuracy": 100 * sklearn.metrics.accuracy_score(
-              labels_indicator, predictions_indicator),
-      })
+  metrics.update({
+      "auc-roc":
+          100 * sklearn.metrics.roc_auc_score(
+              labels_indicator, probs, multi_class="ovr",
+              sample_weight=weights),
+      "auc-pr":
+          100 * sklearn.metrics.average_precision_score(
+              labels_indicator, probs, sample_weight=weights),
+      "accuracy":
+          100 * sklearn.metrics.accuracy_score(
+              labels_indicator, predictions_indicator, sample_weight=weights),
+  })
   return metrics
 
 

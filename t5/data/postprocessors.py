@@ -38,8 +38,10 @@ def lower_text(string, **unused_kwargs):
   return string.lower()
 
 
-def string_label_to_class_id(
-    string_label, label_classes, default=-1, **unused_kwargs):
+def string_label_to_class_id(string_label,
+                             label_classes,
+                             default=-1,
+                             **unused_kwargs):
   """Returns index of string_label in label_classes or default if not found."""
   if string_label in label_classes:
     return label_classes.index(string_label)
@@ -50,8 +52,9 @@ def string_label_to_class_id(
 def multirc(string_label, example=None, is_target=False):
   """Returns dict containing the class with the question index for grouping."""
   res = {
-      "value": string_label_to_class_id(
-          string_label, example=example, label_classes=("False", "True"))
+      "value":
+          string_label_to_class_id(
+              string_label, example=example, label_classes=("False", "True"))
   }
   # Add the group, if present, since the model outputs will not have it.
   if is_target:
@@ -118,6 +121,6 @@ def wsc_simple(prediction, example=None, is_target=False):
 def rank_classification(score, example=None, is_target=False):
   """A postprocessor for the `rank_classification` preprocessor and metric."""
   if is_target:
-    return (example["idx"], example["is_correct"])
+    return (example["idx"], example["is_correct"], example.get("weight", 1.0))
   else:
     return score

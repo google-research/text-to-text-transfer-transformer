@@ -578,6 +578,7 @@ class PreprocessorsTest(tf.test.TestCase):
   def test_split_tokens(self):
     original = list(range(2, 102))
     og_dataset = tf.data.Dataset.from_tensors({'targets': original})
+
     # Verify splits with no max segments.
     def _verify_split(length, n_expected_outputs):
       ds = prep.split_tokens(
@@ -1311,6 +1312,56 @@ class PreprocessorsTest(tf.test.TestCase):
             },
         ])
 
+  def test_rank_classification_with_weight(self):
+    dataset = tf.data.Dataset.from_tensors({
+        'left': 'the sky is blue',
+        'right': 'cats are so cute',
+        'label_idx': 1,
+        'weight': 1.0,
+    })
+    preprocessor = functools.partial(
+        prep.rank_classification,
+        dataset,
+        inputs_fn=lambda features: [features['right'], features['left']],
+        targets_fn=lambda features: ['class 0', 'class 1'],
+        is_correct_fn=lambda features: [False, True],
+        weight_fn=lambda features: features['weight'])
+
+    test_utils.assert_dataset(
+        preprocessor(mode='train'), [{
+            'idx': 0,
+            'inputs': 'the sky is blue',
+            'targets': 'class 1',
+            'is_correct': True,
+            'weight': 1.0,
+        }])
+
+    test_utils.assert_dataset(
+        preprocessor(mode='eval'), [{
+            'idx': 0,
+            'inputs': 'cats are so cute',
+            'targets': 'class 0',
+            'is_correct': False,
+            'weight': 1.0,
+        }, {
+            'idx': 0,
+            'inputs': 'the sky is blue',
+            'targets': 'class 1',
+            'is_correct': True,
+            'weight': 1.0,
+        }])
+
+    test_utils.assert_dataset(
+        preprocessor(mode='fewshot_eval'), [
+            {
+                'idx': [0, 0],
+                'inputs': ['cats are so cute', 'the sky is blue'],
+                'targets': ['class 0', 'class 1'],
+                'is_correct': [False, True],
+                'weight': [1, 1],
+            },
+        ])
+
   def test_rank_classification_errors(self):
     dataset = tf.data.Dataset.from_tensors({
         'left': 'the sky is blue',
@@ -1582,6 +1633,146 @@ class PreprocessorsTest(tf.test.TestCase):
           targets_formats=['test1', 'test2'],
           mode='eval',
           label_key='answerKey')
+
+  def test_rank_classification_formatter_with_weight(self):
+    input_examples = [
+        {
+            'premise': 'The farmland needed irrigation.',
+            'question': 'effect',
+            'choice1': 'a canal was constructed',
+            'choice2': 'the crops grew tall',
+            'label': 0,
+            'weight': 1,
+        },
+        {
+            'premise': 'I decided to stay home last night.',
+            'question': 'cause',
+            'choice1': 'I wanted to see people',
+            'choice2': 'I was too tired',
+            'label': 1,
+            'weight': 0.5,
+        },
+    ]
+
+    input_ds = tf.data.Dataset.from_generator(
+        lambda: (x for x in input_examples),
+        output_types={
+            'premise': tf.string,
+            'question': tf.string,
+            'choice1': tf.string,
+            'choice2': tf.string,
+            'label': tf.int32,
+            'weight': tf.float32,
+        },
+        output_shapes={
+            'premise': [],
+            'question': [],
+            'choice1': [],
+            'choice2': [],
+            'label': [],
+            'weight': [],
+        })
+
+    # all options
+    dataset = prep.rank_classification_formatter(
+        input_ds,
+        inputs_formats='{premise} What is the {question}? X',
+        targets_formats=['I think {choice1}.', 'I think {choice2}.'],
+        weight_key='weight',
+        mode='eval')
+
+    test_utils.assert_dataset(dataset, [
+        {
+            'idx': 0,
+            'inputs': 'The farmland needed irrigation. What is the effect? X',
+            'targets': 'I think a canal was constructed.',
+            'is_correct': True,
+            'weight': 1.0,
+        },
+        {
+            'idx': 0,
+            'inputs': 'The farmland needed irrigation. What is the effect? X',
+            'targets': 'I think the crops grew tall.',
+            'is_correct': False,
+            'weight': 1.0,
+        },
+        {
+            'idx': 1,
+            'inputs': 'I decided to stay home last night. What is the cause? X',
+            'targets': 'I think I wanted to see people.',
+            'is_correct': False,
+            'weight': 0.5,
+        },
+        {
+            'idx': 1,
+            'inputs': 'I decided to stay home last night. What is the cause? X',
+            'targets': 'I think I was too tired.',
+            'is_correct': True,
+            'weight': 0.5,
+        },
+    ])
+
+    # train mode
+    dataset = prep.rank_classification_formatter(
+        input_ds,
+        inputs_formats='{premise} What is the {question}? X',
+        targets_formats=['I think {choice1}.', 'I think {choice2}.'],
+        weight_key='weight',
+        mode='train')
+
+    test_utils.assert_dataset(dataset, [
+        {
+            'idx': 0,
+            'inputs': 'The farmland needed irrigation. What is the effect? X',
+            'targets': 'I think a canal was constructed.',
+            'is_correct': True,
+            'weight': 1.0,
+        },
+        {
+            'idx': 1,
+            'inputs': 'I decided to stay home last night. What is the cause? X',
+            'targets': 'I think I was too tired.',
+            'is_correct': True,
+            'weight': 0.5,
+        },
+    ])
+
+    # fewshot_eval mode
+    dataset = prep.rank_classification_formatter(
+        input_ds,
+        inputs_formats='{premise} What is the {question}? X',
+        targets_formats=['I think {choice1}.', 'I think {choice2}.'],
+        weight_key='weight',
+        mode='fewshot_eval')
+
+    test_utils.assert_dataset(dataset, [
+        {
+            'idx': [0, 0],
+            'inputs': [
+                'The farmland needed irrigation. What is the effect? X',
+                'The farmland needed irrigation. What is the effect? X',
+            ],
+            'targets': [
+                'I think a canal was constructed.',
+                'I think the crops grew tall.',
+            ],
+            'is_correct': [True, False],
+            'weight': 1.0,
+        },
+        {
+            'idx': [1, 1],
+            'inputs': [
+                'I decided to stay home last night. What is the cause? X',
+                'I decided to stay home last night. What is the cause? X',
+            ],
+            'targets': [
+                'I think I wanted to see people.',
+                'I think I was too tired.',
+            ],
+            'is_correct': [False, True],
+            'weight': 0.5,
+        },
+    ])
 
   def test_select_random_chunk(self):
     dataset = tf.data.Dataset.from_tensors({

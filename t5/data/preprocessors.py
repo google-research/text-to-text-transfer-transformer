@@ -1518,13 +1518,13 @@ def wnli_simple(x, label='wsc:'):
   }
 
 
-def rank_classification(
-    ds: tf.data.Dataset,
-    inputs_fn: Callable[[FeatureType], tf.Tensor],
-    targets_fn: Callable[[FeatureType], tf.Tensor],
-    is_correct_fn: Callable[[FeatureType], tf.Tensor],
-    mode: str = 'eval',
-) -> tf.data.Dataset:
+def rank_classification(ds: tf.data.Dataset,
+                        inputs_fn: Callable[[FeatureType], tf.Tensor],
+                        targets_fn: Callable[[FeatureType], tf.Tensor],
+                        is_correct_fn: Callable[[FeatureType], tf.Tensor],
+                        weight_fn: Optional[Callable[[FeatureType],
+                                                     tf.Tensor]] = None,
+                        mode: str = 'eval') -> tf.data.Dataset:
   """Prepare dataset for rank classification scoring.
 
   Intended to be used with `rank_classification` postprocessor and metric.
@@ -1544,7 +1544,8 @@ def rank_classification(
 
   inputs_fn=lambda ex: ex['prefix'],
   targets_fn=lambda ex: ex['suffix'],
-  is_correct_fn=lambda ex: tf.one_hot(ex['label'])
+  is_correct_fn=lambda ex: tf.one_hot(ex['label'], num_classes)
+  weight_fn=lambda ex: tf.fill([num_classes], ex['weight'])
 
   Given the following example:
 
@@ -1552,6 +1553,7 @@ def rank_classification(
     'prefix': ['The farmland needed ', 'The farmland wanted '],
     'suffix': ['water', 'cows'],
     'label': 0,
+    'weight': 1.0,
   }
   the preprocessor would return:
 
@@ -1559,13 +1561,15 @@ def rank_classification(
       'idx': 0,
       'inputs': 'The farmland needed ',
       'targets': 'water',
-      'is_correct': True
+      'is_correct': True,
+      'weight': 1.0
    },
    {
      'idx': 0,
      'inputs': 'The farmland wanted ',
      'targets': 'cows',
-     'is_correct': False
+     'is_correct': False,
+     'weight': 1.0
    }]
 
   With mode set to 'train', it would return only the first example,
@@ -1580,11 +1584,13 @@ def rank_classification(
       given the input example.
     is_correct_fn: a callable that returns the 'label' feature. May be an int32
       scalar or 1-D Tensor.
-    mode: A string, one of 'train' or'eval
-      'train' produces only the correct example(s) based on the label value(s).
-      'eval' produces an example for every possible class value, sequentially.
-      'fewshot_eval' produces an example for every possible class value,
-        batched together for each input example.
+    weight_fn: a callable that returns the 'weight' feature (float32 scalar).
+    mode: A string, one of 'train' or'eval 'train' produces only the correct
+      example(s) based on the label value(s). 'eval' produces an example for
+      every possible class value, sequentially. 'fewshot_eval' produces an
+      example for every possible class value, batched together for each input
+      example.
+
   Returns:
     A tf.data.Dataset containing 'idx', inputs', 'targets', and 'is_correct'.
   """
@@ -1603,12 +1609,18 @@ def rank_classification(
         '`inputs_fn`, `targets_fn`, and `is_correct_fn` must return the same '
         'size tensors.')
 
-    return {
+    output = {
         'idx': tf.fill(tf.shape(is_correct), idx),
         'inputs': inputs,
         'targets': targets,
-        'is_correct': is_correct
+        'is_correct': is_correct,
     }
+
+    if weight_fn is not None:
+      output['weight'] = tf.fill(tf.shape(is_correct), weight_fn(ex))
+      output['weight'] = tf.cast(output['weight'], tf.float32)
+
+    return output
 
   ds = ds.enumerate()
   ds = ds.map(make_examples, num_parallel_calls=AUTOTUNE)
@@ -1624,8 +1636,8 @@ def rank_classification_formatter(
     inputs_formats: Union[str, Sequence[str]],
     targets_formats: Union[str, Sequence[str]],
     mode: str = 'eval',
-    label_key: str = 'label'
-) -> tf.data.Dataset:
+    label_key: str = 'label',
+    weight_key: Optional[str] = None) -> tf.data.Dataset:
   """Create 'inputs' and 'targets' strings for ranking classification.
 
   Intended to be used with `rank_classification` postprocessor and metric.
@@ -1696,12 +1708,14 @@ def rank_classification_formatter(
     targets_formats: A string or a list of strings to format with feature values
       to produce 'targets', one for each possible class value. Feature keys
       should be surrounded by curly braces to be replaced.
-    mode: A string, one of 'train', 'eval', or 'fewshot_train')
-      'train' produces only the correct example(s) based on the label value(s).
-      'eval' produces an example for every possible class value, sequentially.
+    mode: A string, one of 'train', 'eval', or 'fewshot_train') 'train' produces
+      only the correct example(s) based on the label value(s). 'eval' produces
+      an example for every possible class value, sequentially.
       'fewshot_eval': produces an example for every possible class value,
         batched together for each input example.
     label_key: A string, the feature key for the integer label value(s).
+    weight_key: A string, the feature key for the float example weight.
+
   Returns:
     A tf.data.Dataset containing 'idx', inputs', 'targets', and 'is_correct'.
   """
@@ -1752,11 +1766,15 @@ def rank_classification_formatter(
       is_correct = tf.math.reduce_any(is_correct, axis=0)
     return is_correct
 
+  def _weight_fn(ex):
+    return ex[weight_key]
+
   return rank_classification(
       ds,
       inputs_fn=functools.partial(_apply_formats, fmts=inputs_formats),
       targets_fn=functools.partial(_apply_formats, fmts=targets_formats),
       is_correct_fn=_is_correct_fn,
+      weight_fn=None if weight_key is None else _weight_fn,
       mode=mode)
 
 
