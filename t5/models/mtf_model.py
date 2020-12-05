@@ -382,7 +382,7 @@ class MtfModel(T5Model):
                split=split)
 
   def predict(self, input_file, output_file, checkpoint_steps=-1,
-              beam_size=1, temperature=1.0, vocabulary=None):
+              beam_size=1, temperature=1.0, keep_top_k=-1, vocabulary=None):
     """Predicts targets from the given inputs.
 
     Args:
@@ -399,6 +399,8 @@ class MtfModel(T5Model):
         beam search.
       temperature: float, a value between 0 and 1 (must be 0 if beam_size > 1)
         0.0 means argmax, 1.0 means sample according to predicted distribution.
+      keep_top_k: integer, a value between 1 and the vocabulary size. When
+        sampling, only pick tokens that are in the k most likely.
       vocabulary: vocabularies.Vocabulary object to use for tokenization, or
         None to use the default SentencePieceVocabulary.
     """
@@ -414,6 +416,7 @@ class MtfModel(T5Model):
     with gin.unlock_config():
       gin.bind_parameter("Bitransformer.decode.beam_size", beam_size)
       gin.bind_parameter("Bitransformer.decode.temperature", temperature)
+      gin.bind_parameter("Bitransformer.decode.sampling_keep_top_k", keep_top_k)
 
     if vocabulary is None:
       vocabulary = utils.get_vocabulary()
@@ -497,7 +500,8 @@ class MtfModel(T5Model):
           score_postprocess_fn=score_postprocess_fn)
 
   def export(self, export_dir=None, checkpoint_step=-1, beam_size=1,
-             temperature=1.0, vocabulary=None, eval_with_score=False):
+             temperature=1.0, keep_top_k=-1, vocabulary=None,
+             eval_with_score=False):
     """Exports a TensorFlow SavedModel.
 
     Args:
@@ -509,6 +513,8 @@ class MtfModel(T5Model):
         beam search.
       temperature: float, a value between 0 and 1 (must be 0 if beam_size > 1)
         0.0 means argmax, 1.0 means sample according to predicted distribution.
+      keep_top_k: integer, a value between 1 and the vocabulary size. When
+        sampling, only pick tokens that are in the k most likely.
       vocabulary: vocabularies.Vocabulary object to use for tokenization, or
         None to use the default SentencePieceVocabulary.
       eval_with_score: If True, compute log-likelihood scores of targets.
@@ -523,6 +529,7 @@ class MtfModel(T5Model):
     with gin.unlock_config():
       gin.bind_parameter("Bitransformer.decode.beam_size", beam_size)
       gin.bind_parameter("Bitransformer.decode.temperature", temperature)
+      gin.bind_parameter("Bitransformer.decode.sampling_keep_top_k", keep_top_k)
 
     if vocabulary is None:
       vocabulary = utils.get_vocabulary()

@@ -125,9 +125,14 @@ flags.DEFINE_string("output_file", "", "Path to output file to save decodes.")
 flags.DEFINE_string(
     "export_dir", "",
     "Directory to export SavedModels to. Will use `model_dir` if unspecified.")
-flags.DEFINE_integer("export_beam_size", 1, "Beam size in export mode.")
-flags.DEFINE_float("export_temperature", 0.0,
-                   "Sampling emperature in export mode.")
+
+
+# Decoding strategy args, used in export and predict modes.
+flags.DEFINE_integer("beam_size", 1, "Beam size for predict or export mode.")
+flags.DEFINE_float("temperature", 0.0,
+                   "Sampling emperature for predict or export mode.")
+flags.DEFINE_integer("keep_top_k", -1,
+                     "Top-k value for predict or export mode.")
 
 FLAGS = flags.FLAGS
 
@@ -221,7 +226,10 @@ def main(_):
       model.predict(
           checkpoint_steps=checkpoint_steps,
           input_file=FLAGS.input_file,
-          output_file=FLAGS.output_file)
+          output_file=FLAGS.output_file,
+          beam_size=FLAGS.beam_size,
+          temperature=FLAGS.temperature,
+          keep_top_k=FLAGS.keep_top_k,)
     elif FLAGS.mode == "score":
       model.score(
           FLAGS.input_file,
@@ -241,8 +249,9 @@ def main(_):
       model.export(
           export_dir=FLAGS.export_dir,
           checkpoint_step=checkpoint_steps,
-          beam_size=FLAGS.export_beam_size,
-          temperature=FLAGS.export_temperature,
+          beam_size=FLAGS.beam_size,
+          temperature=FLAGS.temperature,
+          keep_top_k=FLAGS.keep_top_k,
           eval_with_score=(FLAGS.mode == "export_score"))
     else:
       raise ValueError("--mode flag must be set when using Model API.")
