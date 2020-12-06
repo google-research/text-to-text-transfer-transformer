@@ -17,7 +17,10 @@
 In short, feature converters provide additional data processings to the
 tf.data.Dataset out of the Task API. They convert the features of the input
 dataset into more descriptive features (e.g., "decoder_target_token" instead of
-"targets") as well as pad and/or pack them.
+"targets") as well as pad and/or pack them. The features of the input dataset
+are referred to as "task_features" because they are the output of the Task API.
+Those of the output dataset are referred to as "model_features" as they are the
+features directly fed to the model implementation.
 
 We provide feature converters for the following three architectures:
 
@@ -26,30 +29,28 @@ We provide feature converters for the following three architectures:
   - encoder-only
 
 Each of these feature converters inherit the base class FeatureConverter and
-override two methods `_convert_features` and `get_output_lengths` to
-define how input features are mapped to the output features including the length
+override two methods `_convert_features` and `get_model_feature_lengths` to
+define how task features are mapped to the model features including the length
 relationships. Other model architectures can be supported by subclassing the
 FeatureConverter class in a similar manner.
 
 
 Definition: standard_features
 
-Throughout this module, we refer to the following 10 fields as
-standard_features. Depending on the model architecture, a subset of them will be
-returned by the feature converter.
+Throughout this module, we refer to the following 8 fields as standard_features.
+Depending on the model architecture, a subset of them will be returned by the
+feature converter.
 
   - encoder_input_token
   - encoder_target_token
   - encoder_loss_weight
-  - encoder_position
   - encoder_segment_id
   - decoder_input_token
   - decoder_target_token
   - decoder_loss_weight
-  - decoder_position
   - decoder_segment_id
 
-  *_segment_id and *_position are only relevant for packed dataset.
+  *_segment_id fields are only relevant for packed dataset.
 
   *_segment_id is a tf.Tensor of integer which is aligned with
   *_input_token. Positive integers represent the sequence membership in
@@ -57,12 +58,6 @@ returned by the feature converter.
   [1, 1, 2, 2, 2, 0] means that the first two positions belong to the first
   sequence, the next three to the second sequence and the last position is a
   padding.
-
-  *_position is a tf.Tensor of integer representing the position index in the
-  original sequence before packing. For example, consider
-  encoder_position = [0, 1, 0, 1, 2, 0]. The first two tokens were the 0th and
-  1st tokens of the first sequence and next three tokens are the 0th, 1st and
-  2nd tokens of the second sequence before packing.
 
   *_loss_weight is used to indicate which positions should be used for the loss
   calculation.
@@ -79,22 +74,8 @@ input dataset.
 import abc
 import functools
 from typing import Mapping, Sequence
+from t5.data import utils
 import tensorflow.compat.v2 as tf
-
-
-STANDARD_INPUTS = ["inputs", "targets"]
-STANDARD_FEATURES = [
-    "encoder_input_token",
-    "encoder_target_token",
-    "encoder_loss_weight",
-    "encoder_position",
-    "encoder_segment_id",
-    "decoder_input_token",
-    "decoder_target_token",
-    "decoder_loss_weight",
-    "decoder_position",
-    "decoder_segment_id",
-]
 
 
 def _check_lengths(ds: tf.data.Dataset, expected_lengths: Mapping[str, int],
@@ -154,29 +135,49 @@ def _check_lengths(ds: tf.data.Dataset, expected_lengths: Mapping[str, int],
   return ds
 
 
+def _check_exact_match(expected_features: Sequence[str],
+                       actual_features: Sequence[str],
+                       expected_feature_source: str,
+                       actual_feature_source: str) -> None:
+  """Check whether expected and actual features match one-to-one."""
+  expected_features = set(expected_features)
+  actual_features = set(actual_features)
+
+  if expected_features != actual_features:
+    if actual_features - expected_features:
+      extra_features = actual_features - expected_features
+      raise ValueError(
+          f"The {actual_feature_source} contains extra features not specified "
+          f"in the {expected_feature_source}: {extra_features}")
+    else:
+      missing_features = expected_features - actual_features
+      raise ValueError(
+          f"The {actual_feature_source} is missing features specified "
+          f"in the {expected_feature_source}: {missing_features}")
+
+
 class FeatureConverter(abc.ABC):
   """Abstract base class for feature converters.
 
   Subclasses of FeatureConverter are used to convert the tf.data.Dataset
   instance from the Task API to features that are passed to the
   model implementation. Note that Task API has an attribute "output_features",
-  which is considered an "input features" in the context of FeatureConverter. To
-  minimize confusion, output features always refer to the features of the
-  dataset output by the FeatureConverter unless otherwise noted.
+  which is referred to as "model features" in the context of FeatureConverter.
 
-  Typically the input features contain keys: "inputs" and "targets". The output
+  Typically the task features contain keys: "inputs" and "targets". The model
   features are constructed based on what is consumed by the model architecture.
-  For custom model architectures that require additional output features, one
+  For custom model architectures that require additional model features, one
   needs to subclass FeatureConverter.
 
   This conversion is fully specified by
 
     1. defining the mapping of the features in `_convert_features` method and
     2. defining the relationship between sequence lengths of input and output
-       features in `get_output_lengths` which is a function of input_lengths.
+       features in `get_model_feature_lengths` which is a function of
+       task_feature_lengths.
 
   Therefore, a subclass of FeatureConverter should override `_convert_features`
-  and `get_output_lengths` methods.
+  and `get_model_feature_lengths` methods.
 
   The actual feature conversion is done in the `__call__` method, which
   wraps around the `_convert_features` method in order to provide useful checks
@@ -185,28 +186,32 @@ class FeatureConverter(abc.ABC):
 
   Other notes:
 
-    If pack = True, each feature in the input_features should be packable,
+    If pack = True, each feature in the task features should be packable,
     i.e., 1-dimensional.
 
+    Subclasses must override _task_feature_dtypes and _model_feature_dtypes.
+
   Attributes:
+    task_feature_dtypes: a mapping from a feature name to its data type.
+    model_feature_dtypes: a mapping from a feature name to its data type.
     pack: whether to pack the dataset.
-    input_dtypes: a mapping from a feature name to its data type.
-    output_dtypes: a mapping from a feature name to its data type.
+    use_custom_packing_ops: whether to use custom ops for packing.
   """
+
+  _task_feature_dtypes: Mapping[str, tf.dtypes.DType]
+  _model_feature_dtypes: Mapping[str, tf.dtypes.DType]
 
   def __init__(self,
                pack: bool = True,
-               input_dtypes: Mapping[str, tf.dtypes.DType] = None,
-               output_dtypes: Mapping[str, tf.dtypes.DType] = None):
+               use_custom_packing_ops: bool = False):
     self._pack = pack
+    self._use_custom_packing_ops = use_custom_packing_ops
 
-    if input_dtypes is None:
-      input_dtypes = {feat: tf.int32 for feat in STANDARD_INPUTS}
-    self._input_dtypes = input_dtypes
+    if self._task_feature_dtypes is None:
+      raise ValueError("_task_feature_dtypes must be defined in the subclass.")
 
-    if output_dtypes is None:
-      output_dtypes = {feat: tf.int32 for feat in STANDARD_FEATURES}
-    self._output_dtypes = output_dtypes
+    if self._model_feature_dtypes is None:
+      raise ValueError("_model_feature_dtypes must be defined in the subclass.")
 
   def _validate_dataset(self,
                         ds: tf.data.Dataset,
@@ -226,7 +231,7 @@ class FeatureConverter(abc.ABC):
 
     Each feature in `expected_features`
       - is also in `ds`
-      - has dtype = self.output_dtypes[feature]
+      - has dtype = self.model_feature_dtypes[feature]
       - has rank of 1
       - is also in expected_lengths
       - is compatible with the expected lengths
@@ -272,75 +277,150 @@ class FeatureConverter(abc.ABC):
             f"{error_label} validation: "
             f"Got {actual_rank}, expected {expected_rank}")
 
-      if feat not in expected_lengths:
-        raise ValueError(f"Sequence length for feature '{feat}' is missing "
-                         f"during {error_label} validation")
-
     ds = _check_lengths(ds, expected_lengths, strict, error_label)
     return ds
 
-  def __call__(
-      self, ds: tf.data.Dataset,
-      input_lengths: Mapping[str, int]) -> tf.data.Dataset:
-    """Convert the features of `ds` into output features.
+  def __call__(self, ds: tf.data.Dataset,
+               task_feature_lengths: Mapping[str, int]) -> tf.data.Dataset:
+    r"""Convert the features of `ds` into output features.
 
     This method should not be overridden by subclasses.
 
-    There are three major steps.
+    There are two conversion steps and five validation steps.
 
-    1. The input dataset is validated. See _validate_dataset for what aspects
-       are checked. At this stage, the length of each feature can be less than
-       or equal to the specified length in `input_lengths`.
+    Conversion 1: task features are converted to model features in
+                  `_convert_features
 
-    2. Input features are converted to output features.
+    Conversion 2: task_feature_lengths are converted to model_feature_lengths in
+                  `get_model_feature_lengths`
 
-    3. The output dataset is validated. The length has to be exactly
-       equal to the length specified in `output_lengths`.
+    Validation 1: verifies that the user input `task_feature_lengths` only
+                  contains the required features.
+
+    Validation 2: verifies whether the input dataset has same or more features,
+                  same dtype, and length that is less than or equal compared to
+                  input_ds.
+
+    Validation 3: partially verifies the behavior of overriden
+                  `get_model_feature_lengths`.
+
+    Validation 4: check whether the ouput dataset has expected features (extra
+                  features are allowed), dtype, rank and lengths (exact mactch).
+
+    Validation 5: check one-to-one match between the output dataset and
+                  model_feature_dtypes. Extra features are not allowed.
+
+    The following diagram describes the validation and conversion processes. We
+    treat features in the task_feature_dtypes and model_feature_dtypes specified
+    as class variables as the ground-truth.
+
+    There are 5 validation steps. features (<=) means that features of the
+    variable on the left is a subset of those of the variable on the right. For
+    example, validation 2 guarantees that task_feature_dtypes have features that
+    are subset of the features of input_ds. Validation 4 has length (==), which
+    means that it ensures that each feature in model_feature_dtypes has the same
+    length as the corresponding feature in output_ds.
+
+    Overall, these 5 validations ensures that the output_ds has the expected
+    features with exact length, dtype and rank. Again, these validations assume
+    that task_feature_dtypes and model_feature_dtypes are correct.
+
+
+                        Validation 1                     Validation 2
+    task_feature_lengths <-------> task_feature_dtypes <--------------> input_ds
+    |                   features (==)                    features (<=)        |
+    |                                                    dtype (==)           |
+    |                                                    length (<=)          |
+    |                                                    rank (==1)           |
+    |                                                                         |
+    |   Conversion 2                                           Conversion 1   |
+    | get_model_feature_lengths                             _convert_features |
+    |                                                                         |
+    |                                              Validation 5               |
+    |                                           <-------------------->        |
+    |                                                 features (==)           |
+    |                                                                         |
+    \/                    Validation 3                    Validation 4        \/
+    model_feature_lengths <-------> model_feature_dtypes <-----------> output_ds
+                        features (==)                     features (<=)
+                                                          dtype (==)
+                                                          length (==)
+                                                          rank (==1)
 
     Args:
       ds: a tf.data.Dataset to be validated
-      input_lengths: a mapping from a task feature to its length
+      task_feature_lengths: a mapping from a task feature to its length
 
     Returns:
       ds: the converted dataset.
     """
-    # Input dataset validation stage
+    # Validation 1
+    _check_exact_match(expected_features=self.task_feature_dtypes.keys(),
+                       actual_features=task_feature_lengths.keys(),
+                       expected_feature_source="task_feature_dtypes",
+                       actual_feature_source="task_feature_lengths")
+
+    # Validation 2
     ds = self._validate_dataset(
         ds,
-        expected_features=input_lengths.keys(),
-        expected_dtypes=self.input_dtypes,
-        expected_lengths=input_lengths,
+        expected_features=self.task_feature_dtypes.keys(),
+        expected_dtypes=self.task_feature_dtypes,
+        expected_lengths=task_feature_lengths,
         # Before pack/pad, check feature (of ds) length <= task feature length
         strict=False,
         error_label="input_validation")
 
-    # Input to output feature conversion, implemented by subclasses
-    ds = self._convert_features(ds, input_lengths)
+    # Conversion 1: implemented by subclass
+    ds = self._convert_features(ds, task_feature_lengths)
 
-    # Output dataset validation stage
-    output_lengths = self.get_output_lengths(input_lengths)
+    # Conversion 2: implemented by subclasses
+    model_feature_lengths = self.get_model_feature_lengths(task_feature_lengths)
+
+    # Validation 3
+    _check_exact_match(expected_features=self.model_feature_dtypes.keys(),
+                       actual_features=model_feature_lengths.keys(),
+                       expected_feature_source="model_feature_dtypes",
+                       actual_feature_source="model_feature_lengths")
+
+    # Validation 4
     ds = self._validate_dataset(
         ds,
-        expected_features=output_lengths.keys(),
-        expected_dtypes=self.output_dtypes,
-        expected_lengths=output_lengths,
+        expected_features=self.model_feature_dtypes.keys(),
+        expected_dtypes=self.model_feature_dtypes,
+        expected_lengths=model_feature_lengths,
         # After pack/pad, check feature (of ds) length == model feature length
         strict=True,
         error_label="output_validation")
 
+    # Validation 5
+    _check_exact_match(expected_features=self.model_feature_dtypes.keys(),
+                       actual_features=ds.element_spec.keys(),
+                       expected_feature_source="model_feature_dtypes",
+                       actual_feature_source="output_dataset")
+    return ds
+
+  def _pack_or_pad(self,
+                   ds: tf.data.Dataset,
+                   packed_lengths: Mapping[str, int]) -> tf.data.Dataset:
+    """Trim/pad to packed_lengths and optionally pack the input dataset."""
+    if self.pack:
+      ds = utils.trim_and_pack_dataset(ds, packed_lengths,
+                                       self._use_custom_packing_ops)
+    else:
+      ds = utils.trim_and_pad_dataset(ds, packed_lengths)
     return ds
 
   @abc.abstractmethod
   def _convert_features(
       self, ds: tf.data.Dataset,
-      input_lengths: Mapping[str, int]) -> tf.data.Dataset:
+      task_feature_lengths: Mapping[str, int]) -> tf.data.Dataset:
     """Main feature conversion method to be overridden.."""
     raise NotImplementedError
 
   @abc.abstractmethod
-  def get_output_lengths(self,
-                         input_lengths: Mapping[str, int]) -> Mapping[str, int]:
-    """Define the length relationship between input and output features."""
+  def get_model_feature_lengths(
+      self, task_feature_lengths: Mapping[str, int]) -> Mapping[str, int]:
+    """Define the length relationship between task and model features."""
     raise NotImplementedError
 
   @property
@@ -348,9 +428,9 @@ class FeatureConverter(abc.ABC):
     return self._pack
 
   @property
-  def input_dtypes(self) -> Mapping[str, tf.dtypes.DType]:
-    return self._input_dtypes
+  def task_feature_dtypes(self) -> Mapping[str, tf.dtypes.DType]:
+    return self._task_feature_dtypes
 
   @property
-  def output_dtypes(self) -> Mapping[str, tf.dtypes.DType]:
-    return self._output_dtypes
+  def model_feature_dtypes(self) -> Mapping[str, tf.dtypes.DType]:
+    return self._model_feature_dtypes
