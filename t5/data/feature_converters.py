@@ -189,17 +189,18 @@ class FeatureConverter(abc.ABC):
     If pack = True, each feature in the task features should be packable,
     i.e., 1-dimensional.
 
-    Subclasses must override _task_feature_dtypes and _model_feature_dtypes.
+    Subclasses must override TASK_FEATURE_DTYPES and MODEL_FEATURE_DTYPES. If
+    packing is used, they must override PACKING_FEATURE_DTYPES as well. These
+    are the packing-specific features such as "*_segment_id".
 
   Attributes:
-    task_feature_dtypes: a mapping from a feature name to its data type.
-    model_feature_dtypes: a mapping from a feature name to its data type.
     pack: whether to pack the dataset.
     use_custom_packing_ops: whether to use custom ops for packing.
   """
 
-  _task_feature_dtypes: Mapping[str, tf.dtypes.DType]
-  _model_feature_dtypes: Mapping[str, tf.dtypes.DType]
+  TASK_FEATURE_DTYPES: Mapping[str, tf.dtypes.DType]
+  MODEL_FEATURE_DTYPES: Mapping[str, tf.dtypes.DType]
+  PACKING_FEATURE_DTYPES: Mapping[str, tf.dtypes.DType]
 
   def __init__(self,
                pack: bool = True,
@@ -207,11 +208,16 @@ class FeatureConverter(abc.ABC):
     self._pack = pack
     self._use_custom_packing_ops = use_custom_packing_ops
 
-    if self._task_feature_dtypes is None:
-      raise ValueError("_task_feature_dtypes must be defined in the subclass.")
+    if self.TASK_FEATURE_DTYPES is None:
+      raise ValueError("TASK_FEATURE_DTYPES must be defined in the subclass.")
 
-    if self._model_feature_dtypes is None:
-      raise ValueError("_model_feature_dtypes must be defined in the subclass.")
+    if self.MODEL_FEATURE_DTYPES is None:
+      raise ValueError("MODEL_FEATURE_DTYPES must be defined in the subclass.")
+
+    if self.pack and self.PACKING_FEATURE_DTYPES is None:
+      raise ValueError(
+          "PACKING_FEATURE_DTYPES must be defined in the subclass if pack=True."
+      )
 
   def _validate_dataset(self,
                         ds: tf.data.Dataset,
@@ -231,7 +237,7 @@ class FeatureConverter(abc.ABC):
 
     Each feature in `expected_features`
       - is also in `ds`
-      - has dtype = self.model_feature_dtypes[feature]
+      - has dtype = self.MODEL_FEATURE_DTYPES[feature]
       - has rank of 1
       - is also in expected_lengths
       - is compatible with the expected lengths
@@ -308,26 +314,27 @@ class FeatureConverter(abc.ABC):
                   features are allowed), dtype, rank and lengths (exact mactch).
 
     Validation 5: check one-to-one match between the output dataset and
-                  model_feature_dtypes. Extra features are not allowed.
+                  `expected_dtypes`. Extra features are not allowed.
 
     The following diagram describes the validation and conversion processes. We
-    treat features in the task_feature_dtypes and model_feature_dtypes specified
-    as class variables as the ground-truth.
+    treat features in the TASK_FEATURE_DTYPES and MODEL_FEATURE_DTYPES specified
+    as class variables as the ground-truth. For validations 3, 4 and 5, we
+    define `expected_dtypes`.
 
     There are 5 validation steps. features (<=) means that features of the
     variable on the left is a subset of those of the variable on the right. For
-    example, validation 2 guarantees that task_feature_dtypes have features that
+    example, validation 2 guarantees that TASK_FEATURE_DTYPES have features that
     are subset of the features of input_ds. Validation 4 has length (==), which
-    means that it ensures that each feature in model_feature_dtypes has the same
+    means that it ensures that each feature in MODEL_FEATURE_DTYPES has the same
     length as the corresponding feature in output_ds.
 
     Overall, these 5 validations ensures that the output_ds has the expected
     features with exact length, dtype and rank. Again, these validations assume
-    that task_feature_dtypes and model_feature_dtypes are correct.
+    that TASK_FEATURE_DTYPES and MODEL_FEATURE_DTYPES are correct.
 
 
                         Validation 1                     Validation 2
-    task_feature_lengths <-------> task_feature_dtypes <--------------> input_ds
+    task_feature_lengths <-------> TASK_FEATURE_DTYPES <--------------> input_ds
     |                   features (==)                    features (<=)        |
     |                                                    dtype (==)           |
     |                                                    length (<=)          |
@@ -341,7 +348,7 @@ class FeatureConverter(abc.ABC):
     |                                                 features (==)           |
     |                                                                         |
     \/                    Validation 3                    Validation 4        \/
-    model_feature_lengths <-------> model_feature_dtypes <-----------> output_ds
+    model_feature_lengths <-------> expected_dtypes <----------------> output_ds
                         features (==)                     features (<=)
                                                           dtype (==)
                                                           length (==)
@@ -355,16 +362,16 @@ class FeatureConverter(abc.ABC):
       ds: the converted dataset.
     """
     # Validation 1
-    _check_exact_match(expected_features=self.task_feature_dtypes.keys(),
-                       actual_features=task_feature_lengths.keys(),
-                       expected_feature_source="task_feature_dtypes",
+    _check_exact_match(expected_features=list(self.TASK_FEATURE_DTYPES),
+                       actual_features=list(task_feature_lengths),
+                       expected_feature_source="TASK_FEATURE_DTYPES",
                        actual_feature_source="task_feature_lengths")
 
     # Validation 2
     ds = self._validate_dataset(
         ds,
-        expected_features=self.task_feature_dtypes.keys(),
-        expected_dtypes=self.task_feature_dtypes,
+        expected_features=list(self.TASK_FEATURE_DTYPES),
+        expected_dtypes=self.TASK_FEATURE_DTYPES,
         expected_lengths=task_feature_lengths,
         # Before pack/pad, check feature (of ds) length <= task feature length
         strict=False,
@@ -373,29 +380,33 @@ class FeatureConverter(abc.ABC):
     # Conversion 1: implemented by subclass
     ds = self._convert_features(ds, task_feature_lengths)
 
+    expected_dtypes = dict(self.MODEL_FEATURE_DTYPES)
+    if self.pack:
+      expected_dtypes = {**expected_dtypes, **self.PACKING_FEATURE_DTYPES}
+
     # Conversion 2: implemented by subclasses
     model_feature_lengths = self.get_model_feature_lengths(task_feature_lengths)
 
     # Validation 3
-    _check_exact_match(expected_features=self.model_feature_dtypes.keys(),
-                       actual_features=model_feature_lengths.keys(),
-                       expected_feature_source="model_feature_dtypes",
+    _check_exact_match(expected_features=list(expected_dtypes),
+                       actual_features=list(model_feature_lengths),
+                       expected_feature_source="model_feature_names",
                        actual_feature_source="model_feature_lengths")
 
     # Validation 4
     ds = self._validate_dataset(
         ds,
-        expected_features=self.model_feature_dtypes.keys(),
-        expected_dtypes=self.model_feature_dtypes,
+        expected_features=list(expected_dtypes),
+        expected_dtypes=expected_dtypes,
         expected_lengths=model_feature_lengths,
         # After pack/pad, check feature (of ds) length == model feature length
         strict=True,
         error_label="output_validation")
 
     # Validation 5
-    _check_exact_match(expected_features=self.model_feature_dtypes.keys(),
-                       actual_features=ds.element_spec.keys(),
-                       expected_feature_source="model_feature_dtypes",
+    _check_exact_match(expected_features=list(expected_dtypes),
+                       actual_features=list(ds.element_spec),
+                       expected_feature_source="model_feature_names",
                        actual_feature_source="output_dataset")
     return ds
 
@@ -426,11 +437,3 @@ class FeatureConverter(abc.ABC):
   @property
   def pack(self) -> bool:
     return self._pack
-
-  @property
-  def task_feature_dtypes(self) -> Mapping[str, tf.dtypes.DType]:
-    return self._task_feature_dtypes
-
-  @property
-  def model_feature_dtypes(self) -> Mapping[str, tf.dtypes.DType]:
-    return self._model_feature_dtypes

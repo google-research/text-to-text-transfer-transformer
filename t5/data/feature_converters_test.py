@@ -120,12 +120,14 @@ class FeatureConvertersTest(tf.test.TestCase):
 
   def setUp(self):
     super().setUp()
-    feature_converters.FeatureConverter._task_feature_dtypes = {}
-    feature_converters.FeatureConverter._model_feature_dtypes = {}
+    feature_converters.FeatureConverter.TASK_FEATURE_DTYPES = {}
+    feature_converters.FeatureConverter.MODEL_FEATURE_DTYPES = {}
+    feature_converters.FeatureConverter.PACKING_FEATURE_DTYPES = {}
 
   def tearDown(self):
-    del feature_converters.FeatureConverter._task_feature_dtypes
-    del feature_converters.FeatureConverter._model_feature_dtypes
+    del feature_converters.FeatureConverter.TASK_FEATURE_DTYPES
+    del feature_converters.FeatureConverter.MODEL_FEATURE_DTYPES
+    del feature_converters.FeatureConverter.PACKING_FEATURE_DTYPES
     super().tearDown()
 
   def test_validate_dataset_missing_feature(self):
@@ -157,7 +159,7 @@ class FeatureConvertersTest(tf.test.TestCase):
 
     with mock.patch.object(feature_converters.FeatureConverter,
                            "__abstractmethods__", set()):
-      feature_converters.FeatureConverter._task_feature_dtypes = (
+      feature_converters.FeatureConverter.TASK_FEATURE_DTYPES = (
           task_feature_dtypes)
       converter = feature_converters.FeatureConverter()
       expected_msg = ("Dataset has incorrect type for feature 'inputs' during "
@@ -203,12 +205,12 @@ class FeatureConvertersTest(tf.test.TestCase):
     with mock.patch.object(feature_converters.FeatureConverter,
                            "__abstractmethods__", set()):
       converter = feature_converters.FeatureConverter()
-      feature_converters.FeatureConverter._task_feature_dtypes = {
+      feature_converters.FeatureConverter.TASK_FEATURE_DTYPES = {
           "inputs": tf.int64,
           "targets": tf.int64
       }
       expected_msg = ("The task_feature_lengths is missing features specified "
-                      "in the task_feature_dtypes: {'targets'}")
+                      "in the TASK_FEATURE_DTYPES: {'targets'}")
       with self.assertRaisesRegex(ValueError, expected_msg):
         converter(ds, task_feature_lengths)
 
