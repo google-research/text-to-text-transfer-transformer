@@ -14,6 +14,7 @@
 
 """Tests for t5.data.feature_converters."""
 
+import re
 from typing import Mapping, Sequence
 from unittest import mock
 from t5.data import feature_converters
@@ -136,10 +137,10 @@ class HelperFunctionsTest(tf.test.TestCase):
     list(ds.as_numpy_iterator())
 
   def test_check_exact_match_redundant_features(self):
-    extra = ["inputs", "random"]
     expected_msg = (
         "The input_dataset contains extra features not specified in the "
-        f"task_feature_dtypes: {set(extra)}")
+        "task_feature_dtypes: ({'random', 'inputs'}|{'inputs', 'random'})")
+    expected_msg = re.compile(expected_msg)
     with self.assertRaisesRegex(ValueError, expected_msg):
       feature_converters._check_exact_match(
           expected_features=["targets"],
@@ -148,10 +149,10 @@ class HelperFunctionsTest(tf.test.TestCase):
           actual_feature_source="input_dataset")
 
   def test_check_exact_match_missing_features(self):
-    missing = ["inputs", "random"]
     expected_msg = (
         "The input_dataset is missing features specified in the "
-        f"task_feature_dtypes: {set(missing)}")
+        "task_feature_dtypes: ({'random', 'inputs'}|{'inputs', 'random'})")
+    expected_msg = re.compile(expected_msg)
     with self.assertRaisesRegex(ValueError, expected_msg):
       feature_converters._check_exact_match(
           expected_features=["inputs", "targets", "random"],
