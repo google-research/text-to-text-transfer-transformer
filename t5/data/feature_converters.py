@@ -135,6 +135,87 @@ def _check_lengths(ds: tf.data.Dataset, expected_lengths: Mapping[str, int],
   return ds
 
 
+def non_padding_position(tensor: tf.Tensor,
+                         dtype: tf.dtypes.DType = tf.int32,
+                         pad_id: int = 0) -> tf.Tensor:
+  """Return a tensor with 1 on non-padding and 0 on padding positions."""
+  return tf.cast(tf.not_equal(tensor, pad_id), dtype=dtype)
+
+
+def _shift_right_by_one(tensor: tf.Tensor, axis: int = -1) -> tf.Tensor:
+  """Shift the 1d input tensor to the right by one position without wrapping."""
+
+  if not tensor.dtype.is_integer:
+    raise ValueError("Only integer types are supported.")
+
+  # tf.roll wraps around the axis.
+  rolled = tf.roll(tensor, shift=1, axis=axis)
+
+  # Zero out the first position by multiplying with [0, 1, 1, ..., 1].
+  reverse_onehot = tf.one_hot(0,
+                              depth=tensor.shape[axis],
+                              on_value=0,
+                              off_value=1,
+                              dtype=tensor.dtype)
+
+  return rolled * reverse_onehot
+
+
+def autoregressive_inputs(
+    targets: tf.Tensor,
+    sequence_id: tf.Tensor = None,
+    output_dtype: tf.dtypes.DType = tf.int32) -> tf.Tensor:
+  """Generate inputs for an autoregressive model, by shifting the targets.
+
+  Modified from mesh_tensorflow.transformer.transformer.autoregressive_inputs.
+
+  For the first element of each sequence, the returned input id is 0.
+
+  For a "packed" dataset, also pass the sequence_id tensor, which aligns
+  with the targets tensor and contains different values for different
+  concatenated examples.
+
+  Example for a packed dataset:
+
+  ```
+        targets = [3, 8, 1, 9, 1, 5, 4, 1, 0, 0]
+    sequence_id = [1, 1, 1, 2, 2, 3, 3, 3, 0, 0]
+         inputs = [0, 3, 8, 0, 9, 0, 5, 4, 0, 0]
+                            |     |        |
+                            These positions are set to 0 if sequence_id is not
+                            None.
+  ```
+
+  Args:
+    targets: a tf.int32 tensor with shape [length].
+    sequence_id: an optional tensor with the same shape as targets.
+    output_dtype: an optional output data type.
+
+  Returns:
+    a tensor with dtype tf.int32 and the same shape as targets.
+  """
+  if not targets.dtype.is_integer:
+    raise ValueError("The targets should be integer-valued tensors.")
+
+  if sequence_id is not None and not sequence_id.dtype.is_integer:
+    raise ValueError(
+        "The sequence_id should be integer-valued tensors for a packed dataset."
+    )
+
+  inputs = _shift_right_by_one(targets)
+  if inputs.dtype != output_dtype:
+    inputs = tf.cast(inputs, output_dtype)
+
+  # We should have a 0 at the beginning of each sequence rather than the
+  # shifted EOS (e.g. 1) from the previous sequence.
+  if sequence_id is not None:
+    not_first_in_sequence = tf.equal(
+        sequence_id,
+        _shift_right_by_one(sequence_id))
+    inputs *= tf.cast(not_first_in_sequence, output_dtype)
+  return inputs
+
+
 def _check_exact_match(expected_features: Sequence[str],
                        actual_features: Sequence[str],
                        expected_feature_source: str,
@@ -437,3 +518,124 @@ class FeatureConverter(abc.ABC):
   @property
   def pack(self) -> bool:
     return self._pack
+
+
+class EncDecFeatureConverter(FeatureConverter):
+  """Feature converter for an encoder-decoder architecture.
+
+  The input dataset has "inputs" and "targets" field. These will be converted
+  to a subset of standard features.
+
+  To use packing, pass pack = True argument to the FeatureConverter's
+  constructor. When packing is done, two additional fields are added for each of
+  "inputs" and "targets" fields.
+
+  Example for a packed dataset:
+
+  The input dataset has two examples each with "inputs" and "targets".
+
+  ds = [{"inputs": [7, 8, 5, 1], "targets": [3, 9, 1]},
+        {"inputs": [8, 4, 9, 3, 1], "targets": [4, 1]}]
+
+  task_feature_lengths = {"inputs": 10, "targets": 7}
+
+  First, the `inputs` are packed together, padded to length 10 and assigned to
+  "encoder_input_token" field. The `targets` are processed similarly.
+
+  The "*_segment_id" fields are generated from the packing operation. For the
+  explanation of these fields, see the module docstring.
+
+  The "decoder_loss_weight" is a binary mask indicating where non-padding
+  positions are, i.e., value of 1 indicates non-padding and 0 for padding. This
+  class assumes that the loss is taken only on the decoder side.
+
+  converted_ds = [{
+       "encoder_input_token": [7, 8, 5, 1, 8, 4, 9, 3, 1, 0],
+        "encoder_segment_id": [1, 1, 1, 1, 2, 2, 2, 2, 2, 0],
+      "decoder_target_token": [3, 9, 1, 4, 1, 0, 0],
+       "decoder_input_token": [0, 3, 9, 0, 4, 0, 0],
+       "decoder_loss_weight": [1, 1, 1, 1, 1, 0, 0],
+        "decoder_segment_id": [1, 1, 1, 2, 2, 0, 0],
+  }]
+
+  Note that two examples are packed together into one example.
+  """
+
+  TASK_FEATURE_DTYPES = {"inputs": tf.int32, "targets": tf.int32}
+  MODEL_FEATURE_DTYPES = {
+      "encoder_input_token": tf.int32,
+      "decoder_target_token": tf.int32,
+      "decoder_input_token": tf.int32,
+      "decoder_loss_weight": tf.int32,
+  }
+  PACKING_FEATURE_DTYPES = {
+      "encoder_segment_id": tf.int32,
+      "decoder_segment_id": tf.int32
+  }
+
+  def _convert_features(
+      self, ds: tf.data.Dataset,
+      task_feature_lengths: Mapping[str, int]) -> tf.data.Dataset:
+    """Convert the dataset to be fed to the encoder-decoder model.
+
+    The conversion process involves three steps
+
+    1. Each feature in the `task_feature_lengths` is trimmed/padded and
+       optionally packed depending on the value of self.pack.
+    2. "inputs" fields are mapped to the encoder input and "targets" are mapped
+       to decoder input (after being shifted) and target.
+
+    All the keys in the `task_feature_lengths` should be present in the input
+    dataset, which may contain some extra features that are not in the
+    `task_feature_lengths`. They will not be included in the output dataset.
+    One common scenario is the "inputs_plaintext" and "targets_plaintext"
+    fields.
+
+    Args:
+      ds: an input tf.data.Dataset to be converted.
+      task_feature_lengths: a mapping from feature to its length.
+
+    Returns:
+      ds: the converted dataset.
+    """
+
+    def convert_example(
+        features: Mapping[str, tf.Tensor]) -> Mapping[str, tf.Tensor]:
+      # targets_segment_id is present only for a packed dataset.
+      decoder_input_token = autoregressive_inputs(
+          features["targets"],
+          sequence_id=features.get("targets_segment_id", None))
+
+      d = {"encoder_input_token": features["inputs"],
+           "decoder_target_token": features["targets"],
+           "decoder_input_token": decoder_input_token,
+           # Loss is computed for all but the padding positions.
+           "decoder_loss_weight": non_padding_position(features["targets"])}
+
+      if self.pack:
+        d["encoder_segment_id"] = features["inputs_segment_id"]
+        d["decoder_segment_id"] = features["targets_segment_id"]
+
+      return d
+
+    ds = self._pack_or_pad(ds, task_feature_lengths)
+    return ds.map(
+        convert_example, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+  def get_model_feature_lengths(
+      self, task_feature_lengths: Mapping[str, int]) -> Mapping[str, int]:
+    """Define the length relationship between input and output features."""
+    encoder_length = task_feature_lengths["inputs"]
+    decoder_length = task_feature_lengths["targets"]
+
+    model_feature_lengths = {
+        "encoder_input_token": encoder_length,
+        "decoder_target_token": decoder_length,
+        "decoder_input_token": decoder_length,
+        "decoder_loss_weight": decoder_length
+    }
+    if self.pack:
+      model_feature_lengths["encoder_segment_id"] = encoder_length
+      model_feature_lengths["decoder_segment_id"] = decoder_length
+
+    return model_feature_lengths

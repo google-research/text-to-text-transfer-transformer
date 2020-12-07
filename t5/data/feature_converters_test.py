@@ -27,6 +27,63 @@ assert_dataset = test_utils.assert_dataset
 
 class HelperFunctionsTest(tf.test.TestCase):
 
+  def test_non_padding_position(self):
+    x = tf.constant([3, 8, 5, 0, 0, 2, 0])
+    non_padding_position = feature_converters.non_padding_position(x)
+    expected = [1, 1, 1, 0, 0, 1, 0]
+    actual = self.evaluate(non_padding_position)
+    self.assertAllEqual(actual, expected)
+
+  def test_shift_right_by_one(self):
+    x = tf.constant([3, 8, 1, 0, 0])
+    shifted = feature_converters._shift_right_by_one(x)
+    expected = [0, 3, 8, 1, 0]
+    actual = self.evaluate(shifted)
+    self.assertAllEqual(actual, expected)
+
+  def test_shift_right_by_one_nonzero_last_position(self):
+    x = tf.constant([3, 8, 8, 9, 4])
+    shifted = feature_converters._shift_right_by_one(x)
+    expected = [0, 3, 8, 8, 9]
+    actual = self.evaluate(shifted)
+    self.assertAllEqual(actual, expected)
+
+  def test_autoregressive_inputs_unpacked(self):
+    x = tf.constant([3, 8, 9, 5, 1, 0, 0])
+    autoreg_inputs = feature_converters.autoregressive_inputs(x)
+    actual = self.evaluate(autoreg_inputs)
+    expected = [0, 3, 8, 9, 5, 1, 0]
+    self.assertAllEqual(actual, expected)
+
+  def test_autoregressive_inputs_packed(self):
+    x = tf.constant([3, 8, 1, 9, 1, 5, 4, 1, 0, 0])
+    sequence_id = tf.constant([1, 1, 1, 2, 2, 3, 3, 3, 0, 0])
+    autoreg_inputs = feature_converters.autoregressive_inputs(
+        x, sequence_id=sequence_id)
+    actual = self.evaluate(autoreg_inputs)
+    expected = [0, 3, 8, 0, 9, 0, 5, 4, 0, 0]
+    self.assertAllEqual(actual, expected)
+
+  def test_autoregressive_inputs_packed_non_eos(self):
+    # In the correct input format, x[4] should have been 1 (EOS).
+    x = tf.constant([3, 8, 1, 9, 6, 5, 4, 1, 0, 0])
+    # sequence_id is correctly formated.
+    sequence_id = tf.constant([1, 1, 1, 2, 2, 3, 3, 3, 0, 0])
+    autoreg_inputs = feature_converters.autoregressive_inputs(
+        x, sequence_id=sequence_id)
+    actual = self.evaluate(autoreg_inputs)
+    # The incorrect x[4] should not affect the output as long as the sequence_id
+    # is correct.
+    expected = [0, 3, 8, 0, 9, 0, 5, 4, 0, 0]
+    self.assertAllEqual(actual, expected)
+
+  def test_autoregressive_inputs_different_dtypes(self):
+    x = tf.constant([3, 8, 1, 9, 1, 5, 4, 1, 0, 0])
+    sequence_id = tf.constant([1, 1, 1, 2, 2, 3, 3, 3, 0, 0], tf.int32)
+    autoreg_inputs = feature_converters.autoregressive_inputs(
+        x, sequence_id=sequence_id, output_dtype=tf.int64)
+    self.assertEqual(autoreg_inputs.dtype, tf.int64)
+
   def test_check_lengths_strict_no_exception(self):
     x = [{"inputs": [9, 4, 3, 8, 1], "targets": [3, 9, 4, 5]}]
     ds = create_default_dataset(x)
@@ -233,6 +290,140 @@ class FeatureConvertersTest(tf.test.TestCase):
           expected_lengths=task_feature_lengths,
           strict=True,
           error_label="initial")
+
+
+class EncDecFeatureConverterTest(tf.test.TestCase):
+
+  # def setUp(self):
+  #   super().setUp()
+  #   feature_converters.EncDecFeatureConverter._task_feature_dtypes = {
+  #       "inputs": tf.int32,
+  #       "targets": tf.int32
+  #   }
+  #   feature_converters.EncDecFeatureConverter._model_feature_dtypes = {
+  #       "encoder_input_token": tf.int32,
+  #       "decoder_target_token": tf.int32,
+  #       "decoder_input_token": tf.int32,
+  #       "decoder_loss_weight": tf.int32,
+  #   }
+
+  def test_encoder_decoder_unpacked(self):
+    x = [{"inputs": [9, 4, 3, 8, 1], "targets": [3, 9, 4, 1]}]
+    ds = create_default_dataset(x)
+    task_feature_lengths = {"inputs": 7, "targets": 5}
+
+    converter = feature_converters.EncDecFeatureConverter(pack=False)
+    converted_ds = converter(ds, task_feature_lengths)
+
+    expected = {
+        "encoder_input_token": [9, 4, 3, 8, 1, 0, 0],
+        "decoder_target_token": [3, 9, 4, 1, 0],
+        # mtf.transformer.autoregressive_inputs does not zero out the last eos
+        # when the data is not packed. This test mimic the behavior.
+        "decoder_input_token": [0, 3, 9, 4, 1],
+        "decoder_loss_weight": [1, 1, 1, 1, 0],
+    }
+    assert_dataset(converted_ds, expected)
+
+  def test_encoder_decoder_targets_max_length(self):
+    x = [{"inputs": [9, 4, 3, 8, 1], "targets": [3, 9, 4, 5, 1]}]
+    ds = create_default_dataset(x)
+    task_feature_lengths = {"inputs": 5, "targets": 5}
+
+    converter = feature_converters.EncDecFeatureConverter(pack=False)
+    converted_ds = converter(ds, task_feature_lengths)
+
+    expected = {
+        "encoder_input_token": [9, 4, 3, 8, 1],
+        "decoder_target_token": [3, 9, 4, 5, 1],
+        "decoder_input_token": [0, 3, 9, 4, 5],
+        "decoder_loss_weight": [1, 1, 1, 1, 1],
+    }
+    assert_dataset(converted_ds, expected)
+
+  def test_encoder_decoder_extra_long_inputs(self):
+    x = [{"inputs": [9, 4, 3, 8, 4, 5, 1], "targets": [3, 9, 4, 7, 8, 1]}]
+    ds = create_default_dataset(x)
+    task_feature_lengths = {"inputs": 5, "targets": 8}
+    expected_msg = (
+        r".*Feature \\'inputs\\' has length not less than or equal to the "
+        r"expected length of 5 during input_validation.*")
+    with self.assertRaisesRegex(tf.errors.InvalidArgumentError, expected_msg):
+      converter = feature_converters.EncDecFeatureConverter(pack=False)
+      converted_ds = converter(ds, task_feature_lengths)
+      list(converted_ds.as_numpy_iterator())
+
+  def test_encoder_decoder_packed(self):
+    x = [{"inputs": [7, 8, 5, 1], "targets": [3, 9, 1]},
+         {"inputs": [8, 4, 9, 3, 1], "targets": [4, 1]}]
+    ds = create_default_dataset(x)
+    task_feature_lengths = {"inputs": 10, "targets": 7}
+
+    converter = feature_converters.EncDecFeatureConverter(pack=True)
+    converted_ds = converter(ds, task_feature_lengths)
+    expected = {
+        "encoder_input_token": [7, 8, 5, 1, 8, 4, 9, 3, 1, 0],
+        "encoder_segment_id": [1, 1, 1, 1, 2, 2, 2, 2, 2, 0],
+        "decoder_target_token": [3, 9, 1, 4, 1, 0, 0],
+        "decoder_input_token": [0, 3, 9, 0, 4, 0, 0],
+        "decoder_loss_weight": [1, 1, 1, 1, 1, 0, 0],
+        "decoder_segment_id": [1, 1, 1, 2, 2, 0, 0],
+    }
+    assert_dataset(converted_ds, expected)
+
+  def test_encoder_decoder_packed_long_sequences(self):
+    x = [{"inputs": [7, 8, 5, 6, 9, 4, 1], "targets": [3, 9, 1]},
+         {"inputs": [8, 4, 9, 3, 5, 1], "targets": [4, 1]}]
+    ds = create_default_dataset(x)
+    task_feature_lengths = {"inputs": 7, "targets": 3}
+
+    converter = feature_converters.EncDecFeatureConverter(pack=True)
+    converted_ds = converter(ds, task_feature_lengths)
+
+    # Corner case: packing is true but task_feature_lengths are too long for
+    # packing to happen. We should still get the *_segment_id, *_position
+    # fields.
+    expected = [{
+        "encoder_input_token": [7, 8, 5, 6, 9, 4, 1],
+        "encoder_segment_id": [1, 1, 1, 1, 1, 1, 1],
+        "decoder_target_token": [3, 9, 1],
+        "decoder_input_token": [0, 3, 9],
+        "decoder_loss_weight": [1, 1, 1],
+        "decoder_segment_id": [1, 1, 1],
+    }, {
+        "encoder_input_token": [8, 4, 9, 3, 5, 1, 0],
+        "encoder_segment_id": [1, 1, 1, 1, 1, 1, 0],
+        "decoder_target_token": [4, 1, 0],
+        "decoder_input_token": [0, 4, 0],
+        "decoder_loss_weight": [1, 1, 0],
+        "decoder_segment_id": [1, 1, 0],
+    }]
+    assert_dataset(converted_ds, expected)
+
+  def test_encoder_decoder_plaintext_field(self):
+    x = [{
+        "inputs": [7, 8, 5, 1],
+        "targets": [3, 9, 1],
+        "targets_plaintext": "abc"
+    }, {
+        "inputs": [8, 4, 9, 3, 1],
+        "targets": [4, 1],
+        "targets_plaintext": "def"
+    }]
+    types = {
+        "inputs": tf.int32,
+        "targets": tf.int32,
+        "targets_plaintext": tf.string
+    }
+    shapes = {"inputs": [None], "targets": [None], "targets_plaintext": []}
+    ds = tf.data.Dataset.from_generator(
+        lambda: x, output_types=types, output_shapes=shapes)
+
+    task_feature_lengths = {"inputs": 10, "targets": 7}
+    converter = feature_converters.EncDecFeatureConverter(pack=True)
+    # Check whether convert_features raise error because targets_plaintext is
+    # present in the ds but not in the task_feature_lengths
+    converter(ds, task_feature_lengths)
 
 
 if __name__ == "__main__":
