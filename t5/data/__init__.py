@@ -23,3 +23,4 @@ import t5.data.tasks
 import t5.data.test_utils
 from t5.data.utils import *  # pylint:disable=wildcard-import
 from t5.data.vocabularies import *  # pylint:disable=wildcard-import
+from t5.data.feature_converters import *  # pylint:disable=wildcard-import

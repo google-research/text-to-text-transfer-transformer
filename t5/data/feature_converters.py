@@ -74,6 +74,8 @@ input dataset.
 import abc
 import functools
 from typing import Mapping, Sequence
+from absl import logging
+from t5.data import dataset_providers
 from t5.data import utils
 import tensorflow.compat.v2 as tf
 
@@ -639,3 +641,52 @@ class EncDecFeatureConverter(FeatureConverter):
       model_feature_lengths["decoder_segment_id"] = decoder_length
 
     return model_feature_lengths
+
+
+def get_dataset(
+    mixture_or_task_name: str,
+    task_feature_lengths: Mapping[str, int],
+    feature_converter: FeatureConverter,
+    dataset_split: str = "train",
+    use_cached: bool = False,
+    shuffle: bool = True,
+    verbose: bool = True
+) -> tf.data.Dataset:
+  """Get processed dataset with the model features.
+
+  Args:
+    mixture_or_task_name: mixture or task name for the Task API.
+    task_feature_lengths: dict mapping task feature key to its sequence length.
+      This specifies the sequence length of the dataset from the Task API.
+    feature_converter: a feature converter object to use to convert the task
+      features to model features.
+      Must be a subclass of FeatureConverter.
+    dataset_split: the split to use.
+    use_cached: whether to use the cached dataset instead of processing it on
+      the fly.
+    shuffle: whether to shuffle the dataset.
+    verbose: if true, log the feature shapes.
+
+  Returns:
+    ds: the processed dataset.
+  """
+  if not isinstance(feature_converter, FeatureConverter):
+    raise TypeError(
+        "feature_converter should be an instance of FeatureConverter.")
+
+  mixture_or_task = dataset_providers.get_mixture_or_task(mixture_or_task_name)
+  ds = mixture_or_task.get_dataset(
+      task_feature_lengths,
+      split=dataset_split,
+      use_cached=use_cached,
+      shuffle=shuffle)
+
+  ds = feature_converter(ds, task_feature_lengths=task_feature_lengths)
+
+  if verbose:
+    logging.info(
+        "The output dataset from t5.get_dataset has the following features")
+    for feature_name, tensor_spec in ds.element_spec.items():
+      logging.info("feature: %s \t shape: %s \t dtype: %s", feature_name,
+                   tensor_spec.shape.as_list(), tensor_spec.dtype.name)
+  return ds

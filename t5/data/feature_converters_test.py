@@ -15,8 +15,9 @@
 """Tests for t5.data.feature_converters."""
 
 import re
-from typing import Mapping, Sequence
+from typing import Mapping, Sequence, Callable
 from unittest import mock
+from t5.data import dataset_providers
 from t5.data import feature_converters
 from t5.data import test_utils
 import tensorflow.compat.v2 as tf
@@ -425,6 +426,145 @@ class EncDecFeatureConverterTest(tf.test.TestCase):
     # Check whether convert_features raise error because targets_plaintext is
     # present in the ds but not in the task_feature_lengths
     converter(ds, task_feature_lengths)
+
+
+def register_dummy_task(
+    task_name: str,
+    dataset_fn: Callable[[str, str], tf.data.Dataset],
+    output_feature_names: Sequence[str] = ("inputs", "targets")) -> None:
+  """Register a dummy task for GetDatasetTest."""
+  dataset_providers.TaskRegistry.add(
+      task_name,
+      dataset_providers.TaskV3,
+      source=dataset_providers.FunctionSource(
+          dataset_fn=dataset_fn, splits=["train", "validation"]),
+      preprocessors=[dataset_providers.CacheDatasetPlaceholder()],
+      output_features={
+          feat: dataset_providers.Feature(test_utils.sentencepiece_vocab())
+          for feat in output_feature_names
+      },
+      metric_fns=[])
+
+
+class GetDatasetTest(tf.test.TestCase):
+
+  def test_get_dataset_enc_dec_unpacked(self):
+    mixture_or_task_name = "enc_dec_unpacked"
+    x = [{"inputs": [7, 8, 5, 6, 9, 4, 3], "targets": [3, 9]},
+         {"inputs": [8, 4], "targets": [4]},
+         {"inputs": [5, 6, 7], "targets": [6, 5]}]
+    dtypes = {"inputs": tf.int64, "targets": tf.int64}
+    ds = create_default_dataset(x, output_types=dtypes)
+    dataset_fn = lambda split, shuffle_files: ds
+    register_dummy_task(mixture_or_task_name, dataset_fn=dataset_fn)
+
+    task_feature_lengths = {"inputs": 7, "targets": 5}
+    converter = feature_converters.EncDecFeatureConverter(pack=False)
+    output_ds = feature_converters.get_dataset(
+        mixture_or_task_name=mixture_or_task_name,
+        task_feature_lengths=task_feature_lengths,
+        dataset_split="train",
+        shuffle=False,
+        feature_converter=converter)
+
+    expected = [{
+        "encoder_input_token": [7, 8, 5, 6, 9, 4, 1],
+        "decoder_target_token": [3, 9, 1, 0, 0],
+        "decoder_input_token": [0, 3, 9, 1, 0],
+        "decoder_loss_weight": [1, 1, 1, 0, 0],
+    }, {
+        "encoder_input_token": [8, 4, 1, 0, 0, 0, 0],
+        "decoder_target_token": [4, 1, 0, 0, 0],
+        "decoder_input_token": [0, 4, 1, 0, 0],
+        "decoder_loss_weight": [1, 1, 0, 0, 0],
+    }, {
+        "encoder_input_token": [5, 6, 7, 1, 0, 0, 0],
+        "decoder_target_token": [6, 5, 1, 0, 0],
+        "decoder_input_token": [0, 6, 5, 1, 0],
+        "decoder_loss_weight": [1, 1, 1, 0, 0],
+    }]
+    expected_dtypes = {feat: tf.int32 for feat in expected[0].keys()}
+    assert_dataset(output_ds, expected, expected_dtypes=expected_dtypes)
+
+  def test_get_dataset_enc_dec_packed(self):
+    mixture_or_task_name = "enc_dec_packed"
+    x = [{"inputs": [7, 8, 5, 6, 9, 4, 3], "targets": [3, 9]},
+         {"inputs": [8, 4], "targets": [4]},
+         {"inputs": [5, 6, 7], "targets": [6, 5]}]
+    dtypes = {"inputs": tf.int64, "targets": tf.int64}
+    ds = create_default_dataset(x, output_types=dtypes)
+    dataset_fn = lambda split, shuffle_files: ds
+    register_dummy_task(mixture_or_task_name, dataset_fn=dataset_fn)
+
+    task_feature_lengths = {"inputs": 7, "targets": 5}
+    converter = feature_converters.EncDecFeatureConverter(pack=True)
+    output_ds = feature_converters.get_dataset(
+        mixture_or_task_name=mixture_or_task_name,
+        task_feature_lengths=task_feature_lengths,
+        dataset_split="train",
+        shuffle=False,
+        feature_converter=converter)
+
+    expected = [{
+        # Example 1 is trimmed
+        "encoder_input_token": [7, 8, 5, 6, 9, 4, 1],
+        "encoder_segment_id": [1, 1, 1, 1, 1, 1, 1],
+        "decoder_target_token": [3, 9, 1, 0, 0],
+        "decoder_input_token": [0, 3, 9, 0, 0],
+        "decoder_loss_weight": [1, 1, 1, 0, 0],
+        "decoder_segment_id": [1, 1, 1, 0, 0],
+    }, {
+        # Example 2 and 3 are packed together
+        "encoder_input_token": [8, 4, 1, 5, 6, 7, 1],
+        "encoder_segment_id": [1, 1, 1, 2, 2, 2, 2],
+        "decoder_target_token": [4, 1, 6, 5, 1],
+        "decoder_input_token": [0, 4, 0, 6, 5],
+        "decoder_loss_weight": [1, 1, 1, 1, 1],
+        "decoder_segment_id": [1, 1, 2, 2, 2],
+    }]
+    expected_dtypes = {feat: tf.int32 for feat in expected[0].keys()}
+    assert_dataset(output_ds, expected, expected_dtypes=expected_dtypes)
+
+  def test_get_dataset_both_train_and_validation_splits(self):
+    mixture_or_task_name = "both_train_and_validation_splits"
+    x_train = [{"inputs": [7, 8, 5, 6, 9, 4, 3], "targets": [3, 9]}]
+    x_val = [{"inputs": [8, 4], "targets": [4]}]
+    dtypes = {"inputs": tf.int64, "targets": tf.int64}
+    datasets = {
+        "train": create_default_dataset(x_train, output_types=dtypes),
+        "validation": create_default_dataset(x_val, output_types=dtypes)
+    }
+    dataset_fn = lambda split, shuffle_files: datasets[split]
+    register_dummy_task(mixture_or_task_name, dataset_fn=dataset_fn)
+
+    task_feature_lengths = {"inputs": 7, "targets": 5}
+    output_ds = {}
+    for split in ["train", "validation"]:
+      converter = feature_converters.EncDecFeatureConverter(pack=False)
+      output_ds[split] = feature_converters.get_dataset(
+          mixture_or_task_name=mixture_or_task_name,
+          task_feature_lengths=task_feature_lengths,
+          dataset_split=split,
+          shuffle=False,
+          feature_converter=converter)
+
+    expected_train = {
+        "encoder_input_token": [7, 8, 5, 6, 9, 4, 1],
+        "decoder_target_token": [3, 9, 1, 0, 0],
+        "decoder_input_token": [0, 3, 9, 1, 0],
+        "decoder_loss_weight": [1, 1, 1, 0, 0],
+    }
+    expected_val = {
+        "encoder_input_token": [8, 4, 1, 0, 0, 0, 0],
+        "decoder_target_token": [4, 1, 0, 0, 0],
+        "decoder_input_token": [0, 4, 1, 0, 0],
+        "decoder_loss_weight": [1, 1, 0, 0, 0],
+    }
+    expected_dtypes = {feat: tf.int32 for feat in expected_train.keys()}
+    assert_dataset(
+        output_ds["train"], expected_train, expected_dtypes=expected_dtypes)
+    assert_dataset(
+        output_ds["validation"], expected_val, expected_dtypes=expected_dtypes)
 
 
 if __name__ == "__main__":
