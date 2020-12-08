@@ -23,11 +23,9 @@ tf.compat.v1.enable_eager_execution()
 
 mock = absltest.mock
 
-_UNK_STRING = b" \xe2\x81\x87 "
-_TEST_STRING = b"this is a test"
-_TEST_TOKENS = (11, 8, 6, 3, 8, 6, 3, 5, 10)
-_TEST_BYTE_IDS = \
-    (119, 107, 108, 118, 35, 108, 118, 35, 100, 35, 119, 104, 118, 119)
+
+def _decode_tf(vocab, tokens):
+  return vocab.decode_tf(tokens).numpy().decode("UTF-8")
 
 
 class VocabularyTest(absltest.TestCase):
@@ -80,74 +78,62 @@ class VocabularyTest(absltest.TestCase):
     test_ids = [161] + self.TEST_IDS + [127, 191, 1, 0, 10]
     test_str = "\x02" + self.TEST_STR + "\x7f\x02"
     self.assertEqual(test_vocab.decode(test_ids), test_str)
-    self.assertEqual(
-        test_vocab.decode_tf(test_ids).numpy().decode("UTF-8"),
-        test_str)
+    self.assertEqual(_decode_tf(test_vocab, test_ids), test_str)
 
   def test_decode_unk_only(self):
     test_vocab = self.AsciiVocab(use_eos=False, use_unk=True, extra_ids=35)
     test_ids = [161] + self.TEST_IDS + [127, 191, 1, 33, 1]
     test_str = "\x02" + self.TEST_STR + "\x7f\x02\x01!\x01"
     self.assertEqual(test_vocab.decode(test_ids), test_str)
-    self.assertEqual(
-        test_vocab.decode_tf(test_ids).numpy().decode("UTF-8"),
-        test_str)
+    self.assertEqual(_decode_tf(test_vocab, test_ids), test_str)
 
   def test_decode_eos_only(self):
     test_vocab = self.AsciiVocab(use_eos=True, use_unk=False)
     test_ids = [161] + self.TEST_IDS + [127, 191, 1, 33, 1]
     test_str = "¡" + self.TEST_STR + "\x7f¿"
     self.assertEqual(test_vocab.decode(test_ids), test_str)
-    self.assertEqual(
-        test_vocab.decode_tf(test_ids).numpy().decode("UTF-8"),
-        test_str)
+    self.assertEqual(_decode_tf(test_vocab, test_ids), test_str)
 
     test_ids = [161] + self.TEST_IDS + [127, 191]
     test_str = "¡" + self.TEST_STR + "\x7f¿"
     self.assertEqual(test_vocab.decode(test_ids), test_str)
-    self.assertEqual(
-        test_vocab.decode_tf(test_ids).numpy().decode("UTF-8"),
-        test_str)
+    self.assertEqual(_decode_tf(test_vocab, test_ids), test_str)
 
     test_ids = [1] + self.TEST_IDS
     test_str = ""
     self.assertEqual(test_vocab.decode(test_ids), test_str)
-    self.assertEqual(
-        test_vocab.decode_tf(test_ids).numpy().decode("UTF-8"),
-        test_str)
+    self.assertEqual(_decode_tf(test_vocab, test_ids), test_str)
 
   def test_decode_no_unk_or_eos(self):
     test_vocab = self.AsciiVocab(use_eos=False, use_unk=False)
     test_ids = [161] + self.TEST_IDS +  [127, 191, 1, 33, 1]
     test_str = "¡" + self.TEST_STR + "\x7f¿\x01!\x01"
     self.assertEqual(test_vocab.decode(test_ids), test_str)
-    self.assertEqual(
-        test_vocab.decode_tf(test_ids).numpy().decode("UTF-8"),
-        test_str)
+    self.assertEqual(_decode_tf(test_vocab, test_ids), test_str)
 
 
 class SentencepieceVocabularyTest(absltest.TestCase):
 
+  TEST_STRING = "this is a test"
+  TEST_TOKENS = (11, 8, 6, 3, 8, 6, 3, 5, 10)
+  UNK_STRING = " ⁇ "
+
   def test_vocab(self):
     vocab = test_utils.sentencepiece_vocab()
     self.assertEqual(26, vocab.vocab_size)
-    self.assertSequenceEqual(_TEST_TOKENS, vocab.encode(_TEST_STRING))
-    self.assertEqual(
-        _TEST_STRING,
-        tf.compat.as_bytes(vocab.decode(_TEST_TOKENS)))
+    self.assertSequenceEqual(self.TEST_TOKENS, vocab.encode(self.TEST_STRING))
+    self.assertEqual(self.TEST_STRING, vocab.decode(self.TEST_TOKENS))
     self.assertSequenceEqual(
-        _TEST_TOKENS,
-        tuple(vocab.encode_tf(_TEST_STRING).numpy()))
-    self.assertEqual(
-        _TEST_STRING,
-        vocab.decode_tf(_TEST_TOKENS).numpy())
+        self.TEST_TOKENS,
+        tuple(vocab.encode_tf(self.TEST_STRING).numpy()))
+    self.assertEqual(self.TEST_STRING, _decode_tf(vocab, self.TEST_TOKENS))
 
   def test_extra_ids(self):
     vocab = test_utils.sentencepiece_vocab(extra_ids=10)
     self.assertEqual(36, vocab.vocab_size)
     self.assertEqual("v", vocab.decode([25]))
-    self.assertEqual(_UNK_STRING, tf.compat.as_bytes(vocab.decode([35])))
-    self.assertEqual(_UNK_STRING, vocab.decode_tf([35]).numpy())
+    self.assertEqual(self.UNK_STRING, vocab.decode([35]))
+    self.assertEqual(self.UNK_STRING, _decode_tf(vocab, [35]))
 
 
   def test_equal(self):
@@ -163,21 +149,19 @@ class SentencepieceVocabularyTest(absltest.TestCase):
 
 class ByteVocabularyTest(absltest.TestCase):
 
+  TEST_STRING = "this is a test"
+  TEST_BYTE_IDS = (
+      119, 107, 108, 118, 35, 108, 118, 35, 100, 35, 119, 104, 118, 119)
+
   def test_vocab(self):
     vocab = vocabularies.ByteVocabulary()
     self.assertEqual(259, vocab.vocab_size)
-    self.assertSequenceEqual(
-        _TEST_BYTE_IDS,
-        vocab.encode(_TEST_STRING.decode()))
+    self.assertSequenceEqual(self.TEST_BYTE_IDS, vocab.encode(self.TEST_STRING))
+    self.assertEqual(self.TEST_STRING, vocab.decode(self.TEST_BYTE_IDS))
     self.assertEqual(
-        _TEST_STRING,
-        tf.compat.as_bytes(vocab.decode(_TEST_BYTE_IDS)))
-    self.assertEqual(
-        _TEST_BYTE_IDS,
-        tuple(vocab.encode_tf(_TEST_STRING).numpy()))
-    self.assertEqual(
-        _TEST_STRING,
-        vocab.decode_tf(_TEST_BYTE_IDS).numpy())
+        self.TEST_BYTE_IDS,
+        tuple(vocab.encode_tf(self.TEST_STRING).numpy()))
+    self.assertEqual(self.TEST_STRING, _decode_tf(vocab, self.TEST_BYTE_IDS))
 
   def test_extra_ids(self):
     vocab = vocabularies.ByteVocabulary(extra_ids=10)

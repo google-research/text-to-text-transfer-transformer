@@ -24,7 +24,7 @@ from typing import Mapping
 from absl import logging
 import gin
 import numpy as np
-from t5.data import sentencepiece_vocabulary
+from t5.data import vocabularies
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
 
@@ -40,7 +40,7 @@ DEFAULT_EXTRA_IDS = 100
 
 
 def get_default_vocabulary():
-  return sentencepiece_vocabulary.SentencePieceVocabulary(
+  return vocabularies.SentencePieceVocabulary(
       DEFAULT_SPM_PATH, DEFAULT_EXTRA_IDS)
 
 

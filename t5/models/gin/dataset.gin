@@ -2,7 +2,6 @@
 # Gets a dataset from tasks_v2 or mixtures
 
 import t5.data.mixtures
-import t5.data.sentencepiece_vocabulary
 import t5.models.mesh_transformer
 
 # Override these values

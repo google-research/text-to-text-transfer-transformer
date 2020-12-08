@@ -19,11 +19,7 @@ from t5.data.glue_utils import *  # pylint:disable=wildcard-import
 import t5.data.mixtures
 import t5.data.postprocessors
 import t5.data.preprocessors
-# For backwards compatibility with an old import path
-import t5.data.sentencepiece_vocabulary
-# For backwards compatibility with an old import path
-from t5.data.sentencepiece_vocabulary import SentencePieceVocabulary
 import t5.data.tasks
 import t5.data.test_utils
 from t5.data.utils import *  # pylint:disable=wildcard-import
-import t5.data.vocabularies
+from t5.data.vocabularies import *  # pylint:disable=wildcard-import

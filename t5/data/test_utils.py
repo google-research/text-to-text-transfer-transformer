@@ -28,7 +28,7 @@ from absl.testing import absltest
 import numpy as np
 from t5.data import dataset_providers
 from t5.data import preprocessors
-from t5.data import sentencepiece_vocabulary
+from t5.data import vocabularies
 from t5.data import utils as dataset_utils
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
@@ -445,7 +445,7 @@ class MockVocabulary(object):
 
 
 def sentencepiece_vocab(extra_ids=0):
-  return sentencepiece_vocabulary.SentencePieceVocabulary(
+  return vocabularies.SentencePieceVocabulary(
       os.path.join(TEST_DATA_DIR, "sentencepiece", "sentencepiece.model"),
       extra_ids=extra_ids)
 
