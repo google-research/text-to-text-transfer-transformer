@@ -37,20 +37,22 @@ FeatureConverter class in a similar manner.
 
 Definition: standard_features
 
-Throughout this module, we refer to the following 8 fields as standard_features.
-Depending on the model architecture, a subset of them will be returned by the
-feature converter.
+Throughout this module, we refer to the following 10 fields as
+standard_features. Depending on the model architecture, a subset of them will
+be returned by the feature converter.
 
   - encoder_input_token
   - encoder_target_token
   - encoder_loss_weight
+  - encoder_position
   - encoder_segment_id
   - decoder_input_token
   - decoder_target_token
   - decoder_loss_weight
+  - decoder_position
   - decoder_segment_id
 
-  *_segment_id fields are only relevant for packed dataset.
+  *_segment_id and *_position fields are only relevant for packed dataset.
 
   *_segment_id is a tf.Tensor of integer which is aligned with
   *_input_token. Positive integers represent the sequence membership in
@@ -58,6 +60,12 @@ feature converter.
   [1, 1, 2, 2, 2, 0] means that the first two positions belong to the first
   sequence, the next three to the second sequence and the last position is a
   padding.
+
+  *_position is a tf.Tensor of integer representing the position index in the
+  original sequence before packing. For example, consider
+  encoder_position = [0, 1, 0, 1, 2, 0]. The first two tokens were the 0th and
+  1st tokens of the first sequence and next three tokens are the 0th, 1st and
+  2nd tokens of the second sequence before packing.
 
   *_loss_weight is used to indicate which positions should be used for the loss
   calculation.
@@ -554,10 +562,12 @@ class EncDecFeatureConverter(FeatureConverter):
   converted_ds = [{
        "encoder_input_token": [7, 8, 5, 1, 8, 4, 9, 3, 1, 0],
         "encoder_segment_id": [1, 1, 1, 1, 2, 2, 2, 2, 2, 0],
+          "encoder_position": [0, 1, 2, 3, 0, 1, 2, 3, 4, 0],
       "decoder_target_token": [3, 9, 1, 4, 1, 0, 0],
        "decoder_input_token": [0, 3, 9, 0, 4, 0, 0],
        "decoder_loss_weight": [1, 1, 1, 1, 1, 0, 0],
         "decoder_segment_id": [1, 1, 1, 2, 2, 0, 0],
+          "decoder_position": [0, 1, 2, 0, 1, 0, 0],
   }]
 
   Note that two examples are packed together into one example.
@@ -572,7 +582,9 @@ class EncDecFeatureConverter(FeatureConverter):
   }
   PACKING_FEATURE_DTYPES = {
       "encoder_segment_id": tf.int32,
-      "decoder_segment_id": tf.int32
+      "decoder_segment_id": tf.int32,
+      "encoder_position": tf.int32,
+      "decoder_position": tf.int32
   }
 
   def _convert_features(
@@ -617,6 +629,8 @@ class EncDecFeatureConverter(FeatureConverter):
       if self.pack:
         d["encoder_segment_id"] = features["inputs_segment_id"]
         d["decoder_segment_id"] = features["targets_segment_id"]
+        d["encoder_position"] = features["inputs_position"]
+        d["decoder_position"] = features["targets_position"]
 
       return d
 
@@ -639,6 +653,8 @@ class EncDecFeatureConverter(FeatureConverter):
     if self.pack:
       model_feature_lengths["encoder_segment_id"] = encoder_length
       model_feature_lengths["decoder_segment_id"] = decoder_length
+      model_feature_lengths["encoder_position"] = encoder_length
+      model_feature_lengths["decoder_position"] = decoder_length
 
     return model_feature_lengths
 

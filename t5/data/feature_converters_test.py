@@ -296,19 +296,6 @@ class FeatureConvertersTest(tf.test.TestCase):
 
 class EncDecFeatureConverterTest(tf.test.TestCase):
 
-  # def setUp(self):
-  #   super().setUp()
-  #   feature_converters.EncDecFeatureConverter._task_feature_dtypes = {
-  #       "inputs": tf.int32,
-  #       "targets": tf.int32
-  #   }
-  #   feature_converters.EncDecFeatureConverter._model_feature_dtypes = {
-  #       "encoder_input_token": tf.int32,
-  #       "decoder_target_token": tf.int32,
-  #       "decoder_input_token": tf.int32,
-  #       "decoder_loss_weight": tf.int32,
-  #   }
-
   def test_encoder_decoder_unpacked(self):
     x = [{"inputs": [9, 4, 3, 8, 1], "targets": [3, 9, 4, 1]}]
     ds = create_default_dataset(x)
@@ -366,10 +353,12 @@ class EncDecFeatureConverterTest(tf.test.TestCase):
     expected = {
         "encoder_input_token": [7, 8, 5, 1, 8, 4, 9, 3, 1, 0],
         "encoder_segment_id": [1, 1, 1, 1, 2, 2, 2, 2, 2, 0],
+        "encoder_position": [0, 1, 2, 3, 0, 1, 2, 3, 4, 0],
         "decoder_target_token": [3, 9, 1, 4, 1, 0, 0],
         "decoder_input_token": [0, 3, 9, 0, 4, 0, 0],
         "decoder_loss_weight": [1, 1, 1, 1, 1, 0, 0],
         "decoder_segment_id": [1, 1, 1, 2, 2, 0, 0],
+        "decoder_position": [0, 1, 2, 0, 1, 0, 0],
     }
     assert_dataset(converted_ds, expected)
 
@@ -388,17 +377,21 @@ class EncDecFeatureConverterTest(tf.test.TestCase):
     expected = [{
         "encoder_input_token": [7, 8, 5, 6, 9, 4, 1],
         "encoder_segment_id": [1, 1, 1, 1, 1, 1, 1],
+        "encoder_position": [0, 1, 2, 3, 4, 5, 6],
         "decoder_target_token": [3, 9, 1],
         "decoder_input_token": [0, 3, 9],
         "decoder_loss_weight": [1, 1, 1],
         "decoder_segment_id": [1, 1, 1],
+        "decoder_position": [0, 1, 2],
     }, {
         "encoder_input_token": [8, 4, 9, 3, 5, 1, 0],
         "encoder_segment_id": [1, 1, 1, 1, 1, 1, 0],
+        "encoder_position": [0, 1, 2, 3, 4, 5, 0],
         "decoder_target_token": [4, 1, 0],
         "decoder_input_token": [0, 4, 0],
         "decoder_loss_weight": [1, 1, 0],
         "decoder_segment_id": [1, 1, 0],
+        "decoder_position": [0, 1, 0],
     }]
     assert_dataset(converted_ds, expected)
 
@@ -509,18 +502,22 @@ class GetDatasetTest(tf.test.TestCase):
         # Example 1 is trimmed
         "encoder_input_token": [7, 8, 5, 6, 9, 4, 1],
         "encoder_segment_id": [1, 1, 1, 1, 1, 1, 1],
+        "encoder_position": [0, 1, 2, 3, 4, 5, 6],
         "decoder_target_token": [3, 9, 1, 0, 0],
         "decoder_input_token": [0, 3, 9, 0, 0],
         "decoder_loss_weight": [1, 1, 1, 0, 0],
         "decoder_segment_id": [1, 1, 1, 0, 0],
+        "decoder_position": [0, 1, 2, 0, 0],
     }, {
         # Example 2 and 3 are packed together
         "encoder_input_token": [8, 4, 1, 5, 6, 7, 1],
         "encoder_segment_id": [1, 1, 1, 2, 2, 2, 2],
+        "encoder_position": [0, 1, 2, 0, 1, 2, 3],
         "decoder_target_token": [4, 1, 6, 5, 1],
         "decoder_input_token": [0, 4, 0, 6, 5],
         "decoder_loss_weight": [1, 1, 1, 1, 1],
         "decoder_segment_id": [1, 1, 2, 2, 2],
+        "decoder_position": [0, 1, 0, 1, 2],
     }]
     expected_dtypes = {feat: tf.int32 for feat in expected[0].keys()}
     assert_dataset(output_ds, expected, expected_dtypes=expected_dtypes)
