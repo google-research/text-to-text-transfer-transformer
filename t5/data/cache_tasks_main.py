@@ -106,7 +106,7 @@ class PreprocessTask(beam.PTransform):
     self._max_input_examples = max_input_examples
     self._split = split
     self._modules_to_import = modules_to_import
-    self.shards = task.source.list_shards(split)
+    self.shards = list(range(len(task.source.list_shards(split))))
     logging.info(
         "%s %s shards: %s", task.name, split, ", ".join(
             ["%s" % f for f in self.shards]))
@@ -115,18 +115,21 @@ class PreprocessTask(beam.PTransform):
     metrics.Metrics.counter(
         str("%s_%s" % (self._task.name, self._split)), name).inc()
 
-  def _emit_examples(self, shard):
-    """Emits examples keyed by shard path and index for a single shard."""
+  def _emit_examples(self, shard_index):
+    """Emits examples keyed by shard number and index for a single shard."""
     _import_modules(self._modules_to_import)
-    logging.info("Processing shard: %s", shard)
+    logging.info("Processing shard: %d", shard_index)
     self._increment_counter("input-shards")
 
     ds = self._task.source.get_dataset(
-        split=self._split, shard=shard, shuffle=False)
+        split=self._split,
+        shard_info=t5.data.ShardInfo(
+            index=shard_index, num_shards=len(self.shards)
+        ),
+        shuffle=False)
 
     if self._max_input_examples:
-      num_shard_examples = int(
-          self._max_input_examples / len(self.shards))
+      num_shard_examples = int(self._max_input_examples / len(self.shards))
       ds = ds.repeat().take(num_shard_examples)
 
     ds = self._task.preprocess_precache(ds)

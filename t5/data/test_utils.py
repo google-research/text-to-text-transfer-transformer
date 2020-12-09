@@ -17,6 +17,7 @@
 
 import collections
 import copy
+import functools
 import os
 import shutil
 import sys
@@ -28,8 +29,8 @@ from absl.testing import absltest
 import numpy as np
 from t5.data import dataset_providers
 from t5.data import preprocessors
-from t5.data import vocabularies
 from t5.data import utils as dataset_utils
+from t5.data import vocabularies
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
 
@@ -237,12 +238,22 @@ def _assert_compare_to_fake_dataset(
 
 def verify_task_matches_fake_datasets(
     task, use_cached, token_preprocessed=False, splits=("train", "validation"),
+    num_shards=None
 ):
   """Assert all splits for both tokenized datasets are correct."""
   for split in splits:
+    get_dataset = functools.partial(
+        task.get_dataset, _SEQUENCE_LENGTH, split, use_cached=use_cached,
+        shuffle=False)
+    if num_shards:
+      ds = get_dataset(shard_info=dataset_providers.ShardInfo(0, num_shards))
+      for i in range(1, num_shards):
+        ds = ds.concatenate(
+            get_dataset(shard_info=dataset_providers.ShardInfo(i, num_shards)))
+    else:
+      ds = get_dataset()
     _assert_compare_to_fake_dataset(
-        task.get_dataset(
-            _SEQUENCE_LENGTH, split, use_cached=use_cached, shuffle=False),
+        ds,
         split,
         task.output_features,
         token_preprocessed=token_preprocessed,
@@ -338,7 +349,7 @@ def assert_datasets_neq(dataset1, dataset2):
                              assert_datasets_eq, dataset1, dataset2)
 
 
-def get_fake_dataset(split, shuffle_files=False, seed=None):
+def get_fake_dataset(split, shuffle_files=False, seed=None, shard_info=None):
   """Returns a tf.data.Dataset with fake data."""
   del shuffle_files  # Unused, to be compatible with TFDS API.
   del seed
@@ -351,8 +362,11 @@ def get_fake_dataset(split, shuffle_files=False, seed=None):
   if split == "validation":
     output_shapes.update({"idxs": [None], "ids": [None]})
 
-  return tf.data.Dataset.from_generator(
+  ds = tf.data.Dataset.from_generator(
       lambda: _FAKE_DATASET[split], output_types, output_shapes)
+  if shard_info:
+    ds = ds.shard(num_shards=shard_info.num_shards, index=shard_info.index)
+  return ds
 
 
 def test_text_preprocessor(dataset):

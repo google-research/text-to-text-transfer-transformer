@@ -53,6 +53,13 @@ class Feature:
   dtype: tf.DType = tf.int32
 
 
+@dataclasses.dataclass(frozen=True)
+class ShardInfo:
+  """A container for specifying sharding info."""
+  index: int
+  num_shards: int
+
+
 class DatasetProviderBase(metaclass=abc.ABCMeta):
   """Abstract base for classes that provide a tf.data.Dataset."""
 
@@ -71,8 +78,10 @@ class DatasetProviderBase(metaclass=abc.ABCMeta):
       split: str,
       use_cached: bool = False,
       shuffle: bool = True,
-      seed: Optional[int] = None
+      seed: Optional[int] = None,
+      shard_info: Optional[ShardInfo] = None,
   ) -> tf.data.Dataset:
+    """Returns the requested tf.data.Dataset."""
     raise NotImplementedError
 
   @abc.abstractmethod
@@ -130,10 +139,12 @@ class DatasetProviderRegistry(object):
       split,
       use_cached=False,
       shuffle=True,
-      seed=None):
+      seed=None,
+      shard_info=None):
+    """Returns the requested tf.data.Dataset."""
     return cls.get(name).get_dataset(
         sequence_length=sequence_length, split=split, use_cached=use_cached,
-        shuffle=shuffle, seed=seed)
+        shuffle=shuffle, seed=seed, shard_info=shard_info)
 
 
 # =============================== DataSources ==================================
@@ -174,7 +185,7 @@ class DataSource(DatasetProviderBase):
       split: str,
       shuffle: bool = True,
       seed: Optional[int] = None,
-      shard: Optional[str] = None
+      shard_info: Optional[ShardInfo] = None
     ) -> tf.data.Dataset:
     """Overrides base class to add shard identifier and remove use_cached.
 
@@ -182,8 +193,7 @@ class DataSource(DatasetProviderBase):
       split: string, the split to return.
       shuffle: bool, whether to shuffle the input source.
       seed: tf.int64 scalar tf.Tensor (or None) for shuffling input source.
-      shard: string, optional identifier for loading a single shard of the
-        split.
+      shard_info: optional specification for loading a shard of the split.
     """
     raise NotImplementedError
 
@@ -247,8 +257,13 @@ class FunctionSource(DataSource):
       split: str,
       shuffle: bool = True,
       seed: Optional[int] = None,
-      shard: Optional[str] = None
+      shard_info: Optional[ShardInfo] = None
   ) -> tf.data.Dataset:
+    if shard_info and shard_info.num_shards > 1:
+      raise ValueError(
+          "`FunctionSource` does not support low-level sharding. Use "
+          "tf.data.Dataset.shard instead.")
+
     if seed is None:
       ds = self._dataset_fn(split=split, shuffle_files=shuffle)
     else:
@@ -308,12 +323,10 @@ class TfdsDataSource(DataSource):
       split: str,
       shuffle: bool = True,
       seed: Optional[int] = None,
-      shard: Optional[str] = None
+      shard_info: Optional[ShardInfo] = None
   ) -> tf.data.Dataset:
-    if shard:
-      return self.tfds_dataset.load_shard(
-          shard, shuffle_files=shuffle, seed=seed)
-    return self.tfds_dataset.load(split, shuffle_files=shuffle, seed=seed)
+    return self.tfds_dataset.load(
+        split, shuffle_files=shuffle, seed=seed, shard_info=shard_info)
 
   def num_input_examples(self, split: str) -> int:
     """Overrides since we can't call `info.splits` until after init."""
@@ -354,13 +367,22 @@ class FileDataSource(DataSource):
       split: str,
       shuffle: bool = True,
       seed: Optional[int] = None,
-      shard: Optional[str] = None
+      shard_info: Optional[ShardInfo] = None
     ) -> tf.data.Dataset:
-    filepattern = shard or self._split_to_filepattern[split]
+    files = self.list_shards(split)
+    files_ds = tf.data.Dataset.from_tensor_slices(files)
 
-    files = tf.data.Dataset.list_files(filepattern, shuffle=shuffle, seed=seed)
+    if shard_info:
+      if len(files) < shard_info.num_shards:
+        raise ValueError(
+            f"Dataset has too few files to shard. {len(files)} files vs "
+            f"{shard_info.num_shards} shards requested.")
+      files_ds = files_ds.shard(shard_info.num_shards, shard_info.index)
 
-    return files.interleave(
+    if shuffle:
+      files_ds = files_ds.shuffle(buffer_size=16, seed=seed)
+
+    return files_ds.interleave(
         self._reader,
         cycle_length=16,
         block_length=16,
@@ -439,11 +461,11 @@ class TFExampleDataSource(FileDataSource):
       split: str,
       shuffle: bool = True,
       seed: Optional[int] = None,
-      shard: Optional[str] = None
+      shard_info: Optional[ShardInfo] = None
     ) -> tf.data.Dataset:
     """Overrides to parse tf.train.Example proto after reading file."""
     ds = super().get_dataset(
-        split=split, shuffle=shuffle, seed=seed, shard=shard)
+        split=split, shuffle=shuffle, seed=seed, shard_info=shard_info)
     return ds.map(
         lambda pb: tf.io.parse_single_example(pb, self._feature_description),
         num_parallel_calls=tf.data.experimental.AUTOTUNE)
@@ -780,6 +802,7 @@ class TaskV3(DatasetProviderBase):
       shuffle: bool = True,
       shuffle_buffer_size: Optional[int] = None,
       seed: Optional[int] = None,
+      shard_info: Optional[ShardInfo] = None,
   ) -> tf.data.Dataset:
     """Returns a tf.data.Dataset from cache or generated on the fly.
 
@@ -792,8 +815,14 @@ class TaskV3(DatasetProviderBase):
         on the fly (use_cached=False).
       shuffle_buffer_size: an integer or None to use task-specific buffer size.
       seed: tf.int64 scalar tf.Tensor (or None) for shuffling tf.data.
+      shard_info: optional specification for loading a shard of the split. If
+        the Task's DataSource contains at least the number of shards in the
+        specification, it will be passed the shard info to avoid loading the
+        full source dataset. Otherwise, the full source dataset will be loaded
+        and sharded at the individual examples.
+
     Returns:
-      A mixed tf.data.Dataset.
+      A tf.data.Dataset.
     """
     if seed is not None:
       logging.warning(("Global random seed is now set to %d. All TF operations "
@@ -806,19 +835,41 @@ class TaskV3(DatasetProviderBase):
           "Task '%s' does not support caching. Switching to on-the-fly "
           "preprocessing.", self.name)
       use_cached = False
-    if use_cached:
-      ds = self._get_cached_dataset(split, shuffle)
+
+    if shard_info:
+      # Whether we should shard at source or on the examples from the source.
+      shard_data_source = (
+          len(self.source.list_shards(split=split)) >= shard_info.num_shards)
+      logging.info("Sharding at the %s: %d of %d",
+                   "data source" if shard_data_source else "examples",
+                   shard_info.index, shard_info.num_shards)
     else:
-      ds = self.source.get_dataset(split=split, shuffle=shuffle, seed=seed)
+      # No sharding.
+      shard_data_source = False
+      shard_info = ShardInfo(0, 1)
+
+    if use_cached:
+      source = self._get_cached_source(split)
+    else:
+      source = self.source
+
+    if shard_data_source:
+      ds = source.get_dataset(
+          split=split, shuffle=shuffle, seed=seed, shard_info=shard_info)
+    else:
+      ds = source.get_dataset(split=split, shuffle=shuffle, seed=seed)
+      ds = ds.shard(shard_info.num_shards, shard_info.index)
+
+    if not use_cached:
       ds = self.preprocess_precache(ds, seed)
 
     ds = ds.prefetch(tf.data.experimental.AUTOTUNE)
 
-    if (not use_cached and self.num_input_examples(split) and
+    if (self.num_input_examples(split) and
         self.num_input_examples(split) < _MAX_EXAMPLES_TO_MEM_CACHE):
       ds = ds.cache()
 
-   # Post tokenization processing.
+    # Post cache processing.
     ds = self.preprocess_postcache(ds, sequence_length=sequence_length)
     ds = self._cast_trim_and_ensure_eos(ds, sequence_length=sequence_length)
     ds = maybe_print_dataset(ds)
@@ -831,11 +882,8 @@ class TaskV3(DatasetProviderBase):
 
     return ds.prefetch(tf.data.experimental.AUTOTUNE)
 
-  def _get_cached_dataset(self,
-                          split: str = tfds.Split.TRAIN,
-                          shuffle: bool = True,
-                          seed: Optional[int] = None) -> tf.data.Dataset:
-    """Returns a tf.data.Dataset read from cached files."""
+  def _get_cached_source(self, split) -> TFExampleDataSource:
+    """Returns a DataSource to read cached files for split."""
     self.assert_cached()
     with tf.io.gfile.GFile(utils.get_info_path(self.cache_dir, split)) as f:
       split_info = json.load(f)
@@ -846,25 +894,24 @@ class TaskV3(DatasetProviderBase):
         return tf.io.FixedLenSequenceFeature(
             shape[1:], dtype, allow_missing=True)
       return tf.io.FixedLenFeature(shape, dtype)
+
     feature_desc = {
         feat: _feature_config(**desc)
-        for feat, desc in split_info["features"].items()}
+        for feat, desc in split_info["features"].items()
+    }
 
-    ds = tf.data.Dataset.list_files(
-        "%s-*-of-*%d" % (
-            utils.get_tfrecord_prefix(self.cache_dir, split),
-            split_info["num_shards"]),
-        shuffle=shuffle,
-        seed=seed)
-    ds = ds.interleave(
-        tf.data.TFRecordDataset,
-        cycle_length=16, block_length=16,
-        num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    ds = ds.map(lambda ex: tf.io.parse_single_example(ex, feature_desc),
-                num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    if self.get_cached_stats(split)["examples"] <= _MAX_EXAMPLES_TO_MEM_CACHE:
-      ds = ds.cache()
-    return ds
+    return TFExampleDataSource(
+        split_to_filepattern={
+            split: "%s-*-of-*%d" % (
+                utils.get_tfrecord_prefix(self.cache_dir, split),
+                split_info["num_shards"]
+            )
+        },
+        feature_description=feature_desc,
+        num_input_examples={
+            split: self.get_cached_stats(split)["examples"]
+        }
+    )
 
   def postprocess_fn(self, decoded_model_output: Any,
                      **postprocess_kwargs) -> Any:
@@ -1231,6 +1278,7 @@ class Mixture(DatasetProviderBase):
       use_cached: bool = False,
       shuffle: bool = True,
       seed: Optional[int] = None,
+      shard_info: Optional[ShardInfo] = None,
       copy_plaintext: bool = False,
       compute_stats_empirically: bool = False,
   ) -> tf.data.Dataset:
@@ -1244,6 +1292,7 @@ class Mixture(DatasetProviderBase):
       shuffle: bool, whether to shuffle the dataset.  Only used when generating
         on the fly (use_cached=False).
       seed: tf.int64 scalar tf.Tensor (or None) for shuffling tf.data.
+      shard_info: optional specification for loading a shard of the split.
       copy_plaintext: bool, whether to pass through copies of plaintext strings
         with a "_plaintext" suffix added to the key.
       compute_stats_empirically: a boolean - does not work on TPU
@@ -1273,7 +1322,8 @@ class Mixture(DatasetProviderBase):
             split=split,
             use_cached=use_cached,
             shuffle=shuffle,
-            seed=seed)
+            seed=seed,
+            shard_info=shard_info)
         .repeat()
         .map(filter_features, num_parallel_calls=tf.data.experimental.AUTOTUNE)
         for task in tasks]

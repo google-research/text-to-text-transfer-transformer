@@ -131,9 +131,13 @@ class LazyTfdsLoader(object):
       logging.fatal("No TFRecord files found for dataset: %s", self.name)
     return files
 
-  def load(self, split, shuffle_files, seed=None):
+  def load(self, split, shuffle_files, seed=None, shard_info=None):
     """Returns a tf.data.Dataset for the given split."""
     split = self._map_split(split)
+    input_context = (
+        tf.distribute.InputContext(
+            num_input_pipelines=shard_info.num_shards,
+            input_pipeline_id=shard_info.index) if shard_info else None)
     return tfds.load(
         self._name,
         split=split,
@@ -143,7 +147,8 @@ class LazyTfdsLoader(object):
         try_gcs=True,
         read_config=tfds.ReadConfig(
             shuffle_seed=seed,
-            skip_prefetch=True
+            skip_prefetch=True,
+            input_context=input_context
         )
     )
 

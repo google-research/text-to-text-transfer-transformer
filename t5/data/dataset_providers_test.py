@@ -195,6 +195,15 @@ class TasksTest(test_utils.FakeTaskTest):
     test_utils.verify_task_matches_fake_datasets(
         self.task_v3, use_cached=False, token_preprocessed=True)
 
+  def test_sharding(self):
+    for i in range(3):
+      test_utils.verify_task_matches_fake_datasets(
+          self.cached_task, use_cached=False, num_shards=i,
+          token_preprocessed=True)
+      test_utils.verify_task_matches_fake_datasets(
+          self.cached_task, use_cached=True, num_shards=i,
+          token_preprocessed=True)
+
   def test_optional_features(self):
     def _dummy_preprocessor(output):
       return lambda _: tf.data.Dataset.from_tensors(output)
