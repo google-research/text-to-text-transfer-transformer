@@ -65,7 +65,7 @@ In addition to text preprocessing, you can also use one or more **token preproce
 
 We provide many predefined preprocessors in `t5.data.preprocessors`, but you may also define your own.
 
-The **SentencePiece model** is used to tokenize the input strings and decode the output tokens. You can create your own model with the [google/sentencepiece](https://github.com/google/sentencepiece) library, or use our default one at `t5.data.DEFAULT_SPM_PATH`. If you create your own, you must use the flags `--pad_id=0 --eos_id=1 --unk_id=2` with `spm_train` to be compatible with our model code.
+The **SentencePiece model** is used to tokenize the input strings and decode the output tokens. You can create your own model with the [google/sentencepiece](https://github.com/google/sentencepiece) library, or use our default one at `t5.data.DEFAULT_SPM_PATH`. If you create your own, you must use the flags `--pad_id=0 --eos_id=1 --unk_id=2 --bos_id=-1` with `spm_train` to be compatible with our model code.
 
 The **metric function** returns a score given the target and prediction from the model. You may also define a **postprocess function** to convert the target and prediction text to another format before calling the metric. We provide some predefined metrics in `t5.evaluation.metrics`.
 
