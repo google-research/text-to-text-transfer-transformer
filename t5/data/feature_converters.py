@@ -81,7 +81,7 @@ input dataset.
 """
 import abc
 import functools
-from typing import Mapping, Sequence
+from typing import Mapping, Optional, Sequence
 from absl import logging
 from t5.data import dataset_providers
 from t5.data import utils
@@ -666,9 +666,19 @@ def get_dataset(
     dataset_split: str = "train",
     use_cached: bool = False,
     shuffle: bool = True,
+    shard_info: dataset_providers.ShardInfo = None,
     verbose: bool = True
 ) -> tf.data.Dataset:
   """Get processed dataset with the model features.
+
+  In order to use options specific to a feature converter, e.g., packing,
+  `feature_converter` instance should be instantiated with those options before
+  being pased to this function.
+
+  Getting sharded datasets is supported. To use this feature, pass in
+  `shard_info`, with shard_index and num_shards information. Sharding is done
+  before the feature converter stage. Therefore, if packing is used it will be
+  done on the sharded dataset.
 
   Args:
     mixture_or_task_name: mixture or task name for the Task API.
@@ -681,6 +691,7 @@ def get_dataset(
     use_cached: whether to use the cached dataset instead of processing it on
       the fly.
     shuffle: whether to shuffle the dataset.
+    shard_info: number of shards and shard index information.
     verbose: if true, log the feature shapes.
 
   Returns:
@@ -691,11 +702,13 @@ def get_dataset(
         "feature_converter should be an instance of FeatureConverter.")
 
   mixture_or_task = dataset_providers.get_mixture_or_task(mixture_or_task_name)
+
   ds = mixture_or_task.get_dataset(
       task_feature_lengths,
       split=dataset_split,
       use_cached=use_cached,
-      shuffle=shuffle)
+      shuffle=shuffle,
+      shard_info=shard_info)
 
   ds = feature_converter(ds, task_feature_lengths=task_feature_lengths)
 
