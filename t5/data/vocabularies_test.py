@@ -25,7 +25,7 @@ mock = absltest.mock
 
 
 def _decode_tf(vocab, tokens):
-  return vocab.decode_tf(tokens).numpy().decode("UTF-8")
+  return vocab.decode_tf(tf.constant(tokens, tf.int32)).numpy().decode("UTF-8")
 
 
 class VocabularyTest(absltest.TestCase):
@@ -43,13 +43,16 @@ class VocabularyTest(absltest.TestCase):
       return [ord(c) for c in s]
 
     def _decode(self, ids):
-      return "".join(chr(id) for id in ids)
+      return "".join("<eos>" if id == 1 else chr(id) for id in ids if id > 0)
 
     def _encode_tf(self, s):
       return tf.strings.unicode_decode(s, "UTF-8")
 
     def _decode_tf(self, ids):
-      return tf.strings.unicode_encode(ids, "UTF-8")
+      s = tf.strings.unicode_encode(ids, "UTF-8")
+      s = tf.strings.regex_replace(s, chr(0), "")
+      s = tf.strings.regex_replace(s, chr(1), "<eos>")
+      return s
 
   def test_properties(self):
     test_vocab = self.AsciiVocab(use_eos=False, use_unk=True, extra_ids=10)
@@ -76,21 +79,21 @@ class VocabularyTest(absltest.TestCase):
   def test_decode_unk_and_eos(self):
     test_vocab = self.AsciiVocab(use_eos=True, use_unk=True)
     test_ids = [161] + self.TEST_IDS + [127, 191, 1, 0, 10]
-    test_str = "\x02" + self.TEST_STR + "\x7f\x02"
+    test_str = "\x02" + self.TEST_STR + "\x7f\x02<eos>"
     self.assertEqual(test_vocab.decode(test_ids), test_str)
     self.assertEqual(_decode_tf(test_vocab, test_ids), test_str)
 
   def test_decode_unk_only(self):
     test_vocab = self.AsciiVocab(use_eos=False, use_unk=True, extra_ids=35)
     test_ids = [161] + self.TEST_IDS + [127, 191, 1, 33, 1]
-    test_str = "\x02" + self.TEST_STR + "\x7f\x02\x01!\x01"
+    test_str = "\x02" + self.TEST_STR + "\x7f\x02<eos>!<eos>"
     self.assertEqual(test_vocab.decode(test_ids), test_str)
     self.assertEqual(_decode_tf(test_vocab, test_ids), test_str)
 
   def test_decode_eos_only(self):
     test_vocab = self.AsciiVocab(use_eos=True, use_unk=False)
     test_ids = [161] + self.TEST_IDS + [127, 191, 1, 33, 1]
-    test_str = "¡" + self.TEST_STR + "\x7f¿"
+    test_str = "¡" + self.TEST_STR + "\x7f¿<eos>"
     self.assertEqual(test_vocab.decode(test_ids), test_str)
     self.assertEqual(_decode_tf(test_vocab, test_ids), test_str)
 
@@ -100,16 +103,32 @@ class VocabularyTest(absltest.TestCase):
     self.assertEqual(_decode_tf(test_vocab, test_ids), test_str)
 
     test_ids = [1] + self.TEST_IDS
-    test_str = ""
+    test_str = "<eos>"
     self.assertEqual(test_vocab.decode(test_ids), test_str)
     self.assertEqual(_decode_tf(test_vocab, test_ids), test_str)
 
   def test_decode_no_unk_or_eos(self):
     test_vocab = self.AsciiVocab(use_eos=False, use_unk=False)
     test_ids = [161] + self.TEST_IDS +  [127, 191, 1, 33, 1]
-    test_str = "¡" + self.TEST_STR + "\x7f¿\x01!\x01"
+    test_str = "¡" + self.TEST_STR + "\x7f¿<eos>!<eos>"
     self.assertEqual(test_vocab.decode(test_ids), test_str)
     self.assertEqual(_decode_tf(test_vocab, test_ids), test_str)
+
+  def test_decode_tf_batch(self):
+    test_vocab = self.AsciiVocab(use_eos=True, use_unk=True)
+    test_ids = (
+        [161] + self.TEST_IDS +  [127, 191, 1, 33, 1],
+        [161] + self.TEST_IDS +  [1, 191, 1, 33, 1],
+    )
+    test_str = (
+        "\x02" + self.TEST_STR + "\x7f\x02<eos>",
+        "\x02" + self.TEST_STR + "<eos>",
+    )
+    decoded = [
+        dec.decode("UTF-8") for dec in
+        test_vocab.decode_tf(tf.constant(test_ids, tf.int32)).numpy()
+    ]
+    self.assertSequenceEqual(decoded, test_str)
 
 
 class SentencepieceVocabularyTest(absltest.TestCase):

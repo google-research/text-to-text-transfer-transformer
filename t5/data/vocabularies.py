@@ -98,7 +98,7 @@ class Vocabulary(metaclass=abc.ABCMeta):
     raise NotImplementedError
 
   def decode(self, ids: Iterable[int]):
-    """Detokenizes int32 iterable to a string, up to EOS."""
+    """Detokenizes int32 iterable to a string, up through first EOS."""
     clean_ids = list(ids)
 
     if self.unk_id is not None:
@@ -108,7 +108,7 @@ class Vocabulary(metaclass=abc.ABCMeta):
       ]
 
     if self.eos_id is not None and self.eos_id in clean_ids:
-      clean_ids = clean_ids[:clean_ids.index(self.eos_id)]
+      clean_ids = clean_ids[:clean_ids.index(self.eos_id) + 1]
 
     return self._decode(clean_ids)
 
@@ -125,24 +125,22 @@ class Vocabulary(metaclass=abc.ABCMeta):
     raise NotImplementedError
 
   def decode_tf(self, ids: tf.Tensor) -> tf.Tensor:
-    """Detokenizes int32 Tensor to a string Scalar, up to EOS."""
-    valid_ids = tf.constant(ids)
+    """Detokenizes int32 N-D Tensor to string (N-1)-D Tensor, through first EOS.
+    """
+    clean_ids = ids
 
     if self.unk_id is not None:
-      valid_ids = tf.where(
-          tf.less(valid_ids, self._base_vocab_size), valid_ids, self.unk_id)
+      clean_ids = tf.where(
+          tf.less(clean_ids, self._base_vocab_size), clean_ids, self.unk_id)
 
     if self.eos_id is not None:
-      # Argmax always returns the first occurrence.
-      first_eos = tf.argmax(tf.equal(valid_ids, self.eos_id))
-      valid_ids = tf.cond(
-          tf.logical_and(
-              tf.equal(first_eos, 0),
-              tf.not_equal(valid_ids[0], self.eos_id)),
-          lambda: valid_ids,
-          lambda: valid_ids[:first_eos])
+      # Replace everything after the first EOS_ID with PAD_ID.
+      after_eos = tf.cumsum(
+          tf.cast(tf.equal(clean_ids, self.eos_id), tf.int32),
+          exclusive=True, axis=-1)
+      clean_ids = tf.where(tf.cast(after_eos, tf.bool), self.pad_id, clean_ids)
 
-    return self._decode_tf(valid_ids)
+    return self._decode_tf(clean_ids)
 
 
 class SentencePieceVocabulary(Vocabulary):
