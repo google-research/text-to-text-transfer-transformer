@@ -265,7 +265,7 @@ def trim_and_pad_dataset(
 
 def _strip_packed_feature_key(key: str) -> str:
   strip_suffix = lambda k, s: k[:-len(s)] if k.endswith(s) else k
-  return strip_suffix(strip_suffix(key, "_position"), "_segment_id")
+  return strip_suffix(strip_suffix(key, "_positions"), "_segment_ids")
 
 
 def trim_and_pack_dataset(
@@ -285,10 +285,10 @@ def trim_and_pack_dataset(
 
   For each key in the input dataset that also exists in `feature_lengths`, two
   additional keys are created:
-    <key>_segment_id: an int32 tensor identifying the parts
+    <key>_segment_ids: an int32 tensor identifying the parts
        representing the original example.
-    <key>_position: an int32 tensor identifying the position within the original
-       example.
+    <key>_positions: an int32 tensor identifying the position within the
+       original example.
 
   Features that are not in `feature_lengths` will be removed.
 
@@ -300,11 +300,11 @@ def trim_and_pack_dataset(
     The output example is:
     {
                    "inputs": [8, 7, 1, 2, 3, 4, 1, 0, 0, 0]
-      "inputs_segment_id": [1, 1, 1, 2, 2, 2, 2, 0, 0, 0]
-          "inputs_position": [0, 1, 2, 0, 1, 2, 3, 0, 0, 0]
+       "inputs_segment_ids": [1, 1, 1, 2, 2, 2, 2, 0, 0, 0]
+         "inputs_positions": [0, 1, 2, 0, 1, 2, 3, 0, 0, 0]
                   "targets": [4, 1, 5, 6, 1, 0, 0, 0, 0, 0]
-     "targets_segment_id": [1, 1, 2, 2, 2, 0, 0, 0, 0, 0]
-         "targets_position": [0, 1, 0, 1, 2, 0, 0, 0, 0, 0]
+      "targets_segment_ids": [1, 1, 2, 2, 2, 0, 0, 0, 0, 0]
+        "targets_positions": [0, 1, 0, 1, 2, 0, 0, 0, 0, 0]
     }
 
     0 represents padding in both the inputs and the outputs.
@@ -383,7 +383,7 @@ def _pack_with_tf_ops(
   """
   empty_example = {}
   for k in feature_lengths:
-    for suff in ("", "_position"):
+    for suff in ("", "_positions"):
       empty_example[k + suff] = tf.zeros([0], dtype=tf.int32)
       empty_example[k + suff].set_shape([None])
   keys_etc = empty_example.keys()
@@ -419,7 +419,7 @@ def _pack_with_tf_ops(
       outputs[k] = tf.TensorArray(
           tf.int32, size=0, dynamic_size=True,
           element_shape=[feature_lengths[k]])
-      outputs[k + "_position"] = tf.TensorArray(
+      outputs[k + "_positions"] = tf.TensorArray(
           tf.int32, size=0, dynamic_size=True,
           element_shape=[feature_lengths[k]])
 
@@ -451,18 +451,18 @@ def _pack_with_tf_ops(
         new_seq = one_example[k][:feature_lengths[k]]
         new_seq_len = tf.size(new_seq)
         new_partial[k] = tf.concat([partial[k], new_seq], 0)
-        new_partial[k + "_position"] = tf.concat(
-            [partial[k + "_position"],
+        new_partial[k + "_positions"] = tf.concat(
+            [partial[k + "_positions"],
              tf.range(new_seq_len, dtype=tf.int32)], 0)
       partial = new_partial
 
     partial, outputs = _write_packed_example(partial, outputs)
     packed = {k: outputs[k].stack() for k in keys_etc}
     for k in keys:
-      packed[k + "_segment_id"] = (
+      packed[k + "_segment_ids"] = (
           tf.cumsum(
-              tf.cast(tf.equal(packed[k + "_position"], 0), tf.int32), axis=1) *
-          tf.cast(tf.not_equal(packed[k], 0), tf.int32))
+              tf.cast(tf.equal(packed[k + "_positions"], 0), tf.int32), axis=1)
+          * tf.cast(tf.not_equal(packed[k], 0), tf.int32))
     return packed
   dataset = dataset.map(
       pack_batch, num_parallel_calls=tf.data.experimental.AUTOTUNE)
@@ -500,8 +500,8 @@ def _pack_with_custom_ops(
 
   def custom_pack_batch(x):
     """Map-function."""
-    (k1_packed, k1_segmengation, k1_position,
-     k2_packed, k2_segment_id, k2_position) = (
+    (k1_packed, k1_segment_ids, k1_positions,
+     k2_packed, k2_segment_ids, k2_positions) = (
          pack_sequences_ops.pack_sequences2(
              # cast to int64 for compatibility with custom ops
              tf.cast(x[k1], tf.int64),
@@ -510,14 +510,14 @@ def _pack_with_custom_ops(
              feature_lengths[k2]))
     packed = {
         k1: k1_packed,
-        k1 + "_segment_id": k1_segmengation,
-        k1 + "_position": k1_position,
+        k1 + "_segment_ids": k1_segment_ids,
+        k1 + "_positions": k1_positions,
     }
     if len(keys) == 2:
       packed.update({
           k2: k2_packed,
-          k2 + "_segment_id": k2_segment_id,
-          k2 + "_position": k2_position,
+          k2 + "_segment_ids": k2_segment_ids,
+          k2 + "_positions": k2_positions,
       })
 
     # cast back to int32

@@ -16,7 +16,7 @@
 
 In short, feature converters provide additional data processings to the
 tf.data.Dataset out of the Task API. They convert the features of the input
-dataset into more descriptive features (e.g., "decoder_target_token" instead of
+dataset into more descriptive features (e.g., "decoder_target_tokens" instead of
 "targets") as well as pad and/or pack them. The features of the input dataset
 are referred to as "task_features" because they are the output of the Task API.
 Those of the output dataset are referred to as "model_features" as they are the
@@ -41,29 +41,29 @@ Throughout this module, we refer to the following 10 fields as
 standard_features. Depending on the model architecture, a subset of them will
 be returned by the feature converter.
 
-  - encoder_input_token
-  - encoder_target_token
+  - encoder_input_tokens
+  - encoder_target_tokens
   - encoder_loss_weight
-  - encoder_position
-  - encoder_segment_id
-  - decoder_input_token
-  - decoder_target_token
-  - decoder_loss_weight
-  - decoder_position
-  - decoder_segment_id
+  - encoder_positions
+  - encoder_segment_ids
+  - decoder_input_tokens
+  - decoder_target_tokens
+  - decoder_loss_weights
+  - decoder_positions
+  - decoder_segment_ids
 
   *_segment_id and *_position fields are only relevant for packed dataset.
 
   *_segment_id is a tf.Tensor of integer which is aligned with
   *_input_token. Positive integers represent the sequence membership in
-  the packed examples. 0 represents padding. For example, encoder_segment_id =
+  the packed examples. 0 represents padding. For example, encoder_segment_ids =
   [1, 1, 2, 2, 2, 0] means that the first two positions belong to the first
   sequence, the next three to the second sequence and the last position is a
   padding.
 
   *_position is a tf.Tensor of integer representing the position index in the
   original sequence before packing. For example, consider
-  encoder_position = [0, 1, 0, 1, 2, 0]. The first two tokens were the 0th and
+  encoder_positions = [0, 1, 0, 1, 2, 0]. The first two tokens were the 0th and
   1st tokens of the first sequence and next three tokens are the 0th, 1st and
   2nd tokens of the second sequence before packing.
 
@@ -81,7 +81,7 @@ input dataset.
 """
 import abc
 import functools
-from typing import Mapping, Optional, Sequence
+from typing import Mapping, Sequence
 from absl import logging
 from t5.data import dataset_providers
 from t5.data import utils
@@ -282,7 +282,7 @@ class FeatureConverter(abc.ABC):
 
     Subclasses must override TASK_FEATURE_DTYPES and MODEL_FEATURE_DTYPES. If
     packing is used, they must override PACKING_FEATURE_DTYPES as well. These
-    are the packing-specific features such as "*_segment_id".
+    are the packing-specific features such as "*_segment_ids".
 
   Attributes:
     pack: whether to pack the dataset.
@@ -550,24 +550,24 @@ class EncDecFeatureConverter(FeatureConverter):
   task_feature_lengths = {"inputs": 10, "targets": 7}
 
   First, the `inputs` are packed together, padded to length 10 and assigned to
-  "encoder_input_token" field. The `targets` are processed similarly.
+  "encoder_input_tokens" field. The `targets` are processed similarly.
 
   The "*_segment_id" fields are generated from the packing operation. For the
   explanation of these fields, see the module docstring.
 
-  The "decoder_loss_weight" is a binary mask indicating where non-padding
+  The "decoder_loss_weights" is a binary mask indicating where non-padding
   positions are, i.e., value of 1 indicates non-padding and 0 for padding. This
   class assumes that the loss is taken only on the decoder side.
 
   converted_ds = [{
-       "encoder_input_token": [7, 8, 5, 1, 8, 4, 9, 3, 1, 0],
-        "encoder_segment_id": [1, 1, 1, 1, 2, 2, 2, 2, 2, 0],
-          "encoder_position": [0, 1, 2, 3, 0, 1, 2, 3, 4, 0],
-      "decoder_target_token": [3, 9, 1, 4, 1, 0, 0],
-       "decoder_input_token": [0, 3, 9, 0, 4, 0, 0],
-       "decoder_loss_weight": [1, 1, 1, 1, 1, 0, 0],
-        "decoder_segment_id": [1, 1, 1, 2, 2, 0, 0],
-          "decoder_position": [0, 1, 2, 0, 1, 0, 0],
+       "encoder_input_tokens": [7, 8, 5, 1, 8, 4, 9, 3, 1, 0],
+        "encoder_segment_ids": [1, 1, 1, 1, 2, 2, 2, 2, 2, 0],
+          "encoder_positions": [0, 1, 2, 3, 0, 1, 2, 3, 4, 0],
+      "decoder_target_tokens": [3, 9, 1, 4, 1, 0, 0],
+       "decoder_input_tokens": [0, 3, 9, 0, 4, 0, 0],
+       "decoder_loss_weights": [1, 1, 1, 1, 1, 0, 0],
+        "decoder_segment_ids": [1, 1, 1, 2, 2, 0, 0],
+          "decoder_positions": [0, 1, 2, 0, 1, 0, 0],
   }]
 
   Note that two examples are packed together into one example.
@@ -575,16 +575,16 @@ class EncDecFeatureConverter(FeatureConverter):
 
   TASK_FEATURE_DTYPES = {"inputs": tf.int32, "targets": tf.int32}
   MODEL_FEATURE_DTYPES = {
-      "encoder_input_token": tf.int32,
-      "decoder_target_token": tf.int32,
-      "decoder_input_token": tf.int32,
-      "decoder_loss_weight": tf.int32,
+      "encoder_input_tokens": tf.int32,
+      "decoder_target_tokens": tf.int32,
+      "decoder_input_tokens": tf.int32,
+      "decoder_loss_weights": tf.int32,
   }
   PACKING_FEATURE_DTYPES = {
-      "encoder_segment_id": tf.int32,
-      "decoder_segment_id": tf.int32,
-      "encoder_position": tf.int32,
-      "decoder_position": tf.int32
+      "encoder_segment_ids": tf.int32,
+      "decoder_segment_ids": tf.int32,
+      "encoder_positions": tf.int32,
+      "decoder_positions": tf.int32
   }
 
   def _convert_features(
@@ -616,21 +616,21 @@ class EncDecFeatureConverter(FeatureConverter):
     def convert_example(
         features: Mapping[str, tf.Tensor]) -> Mapping[str, tf.Tensor]:
       # targets_segment_id is present only for a packed dataset.
-      decoder_input_token = autoregressive_inputs(
+      decoder_input_tokens = autoregressive_inputs(
           features["targets"],
-          sequence_id=features.get("targets_segment_id", None))
+          sequence_id=features.get("targets_segment_ids", None))
 
-      d = {"encoder_input_token": features["inputs"],
-           "decoder_target_token": features["targets"],
-           "decoder_input_token": decoder_input_token,
+      d = {"encoder_input_tokens": features["inputs"],
+           "decoder_target_tokens": features["targets"],
+           "decoder_input_tokens": decoder_input_tokens,
            # Loss is computed for all but the padding positions.
-           "decoder_loss_weight": non_padding_position(features["targets"])}
+           "decoder_loss_weights": non_padding_position(features["targets"])}
 
       if self.pack:
-        d["encoder_segment_id"] = features["inputs_segment_id"]
-        d["decoder_segment_id"] = features["targets_segment_id"]
-        d["encoder_position"] = features["inputs_position"]
-        d["decoder_position"] = features["targets_position"]
+        d["encoder_segment_ids"] = features["inputs_segment_ids"]
+        d["decoder_segment_ids"] = features["targets_segment_ids"]
+        d["encoder_positions"] = features["inputs_positions"]
+        d["decoder_positions"] = features["targets_positions"]
 
       return d
 
@@ -645,16 +645,16 @@ class EncDecFeatureConverter(FeatureConverter):
     decoder_length = task_feature_lengths["targets"]
 
     model_feature_lengths = {
-        "encoder_input_token": encoder_length,
-        "decoder_target_token": decoder_length,
-        "decoder_input_token": decoder_length,
-        "decoder_loss_weight": decoder_length
+        "encoder_input_tokens": encoder_length,
+        "decoder_target_tokens": decoder_length,
+        "decoder_input_tokens": decoder_length,
+        "decoder_loss_weights": decoder_length
     }
     if self.pack:
-      model_feature_lengths["encoder_segment_id"] = encoder_length
-      model_feature_lengths["decoder_segment_id"] = decoder_length
-      model_feature_lengths["encoder_position"] = encoder_length
-      model_feature_lengths["decoder_position"] = decoder_length
+      model_feature_lengths["encoder_segment_ids"] = encoder_length
+      model_feature_lengths["decoder_segment_ids"] = decoder_length
+      model_feature_lengths["encoder_positions"] = encoder_length
+      model_feature_lengths["decoder_positions"] = decoder_length
 
     return model_feature_lengths
 

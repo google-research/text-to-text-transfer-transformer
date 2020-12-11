@@ -245,11 +245,11 @@ class UtilsTest(parameterized.TestCase):
 
     expected = {
         "inputs": [7, 8, 5, 1, 8, 4, 9, 3, 1, 0],
-        "inputs_segment_id": [1, 1, 1, 1, 2, 2, 2, 2, 2, 0],
-        "inputs_position": [0, 1, 2, 3, 0, 1, 2, 3, 4, 0],
+        "inputs_segment_ids": [1, 1, 1, 1, 2, 2, 2, 2, 2, 0],
+        "inputs_positions": [0, 1, 2, 3, 0, 1, 2, 3, 4, 0],
         "targets": [3, 9, 1, 4, 1, 0, 0],
-        "targets_position": [0, 1, 2, 0, 1, 0, 0],
-        "targets_segment_id": [1, 1, 1, 2, 2, 0, 0],
+        "targets_positions": [0, 1, 2, 0, 1, 0, 0],
+        "targets_segment_ids": [1, 1, 1, 2, 2, 0, 0],
     }
     assert_dataset(
         packed_ds, expected, {"inputs": tf.int32, "targets": tf.int32})
@@ -267,11 +267,11 @@ class UtilsTest(parameterized.TestCase):
     # Packing still works without the eos.
     expected = {
         "inputs": [7, 8, 5, 8, 4, 9, 3, 0],
-        "inputs_segment_id": [1, 1, 1, 2, 2, 2, 2, 0],
-        "inputs_position": [0, 1, 2, 0, 1, 2, 3, 0],
+        "inputs_segment_ids": [1, 1, 1, 2, 2, 2, 2, 0],
+        "inputs_positions": [0, 1, 2, 0, 1, 2, 3, 0],
         "targets": [3, 9, 4, 0, 0],
-        "targets_position": [0, 1, 0, 0, 0],
-        "targets_segment_id": [1, 1, 2, 0, 0],
+        "targets_positions": [0, 1, 0, 0, 0],
+        "targets_segment_ids": [1, 1, 2, 0, 0],
     }
     assert_dataset(
         packed_ds, expected, {"inputs": tf.int32, "targets": tf.int32})
@@ -287,19 +287,19 @@ class UtilsTest(parameterized.TestCase):
         use_custom_ops=use_custom_ops)
     expected = [{
         "inputs": [7, 8, 5, 6, 9, 4, 1],
-        "inputs_segment_id": [1, 1, 1, 1, 1, 1, 1],
-        "inputs_position": [0, 1, 2, 3, 4, 5, 6],
+        "inputs_segment_ids": [1, 1, 1, 1, 1, 1, 1],
+        "inputs_positions": [0, 1, 2, 3, 4, 5, 6],
         "targets": [3, 9, 1],
-        "targets_position": [0, 1, 2],
-        "targets_segment_id": [1, 1, 1],
+        "targets_positions": [0, 1, 2],
+        "targets_segment_ids": [1, 1, 1],
     }, {
         # EOS is trimmed
         "inputs": [8, 4, 9, 3, 5, 7, 9],
-        "inputs_segment_id": [1, 1, 1, 1, 1, 1, 1],
-        "inputs_position": [0, 1, 2, 3, 4, 5, 6],
+        "inputs_segment_ids": [1, 1, 1, 1, 1, 1, 1],
+        "inputs_positions": [0, 1, 2, 3, 4, 5, 6],
         "targets": [4, 1, 0],
-        "targets_position": [0, 1, 0],
-        "targets_segment_id": [1, 1, 0],
+        "targets_positions": [0, 1, 0],
+        "targets_segment_ids": [1, 1, 0],
     }]
     assert_dataset(
         packed_ds, expected, {"inputs": tf.int32, "targets": tf.int32})
