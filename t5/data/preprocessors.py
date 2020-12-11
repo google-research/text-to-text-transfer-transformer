@@ -2138,6 +2138,19 @@ def take(dataset, num_examples=-1, **unused_kwargs):
     return dataset.take(num_examples).cache()
 
 
+def cache_in_memory(dataset):
+  """Cache dataset.
+
+  This function loads the dataset into memory by calling dataset.cache().
+  Useful for smaller datasets.
+  Args:
+    dataset: tf.data.Dataset to load into memory.
+  Returns:
+    A cached tf.data.Dataset.
+  """
+  return dataset.cache()
+
+
 def trivia_qa_truncate_inputs(dataset, output_features, sequence_length):
   """Token preprocessor for the trivia QA dataset to truncate inputs.
 
