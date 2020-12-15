@@ -357,7 +357,7 @@ def get_fake_dataset(split, shuffle_files=False, seed=None, shard_info=None):
   output_types = {"prefix": tf.string, "suffix": tf.string}
   if split == "validation":
     output_types.update(
-        {"idx": tf.int64, "idxs": tf.int64, "id": tf.string, "ids": tf.string})
+        {"idx": tf.int32, "idxs": tf.int32, "id": tf.string, "ids": tf.string})
   output_shapes = {k: [] for k in output_types}
   if split == "validation":
     output_shapes.update({"idxs": [None], "ids": [None]})
@@ -410,7 +410,7 @@ def test_token_preprocessor(dataset, output_features, sequence_length):
     res = ex.copy()
     res["inputs"] = tf.where(
         tf.greater(inputs, 15),
-        tf.constant(50, tf.int64),
+        tf.constant(50, inputs.dtype),
         inputs)
     return res
 
@@ -445,10 +445,10 @@ class MockVocabulary(object):
     return self._encode_dict[s]
 
   def encode_tf(self, s):
-    res = tf.constant([-1])
+    res = tf.constant([-1], tf.int32)
     for k, v in self._encode_dict.items():
       if tf.equal(s, k):
-        res = tf.constant(v)
+        res = tf.constant(v, tf.int32)
       else:
         pass
     return res

@@ -446,8 +446,7 @@ class GetDatasetTest(tf.test.TestCase):
     x = [{"inputs": [7, 8, 5, 6, 9, 4, 3], "targets": [3, 9]},
          {"inputs": [8, 4], "targets": [4]},
          {"inputs": [5, 6, 7], "targets": [6, 5]}]
-    dtypes = {"inputs": tf.int64, "targets": tf.int64}
-    ds = create_default_dataset(x, output_types=dtypes)
+    ds = create_default_dataset(x)
     dataset_fn = lambda split, shuffle_files: ds
     register_dummy_task(mixture_or_task_name, dataset_fn=dataset_fn)
 
@@ -484,8 +483,7 @@ class GetDatasetTest(tf.test.TestCase):
     x = [{"inputs": [7, 8, 5, 6, 9, 4, 3], "targets": [3, 9]},
          {"inputs": [8, 4], "targets": [4]},
          {"inputs": [5, 6, 7], "targets": [6, 5]}]
-    dtypes = {"inputs": tf.int64, "targets": tf.int64}
-    ds = create_default_dataset(x, output_types=dtypes)
+    ds = create_default_dataset(x)
     dataset_fn = lambda split, shuffle_files: ds
     register_dummy_task(mixture_or_task_name, dataset_fn=dataset_fn)
 
@@ -526,10 +524,9 @@ class GetDatasetTest(tf.test.TestCase):
     mixture_or_task_name = "both_train_and_validation_splits"
     x_train = [{"inputs": [7, 8, 5, 6, 9, 4, 3], "targets": [3, 9]}]
     x_val = [{"inputs": [8, 4], "targets": [4]}]
-    dtypes = {"inputs": tf.int64, "targets": tf.int64}
     datasets = {
-        "train": create_default_dataset(x_train, output_types=dtypes),
-        "validation": create_default_dataset(x_val, output_types=dtypes)
+        "train": create_default_dataset(x_train),
+        "validation": create_default_dataset(x_val)
     }
     dataset_fn = lambda split, shuffle_files: datasets[split]
     register_dummy_task(mixture_or_task_name, dataset_fn=dataset_fn)
@@ -568,8 +565,7 @@ class GetDatasetTest(tf.test.TestCase):
     x = [{"inputs": [7, 8, 5, 6, 9, 4, 3], "targets": [3, 9]},
          {"inputs": [8, 4], "targets": [4]},
          {"inputs": [5, 6, 7], "targets": [6, 5]}]
-    dtypes = {"inputs": tf.int64, "targets": tf.int64}
-    ds = create_default_dataset(x, output_types=dtypes)
+    ds = create_default_dataset(x)
     dataset_fn = lambda split, shuffle_files: ds
     register_dummy_task(mixture_or_task_name, dataset_fn=dataset_fn)
 
@@ -604,8 +600,7 @@ class GetDatasetTest(tf.test.TestCase):
     x = [{"inputs": [7, 8], "targets": [3, 9]},
          {"inputs": [8, 4], "targets": [4]},
          {"inputs": [5, 6, 7], "targets": [6]}]
-    dtypes = {"inputs": tf.int64, "targets": tf.int64}
-    ds = create_default_dataset(x, output_types=dtypes)
+    ds = create_default_dataset(x)
     dataset_fn = lambda split, shuffle_files: ds
     register_dummy_task(mixture_or_task_name, dataset_fn=dataset_fn)
 

@@ -1898,7 +1898,7 @@ def tokenize(dataset, output_features, copy_plaintext=True):
       if k in output_features and v.dtype == tf.string:
         if copy_plaintext:
           ret[f'{k}_plaintext'] = v
-        v = tf.cast(output_features[k].vocabulary.encode_tf(v), tf.int64)
+        v = output_features[k].vocabulary.encode_tf(v)
       ret[k] = v
     return ret
 

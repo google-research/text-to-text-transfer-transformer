@@ -616,89 +616,74 @@ class TaskV3(DatasetProviderBase):
       dataset = prep_fn(dataset, **kwargs)
     return dataset
 
-  def _validate_dataset(self,
-                        dataset: tf.data.Dataset,
-                        expected_output_type: tf.DType,
-                        expected_output_rank: int,
-                        error_label: str,
-                        ensure_no_eos: bool = False) -> tf.data.Dataset:
-    """Validates properties of a tf.data.Dataset, raising Exceptions if needed.
+  def _validate_preprocessing(
+      self, dataset: tf.data.Dataset
+    ) -> tf.data.Dataset:
+    """Validates preprocessed dataset, raising Exceptions if needed.
 
     Args:
       dataset: a tf.data.Dataset to validate.
-      expected_output_type: a tf.Dtype, the expected type of the model features.
-      expected_output_rank: an int, the expected rank of the model features.
-      error_label: a string, an identifier for the previous processing step to
-        report in raised ValueErrors.
-      ensure_no_eos: a bool, whether or not to verify that the model features
-        contain no EOS tokens.
 
     Returns:
       a validated tf.data.Dataset.
     """
-    element_spec = dataset.element_spec
-    for feat in self.output_features:
-      if feat not in element_spec:
-        if self.output_features[feat].required:
+    actual_specs = dataset.element_spec
+    for feat, feat_spec in self.output_features.items():
+      if feat not in actual_specs:
+        if feat_spec.required:
           raise ValueError(
-              "Task dataset is missing expected output feature after {label}: "
-              "{feat}".format(label=error_label, feat=feat))
+              "Task dataset is missing expected output feature after "
+              f"preprocessing: {feat}")
         else:
           # It's ok that this feature does not exist.
           continue
-      if expected_output_type != element_spec[feat].dtype:
+      actual_spec = actual_specs[feat]
+      if feat_spec.dtype != actual_spec.dtype:
         raise ValueError(
-            "Task dataset has incorrect type for feature '{feat}' after "
-            "{label}: Got {actual}, expected {expected}".format(
-                feat=feat, label=error_label,
-                actual=element_spec[feat].dtype.name,
-                expected=expected_output_type.name))
-      if expected_output_rank != len(element_spec[feat].shape):
+            f"Task dataset has incorrect type for feature '{feat}' after "
+            f"preprocessing: Got {actual_spec.dtype.name}, expected "
+            f"{feat_spec.dtype.name}")
+      if actual_spec.shape.rank != 1:
         raise ValueError(
-            "Task dataset has incorrect rank for feature '{feat}' after "
-            "{label}: Got {actual}, expected {expected}".format(
-                feat=feat, label=error_label,
-                actual=len(element_spec[feat].shape),
-                expected=expected_output_rank))
+            f"Task dataset has incorrect rank for feature '{feat}' after "
+            f"preprocessing: Got {actual_spec.shape.rank}, expected 1")
 
-    def _ensure_no_eos(feat, v):
-      if feat not in self.output_features:
-        return v
-      with tf.control_dependencies([
-          tf.debugging.assert_none_equal(
-              v, tf.constant(1, tf.int64),
-              message="Feature '{feat}' unexpectedly contains EOS=1 token "
-              "after {label}.".format(feat=feat, label=error_label))
-      ]):
-        return v
-    if ensure_no_eos:
-      dataset = dataset.map(
-          lambda ex: {k: _ensure_no_eos(k, v) for k, v in ex.items()},
-          num_parallel_calls=tf.data.experimental.AUTOTUNE)
     return dataset
 
-  def _cast_trim_and_ensure_eos(
+  def _cast_output_features(self, dataset: tf.data.Dataset) -> tf.data.Dataset:
+    """Cast output features to the specified dtypes, leaving others as-is."""
+    dtypes = {k: f.dtype for k, f in self.output_features.items()}
+    return dataset.map(
+        lambda x: {k: tf.cast(v, dtypes.get(k, v.dtype)) for k, v in x.items()},
+        num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+  def _trim_and_ensure_eos(
       self,
       dataset: tf.data.Dataset,
       sequence_length: Mapping[str, int]
     ) -> tf.data.Dataset:
-    """Cast, trim and append EOS=1 token to model features."""
-    def _cast_trim_and_append_eos(k: str, v: tf.Tensor) -> tf.Tensor:
+    """Trim and append EOS=1 token to model features."""
+    def _trim_and_append_eos(k: str, v: tf.Tensor) -> tf.Tensor:
       if k not in self.output_features:
         return v
       feat = self.output_features[k]
       max_len = sequence_length[k] if sequence_length else None
-      v = tf.cast(v, feat.dtype)
-      if max_len and feat.add_eos:
-        v = tf.concat([v[:max_len-1], [1]], axis=0)
+
+      if feat.add_eos:
+        tf.debugging.assert_none_equal(
+            v, tf.constant(1, feat.dtype),
+            message=f"Feature '{k}' unexpectedly contains EOS=1 token "
+                    "after preprocessing.")
+        if max_len:
+          v = tf.concat([v[:max_len-1], [1]], axis=0)
+        else:
+          v = tf.concat([v, [1]], axis=0)
       elif max_len:
         v = v[:max_len]
-      elif feat.add_eos:
-        v = tf.concat([v, [1]], axis=0)
       return v
 
     return dataset.map(
-        lambda ex: {k: _cast_trim_and_append_eos(k, v) for k, v in ex.items()},
+        lambda ex: {k: _trim_and_append_eos(k, v) for k, v in ex.items()},
         num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
   def preprocess_precache(
@@ -741,12 +726,6 @@ class TaskV3(DatasetProviderBase):
           self._preprocessors[self._cache_step_idx + 1:],
           sequence_length=sequence_length,
       )
-    dataset = self._validate_dataset(
-        dataset,
-        expected_output_type=tf.int64,
-        expected_output_rank=1,
-        error_label="preprocessing",
-        ensure_no_eos=True)
     return dataset
 
   @property
@@ -871,7 +850,12 @@ class TaskV3(DatasetProviderBase):
 
     # Post cache processing.
     ds = self.preprocess_postcache(ds, sequence_length=sequence_length)
-    ds = self._cast_trim_and_ensure_eos(ds, sequence_length=sequence_length)
+    if use_cached:
+      # Cached datasets were previously tokenized as int64, so we may need to
+      # cast here (e.g., to int32).
+      ds = self._cast_output_features(ds)
+    ds = self._validate_preprocessing(ds)
+    ds = self._trim_and_ensure_eos(ds, sequence_length=sequence_length)
     ds = maybe_print_dataset(ds)
 
     if shuffle:

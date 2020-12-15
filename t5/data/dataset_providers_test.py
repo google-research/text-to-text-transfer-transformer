@@ -241,7 +241,7 @@ class TasksTest(test_utils.FakeTaskTest):
   def test_invalid_token_preprocessors(self):
     def _dummy_preprocessor(output):
       return lambda _, **unused: tf.data.Dataset.from_tensors(output)
-    i64_arr = lambda x: np.array(x, dtype=np.int64)
+    i32_arr = lambda x: np.array(x, dtype=np.int32)
     def _materialize(task):
       list(
           TaskRegistry.get_dataset(
@@ -253,13 +253,13 @@ class TasksTest(test_utils.FakeTaskTest):
     test_utils.add_tfds_task(
         "token_prep_ok",
         token_preprocessor=_dummy_preprocessor(
-            {"inputs": i64_arr([2, 3]), "targets": i64_arr([3]),
+            {"inputs": i32_arr([2, 3]), "targets": i32_arr([3]),
              "other": "test"}))
     _materialize("token_prep_ok")
 
     test_utils.add_tfds_task(
         "token_prep_missing_feature",
-        token_preprocessor=_dummy_preprocessor({"inputs": i64_arr([2, 3])}))
+        token_preprocessor=_dummy_preprocessor({"inputs": i32_arr([2, 3])}))
     with self.assertRaisesRegex(
         ValueError,
         "Task dataset is missing expected output feature after preprocessing: "
@@ -269,17 +269,17 @@ class TasksTest(test_utils.FakeTaskTest):
     test_utils.add_tfds_task(
         "token_prep_wrong_type",
         token_preprocessor=_dummy_preprocessor(
-            {"inputs": "a", "targets": i64_arr([3])}))
+            {"inputs": "a", "targets": i32_arr([3])}))
     with self.assertRaisesRegex(
         ValueError,
         "Task dataset has incorrect type for feature 'inputs' after "
-        "preprocessing: Got string, expected int64"):
+        "preprocessing: Got string, expected int32"):
       _materialize("token_prep_wrong_type")
 
     test_utils.add_tfds_task(
         "token_prep_wrong_shape",
         token_preprocessor=_dummy_preprocessor(
-            {"inputs": i64_arr([2, 3]), "targets": i64_arr(1)}))
+            {"inputs": i32_arr([2, 3]), "targets": i32_arr(1)}))
     with self.assertRaisesRegex(
         ValueError,
         "Task dataset has incorrect rank for feature 'targets' after "
@@ -289,7 +289,7 @@ class TasksTest(test_utils.FakeTaskTest):
     test_utils.add_tfds_task(
         "token_prep_has_eos",
         token_preprocessor=_dummy_preprocessor(
-            {"inputs": i64_arr([1, 3]), "targets": i64_arr([4])}))
+            {"inputs": i32_arr([1, 3]), "targets": i32_arr([4])}))
     with self.assertRaisesRegex(
         tf.errors.InvalidArgumentError,
         r".*Feature \\'inputs\\' unexpectedly contains EOS=1 token after "
@@ -373,8 +373,15 @@ class TasksTest(test_utils.FakeTaskTest):
         "targets":
             dataset_providers.Feature(dtype=tf.int64, vocabulary=default_vocab),
     }
+
     test_utils.add_task(
-        "task_dtypes", test_utils.get_fake_dataset, output_features=features
+        "task_dtypes",
+        test_utils.get_fake_dataset,
+        token_preprocessor=utils.map_over_dataset(
+            lambda x: {k: tf.cast(v, tf.int64) if k == "targets" else v  # pylint:disable=g-long-lambda
+                       for k, v in x.items()}
+        ),
+        output_features=features
     )
     dtype_task = TaskRegistry.get("task_dtypes")
     test_utils.verify_task_matches_fake_datasets(dtype_task, use_cached=False)
@@ -518,8 +525,8 @@ class MixturesTest(test_utils.FakeTaskTest):
         test_utils.get_fake_dataset,
         token_preprocessor=lambda ds, **unused: ds.map(
             lambda _: {
-                "targets": tf.constant([2], tf.int64),
-                "inputs": tf.constant([2], tf.int64),
+                "targets": tf.constant([2], tf.int32),
+                "inputs": tf.constant([2], tf.int32),
             }))
 
     test_utils.add_task(
@@ -527,8 +534,8 @@ class MixturesTest(test_utils.FakeTaskTest):
         test_utils.get_fake_dataset,
         token_preprocessor=lambda ds, **unused: ds.map(
             lambda _: {
-                "targets": tf.constant([3], tf.int64),
-                "inputs": tf.constant([3], tf.int64),
+                "targets": tf.constant([3], tf.int32),
+                "inputs": tf.constant([3], tf.int32),
             }))
     # pylint:enable=g-long-lambda
     MixtureRegistry.add("test_mix4", [("two_task", 1), ("three_task", 1)])
