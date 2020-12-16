@@ -56,6 +56,7 @@ flags.DEFINE_string(
 flags.DEFINE_bool("detokenize", False, "If True, then decode ids to strings.")
 
 
+
 @gin.configurable
 def sequence_length(value=512):
   """Sequence length used when tokenizing.
@@ -74,6 +75,8 @@ def sequence_length(value=512):
 def import_modules(modules):
   for module in modules:
     importlib.import_module(module)
+
+
 
 
 def main(_):
@@ -116,6 +119,7 @@ def main(_):
     total_examples += 1
     if total_examples == FLAGS.max_examples:
       return
+
 
 
 if __name__ == "__main__":
