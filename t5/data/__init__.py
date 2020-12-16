@@ -15,12 +15,10 @@
 """Import data modules."""
 
 from t5.data.dataset_providers import *  # pylint:disable=wildcard-import
+from t5.data.feature_converters import *  # pylint:disable=wildcard-import
 from t5.data.glue_utils import *  # pylint:disable=wildcard-import
-import t5.data.mixtures
 import t5.data.postprocessors
 import t5.data.preprocessors
-import t5.data.tasks
 import t5.data.test_utils
 from t5.data.utils import *  # pylint:disable=wildcard-import
 from t5.data.vocabularies import *  # pylint:disable=wildcard-import
-from t5.data.feature_converters import *  # pylint:disable=wildcard-import
