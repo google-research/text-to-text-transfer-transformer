@@ -599,6 +599,30 @@ class PreprocessorsTest(tf.test.TestCase):
     _verify_split(100, 1)
     _verify_split(1000, 1)
 
+  def test_split_padding_tokens(self):
+    original = [0] * 100
+    og_dataset = tf.data.Dataset.from_tensors({'targets': original})
+
+    # Verify splits with no max segments.
+    def _verify_split(length, n_expected_outputs):
+      ds = prep.split_tokens(
+          og_dataset, unused_vocabulary=None, max_tokens_per_segment=length)
+      outputs = list(test_utils.dataset_as_text(ds))
+      self.assertLen(outputs, n_expected_outputs)
+      reconstructed = []
+      for ex in outputs[:-1]:
+        t = ex['targets']
+        self.assertLen(t, length)
+        reconstructed.extend(t)
+      final_t = outputs[-1]['targets']
+      self.assertLessEqual(len(final_t), length)
+      reconstructed.extend(final_t)
+      self.assertEqual(reconstructed, original)
+    _verify_split(25, 4)
+    _verify_split(30, 4)
+    _verify_split(100, 1)
+    _verify_split(1000, 1)
+
   def test_split_tokens_additional_features_passthrough(self):
     original = list(range(2, 102))
     original_aux = list(range(4, 104))

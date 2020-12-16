@@ -2376,6 +2376,10 @@ def split_tokens(dataset: tf.data.Dataset,
         tf.int32)
     padding = num_segments * length - tf.size(tokens)
     padded = tf.pad(tokens, [[0, padding]])
+    orig_lengths = {
+        feature_key: tf.concat(
+            [tf.repeat(length, num_segments - 1), [length - padding]], axis=0)
+    }
     outputs = {feature_key: tf.reshape(padded, [-1, length])}
     if additional_feature_keys is not None:
       for k in additional_feature_keys:
@@ -2383,26 +2387,29 @@ def split_tokens(dataset: tf.data.Dataset,
             tf.assert_equal(tf.size(tokens), tf.size(x[k]))]):
           padded = tf.pad(x[k], [[0, padding]])
           outputs[k] = tf.reshape(padded, [-1, length])
+          orig_lengths[k] = tf.concat(
+              [tf.repeat(length, num_segments - 1), [length - padding]],
+              axis=0)
     if passthrough_feature_keys:
       for k in passthrough_feature_keys:
         outputs[k] = tf.tile(x[k][tf.newaxis, :], [num_segments, 1])
-    return outputs
+    return outputs, orig_lengths
 
-  @utils.map_over_dataset
-  def _strip_padding(x):
+  def _strip_padding(inputs, orig_lengths):
     output = {}
-    for k, v in x.items():
+    for k, v in inputs.items():
       if passthrough_feature_keys and k in passthrough_feature_keys:
         output[k] = v
       else:
-        output[k] = tf.boolean_mask(v, tf.cast(v, tf.bool))
+        output[k] = v[:orig_lengths[k]]
     return output
 
   # Filter empty examples.
   dataset = dataset.filter(lambda x: tf.not_equal(tf.size(x[feature_key]), 0))
   dataset = _split_tokens(dataset)
   dataset = dataset.unbatch()
-  return _strip_padding(dataset)
+  dataset = dataset.map(_strip_padding, num_parallel_calls=AUTOTUNE)
+  return dataset
 
 
 @gin.configurable
