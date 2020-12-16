@@ -283,7 +283,7 @@ TaskRegistry.add(
 TaskRegistry.add(
     "trivia_qa_v010",
     TfdsTask,
-    tfds_name="trivia_qa:1.1.0",
+    tfds_name="trivia_qa/rc:1.1.0",
     text_preprocessor=preprocessors.trivia_qa,
     metric_fns=[],
     token_preprocessor=preprocessors.trivia_qa_truncate_inputs,
