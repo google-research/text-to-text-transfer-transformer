@@ -54,7 +54,7 @@ flags.DEFINE_string(
     "will attempt to automatically detect the GCE project from metadata.")
 
 flags.DEFINE_multi_string(
-    "module_import", None,
+    "module_import", "t5.data.mixtures",
     "Modules to import. Use this, for example, to add new `Task`s to the "
     "global `TaskRegistry`.")
 
