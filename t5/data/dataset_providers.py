@@ -775,7 +775,7 @@ class TaskV3(DatasetProviderBase):
 
   def get_dataset(
       self,
-      sequence_length: Mapping[str, int],
+      sequence_length: Optional[Mapping[str, int]],
       split: str = tfds.Split.TRAIN,
       use_cached: bool = False,
       shuffle: bool = True,
