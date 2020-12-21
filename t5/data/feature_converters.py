@@ -719,3 +719,83 @@ def get_dataset(
       logging.info("feature: %s \t shape: %s \t dtype: %s", feature_name,
                    tensor_spec.shape.as_list(), tensor_spec.dtype.name)
   return ds
+
+
+class LMFeatureConverter(FeatureConverter):
+  """Feature converter for a language model (decoder-only) architecture.
+
+  The input dataset must have "targets" field only.
+
+  One common usecase is to pre-train a decoder-only model with the standard
+  language modeling objective (i.e., predict the next token given the previous
+  ones) on a unlabeled text corpus which only has "targets". Then the
+  pre-trained model can be fine-tuned on a supervised task, e.g., machine
+  translation by concatenating "inputs" and "targets". For this use case,
+  pre-train with LMFeatureConverter and fine-tune with PrefixLMFeatureConverter.
+
+  Example: a packed dataset.
+
+    ds = [{"targets": [3, 9, 1]}, {"targets": [4, 1]}]
+
+    input_lengths = {"targets": 6}
+
+    converted_ds = {
+        "decoder_target_token": [3, 9, 1, 4, 1, 0],
+         "decoder_input_token": [0, 3, 9, 0, 4, 0],
+         "decoder_loss_weight": [1, 1, 1, 1, 1, 0],
+            "decoder_position": [0, 1, 2, 0, 1, 0],
+          "decoder_segment_id": [1, 1, 1, 2, 2, 0]
+    }
+  Note that two examples are packed together into one example.
+  """
+  TASK_FEATURE_DTYPES = {"targets": tf.int32}
+  MODEL_FEATURE_DTYPES = {
+      "decoder_target_tokens": tf.int32,
+      "decoder_input_tokens": tf.int32,
+      "decoder_loss_weights": tf.int32,
+  }
+  PACKING_FEATURE_DTYPES = {
+      "decoder_segment_ids": tf.int32,
+      "decoder_positions": tf.int32
+  }
+
+  def _convert_example(
+      self, features: Mapping[str, tf.Tensor]) -> Mapping[str, tf.Tensor]:
+    """Convert an LM example into an example with model features."""
+    # targets_segment_id is present only for a packed dataset.
+    decoder_input_token = autoregressive_inputs(
+        features["targets"],
+        sequence_id=features.get("targets_segment_ids", None))
+
+    d = {"decoder_target_tokens": features["targets"],
+         "decoder_input_tokens": decoder_input_token,
+         "decoder_loss_weights": non_padding_position(features["targets"])}
+
+    if self.pack:
+      d["decoder_segment_ids"] = features["targets_segment_ids"]
+      d["decoder_positions"] = features["targets_positions"]
+
+    return d
+
+  def _convert_features(
+      self, ds: tf.data.Dataset,
+      task_feature_lengths: Mapping[str, int]) -> tf.data.Dataset:
+    """Convert the dataset to be fed to a language model."""
+    ds = self._pack_or_pad(ds, task_feature_lengths)
+    return ds.map(
+        self._convert_example, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+  def get_model_feature_lengths(
+      self, task_feature_lengths: Mapping[str, int]) -> Mapping[str, int]:
+    """Define the length relationship between task and model features."""
+    decoder_length = task_feature_lengths["targets"]
+    model_feature_lengths = {
+        "decoder_target_tokens": decoder_length,
+        "decoder_input_tokens": decoder_length,
+        "decoder_loss_weights": decoder_length
+    }
+    if self.pack:
+      model_feature_lengths["decoder_segment_ids"] = decoder_length
+      model_feature_lengths["decoder_positions"] = decoder_length
+
+    return model_feature_lengths

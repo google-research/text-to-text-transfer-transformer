@@ -630,5 +630,75 @@ class GetDatasetTest(tf.test.TestCase):
     assert_dataset(output_ds, expected, expected_dtypes=expected_dtypes)
 
 
+class LMFeatureConverter(tf.test.TestCase):
+
+  def test_lm_unpacked(self):
+    x = [{"targets": [3, 9, 1]}]
+    ds = create_default_dataset(x, feature_names=["targets"])
+    task_feature_lengths = {"targets": 5}
+
+    converter = feature_converters.LMFeatureConverter(pack=False)
+    converted_ds = converter(ds, task_feature_lengths)
+
+    expected = {
+        "decoder_target_tokens": [3, 9, 1, 0, 0],
+        "decoder_input_tokens": [0, 3, 9, 1, 0],
+        "decoder_loss_weights": [1, 1, 1, 0, 0],
+    }
+    assert_dataset(converted_ds, expected)
+
+  def test_lm_only_packed(self):
+    x = [{"targets": [3, 9, 1]}, {"targets": [4, 1]}]
+    ds = create_default_dataset(x, feature_names=["targets"])
+    task_feature_lengths = {"targets": 6}
+
+    converter = feature_converters.LMFeatureConverter(pack=True)
+    converted_ds = converter(ds, task_feature_lengths)
+
+    expected = {
+        "decoder_target_tokens": [3, 9, 1, 4, 1, 0],
+        "decoder_input_tokens": [0, 3, 9, 0, 4, 0],
+        "decoder_loss_weights": [1, 1, 1, 1, 1, 0],
+        "decoder_positions": [0, 1, 2, 0, 1, 0],
+        "decoder_segment_ids": [1, 1, 1, 2, 2, 0]
+    }
+    assert_dataset(converted_ds, expected)
+
+  def test_lm_pack_long_sequences(self):
+    x = [{"targets": [3, 9, 4, 5, 1]}, {"targets": [4, 3, 2, 1]}]
+    ds = create_default_dataset(x, feature_names=["targets"])
+    task_feature_lengths = {"targets": 5}
+
+    converter = feature_converters.LMFeatureConverter(pack=True)
+    converted_ds = converter(ds, task_feature_lengths)
+
+    expected = [{
+        "decoder_target_tokens": [3, 9, 4, 5, 1],
+        "decoder_input_tokens": [0, 3, 9, 4, 5],
+        "decoder_loss_weights": [1, 1, 1, 1, 1],
+        "decoder_positions": [0, 1, 2, 3, 4],
+        "decoder_segment_ids": [1, 1, 1, 1, 1]
+    }, {
+        "decoder_target_tokens": [4, 3, 2, 1, 0],
+        "decoder_input_tokens": [0, 4, 3, 2, 0],
+        "decoder_loss_weights": [1, 1, 1, 1, 0],
+        "decoder_positions": [0, 1, 2, 3, 0],
+        "decoder_segment_ids": [1, 1, 1, 1, 0]
+    }]
+    assert_dataset(converted_ds, expected)
+
+  def test_lm_plaintext_field(self):
+    x = [{"targets": [3, 9, 1], "targets_plaintext": "abc"},
+         {"targets": [4, 1], "targets_plaintext": "abc"}]
+    types = {"targets": tf.int32, "targets_plaintext": tf.string}
+    shapes = {"targets": [None], "targets_plaintext": []}
+    ds = tf.data.Dataset.from_generator(
+        lambda: x, output_types=types, output_shapes=shapes)
+    task_feature_lengths = {"targets": 6}
+
+    converter = feature_converters.LMFeatureConverter(pack=True)
+    converter(ds, task_feature_lengths)
+
+
 if __name__ == "__main__":
   tf.test.main()
