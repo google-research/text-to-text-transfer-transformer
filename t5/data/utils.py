@@ -190,7 +190,7 @@ def dict_to_tfexample(ex):
       feature_dict[k] = tf.train.Feature(
           bytes_list=tf.train.BytesList(
               value=[tf.compat.as_bytes(t) for t in v]))
-    elif t.dtype in (tf.int32, tf.int64) and len(t.shape) <= 1:
+    elif t.dtype in (tf.bool, tf.int32, tf.int64) and len(t.shape) <= 1:
       feature_dict[k] = tf.train.Feature(
           int64_list=tf.train.Int64List(value=v))
     elif t.dtype in (tf.float32, tf.float64) and len(t.shape) <= 1:
