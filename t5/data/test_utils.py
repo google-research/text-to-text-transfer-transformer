@@ -492,6 +492,7 @@ def add_task(
     kwargs["output_features"] = dataset_providers.Feature(sentencepiece_vocab())
   TaskRegistry.add(
       name,
+      dataset_providers.Task,
       dataset_fn=dataset_fn,
       splits=splits,
       text_preprocessor=text_preprocessor,
