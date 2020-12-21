@@ -1,0 +1,7 @@
+{
+  "examples": 3,
+  "inputs_max_tokens": 13,
+  "inputs_tokens": 36,
+  "targets_max_tokens": 6,
+  "targets_tokens": 18
+}

@@ -1867,18 +1867,18 @@ def preprocess_tsv(line,
 # ======================Token Preprocessors=====================================
 
 
-def tokenize(dataset, output_features, copy_plaintext=True):
+def tokenize(dataset, output_features, copy_pretokenized=True):
   """Encode specified string features.
 
   Passes through non-string features unchanged. Optionally passes through copy
-  of original string features with "_plaintext" suffix added to the key.
+  of original features with "_pretokenized" suffix added to the key.
 
   Args:
     dataset: a tf.data.Dataset
     output_features: a dict of Feature objects; their vocabulary attribute will
       be used to tokenize the specified features.
-    copy_plaintext: bool, whether to pass through copies of plaintext strings
-      with a "_plaintext" suffix added to the key.
+    copy_pretokenized: bool, whether to pass through copies of original features
+      with "_pretokenized" suffix added to the key.
 
   Returns:
     a tf.data.Dataset
@@ -1895,9 +1895,9 @@ def tokenize(dataset, output_features, copy_plaintext=True):
     """
     ret = {}
     for k, v in features.items():
-      if k in output_features and v.dtype == tf.string:
-        if copy_plaintext:
-          ret[f'{k}_plaintext'] = v
+      if k in output_features:
+        if copy_pretokenized:
+          ret[f'{k}_pretokenized'] = v
         v = output_features[k].vocabulary.encode_tf(v)
       ret[k] = v
     return ret

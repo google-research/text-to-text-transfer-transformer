@@ -487,6 +487,20 @@ def maybe_print_dataset(dataset, should_print=False):
   return print_dataset(dataset) if should_print else dataset
 
 
+def _rename_plaintext_to_pretokenized(
+    dataset: tf.data.Dataset) -> tf.data.Dataset:
+  """Rename cached _plaintext features to new _pretokenized standard."""
+  def _rename(inputs):
+    outputs = {}
+    for k, v in inputs.items():
+      if k.endswith("_plaintext"):
+        k = k[:-len("plaintext")] + "pretokenized"
+      outputs[k] = v
+    return outputs
+  return dataset.map(
+      _rename, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+
 class CacheDatasetPlaceholder(object):
   """A placeholder to signal when in the pipeline offline caching will occur."""
 
@@ -854,6 +868,9 @@ class TaskV3(DatasetProviderBase):
       # Cached datasets were previously tokenized as int64, so we may need to
       # cast here (e.g., to int32).
       ds = self._cast_output_features(ds)
+      # Legacy cached datasets may use old "_plaintext" suffix. Rename to
+      # "_pretokenized".
+      ds = _rename_plaintext_to_pretokenized(ds)
     ds = self._validate_preprocessing(ds)
     ds = self._trim_and_ensure_eos(ds, sequence_length=sequence_length)
     ds = maybe_print_dataset(ds)
@@ -909,8 +926,8 @@ class Task(TaskV3):
   """A wrapper for a `tf.data.Dataset` along with preprocessing information.
 
   Tasks handle preprocessing (via arbitrary TF function) and tokenization.
-  Non-train splits also pass through the original plaintext strings with a
-  "_plaintext" suffix added to the key.
+  Non-train splits also pass through the original features with an
+  "_pretokenized" suffix added to the key.
   """
 
   def __init__(self,
@@ -1263,7 +1280,7 @@ class Mixture(DatasetProviderBase):
       shuffle: bool = True,
       seed: Optional[int] = None,
       shard_info: Optional[ShardInfo] = None,
-      copy_plaintext: bool = False,
+      copy_pretokenized: bool = False,
       compute_stats_empirically: bool = False,
   ) -> tf.data.Dataset:
     """Returns the dataset of mixed tasks using the object-specified rates.
@@ -1277,8 +1294,8 @@ class Mixture(DatasetProviderBase):
         on the fly (use_cached=False).
       seed: tf.int64 scalar tf.Tensor (or None) for shuffling tf.data.
       shard_info: optional specification for loading a shard of the split.
-      copy_plaintext: bool, whether to pass through copies of plaintext strings
-        with a "_plaintext" suffix added to the key.
+      copy_pretokenized: bool, whether to pass through copies of original features
+        with an "_pretokenized" suffix added to the key.
       compute_stats_empirically: a boolean - does not work on TPU
     """
     self._check_compatible_features()
@@ -1294,9 +1311,9 @@ class Mixture(DatasetProviderBase):
       raise ValueError("No datasets have a '{}' split".format(split))
 
     output_feature_keys = set(self.output_features.keys())
-    if copy_plaintext:
+    if copy_pretokenized:
       output_feature_keys.update(
-          {f + "_plaintext" for f in output_feature_keys})
+          {f + "_pretokenized" for f in output_feature_keys})
 
     def filter_features(ex):
       return {k: v for k, v in ex.items() if k in output_feature_keys}

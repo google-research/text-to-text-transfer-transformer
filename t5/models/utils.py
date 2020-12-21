@@ -110,8 +110,8 @@ def write_targets_and_examples(summary_dir, targets, examples):
 
     inputs = []
     for ex in examples[task]:
-      if "inputs_plaintext" in ex:
-        inputs.append(ex["inputs_plaintext"])
+      if "inputs_pretokenized" in ex:
+        inputs.append(ex["inputs_pretokenized"])
       else:
         inputs.append(ex["inputs"])
 
@@ -129,9 +129,9 @@ def get_targets_and_examples(tasks, dataset_fn):
     tasks: list, contains tasks objects.
     dataset_fn: function, returns the dataset from the task object.
   Returns:
-    Dict of plaintext examples for each task, list of plaintext targets for each
-    task, a dict of datasets for each task, and a dict with max sequence lengths
-    for inputs and targets.
+    Dict of unpreprocessed examples for each task, list of unpreprocessed
+    targets for each task, a dict of datasets for each task, and a dict with max
+    sequence lengths for inputs and targets.
   """
   # Pre-load in all of the targets once before entering continuous eval loop
   cached_targets = {}
@@ -155,10 +155,12 @@ def get_targets_and_examples(tasks, dataset_fn):
       examples.append(ex)
 
       # Create list of postprocessed targets
-      if "targets_plaintext" in ex:
+      if "targets_pretokenized" in ex:
+        targets_pretokenized = ex["targets_pretokenized"]
+        if isinstance(targets_pretokenized, bytes):
+          targets_pretokenized = targets_pretokenized.decode("utf-8")
         targets.append(task.postprocess_fn(
-            tf.compat.as_text(ex["targets_plaintext"]),
-            example=ex, is_target=True))
+            targets_pretokenized, example=ex, is_target=True))
       else:
         targets.append(task.postprocess_fn(
             tf.compat.as_text(ex["targets"]), example=ex, is_target=True))

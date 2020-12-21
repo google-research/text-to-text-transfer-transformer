@@ -154,13 +154,13 @@ class EvaluatorTest(tf.test.TestCase):
 
   def test_short_inputs_targets(self):
     task_name = "short_inputs_targets"
-    x = [{"inputs": [7, 8], "targets": [3, 9], "targets_plaintext": "ex 1"}]
+    x = [{"inputs": [7, 8], "targets": [3, 9], "targets_pretokenized": "ex 1"}]
     dtypes = {
         "inputs": tf.int32,
         "targets": tf.int32,
-        "targets_plaintext": tf.string
+        "targets_pretokenized": tf.string
     }
-    shapes = {"inputs": [None], "targets": [None], "targets_plaintext": []}
+    shapes = {"inputs": [None], "targets": [None], "targets_pretokenized": []}
     ds = tf.data.Dataset.from_generator(
         lambda: x, output_types=dtypes, output_shapes=shapes)
     dataset_fn = lambda split, shuffle_files: ds
@@ -180,14 +180,21 @@ class EvaluatorTest(tf.test.TestCase):
 
   def test_no_sequence_lengths(self):
     task_name = "no_sequence_lengths"
-    x = [{"inputs": [7, 8], "targets": [3, 9], "targets_plaintext": "ex 1"},
-         {"inputs": [8, 4, 5, 6], "targets": [4], "targets_plaintext": "ex 2"}]
+    x = [{
+        "inputs": [7, 8],
+        "targets": [3, 9],
+        "targets_pretokenized": "ex 1"
+    }, {
+        "inputs": [8, 4, 5, 6],
+        "targets": [4],
+        "targets_pretokenized": "ex 2"
+    }]
     dtypes = {
         "inputs": tf.int32,
         "targets": tf.int32,
-        "targets_plaintext": tf.string
+        "targets_pretokenized": tf.string
     }
-    shapes = {"inputs": [None], "targets": [None], "targets_plaintext": []}
+    shapes = {"inputs": [None], "targets": [None], "targets_pretokenized": []}
     ds = tf.data.Dataset.from_generator(
         lambda: x, output_types=dtypes, output_shapes=shapes)
     dataset_fn = lambda split, shuffle_files: ds
@@ -206,14 +213,21 @@ class EvaluatorTest(tf.test.TestCase):
 
   def test_caching(self):
     task_name = "caching"
-    x = [{"inputs": [7, 8], "targets": [3, 9], "targets_plaintext": "ex 1"},
-         {"inputs": [8, 4], "targets": [4], "targets_plaintext": "ex 2"}]
+    x = [{
+        "inputs": [7, 8],
+        "targets": [3, 9],
+        "targets_pretokenized": "ex 1"
+    }, {
+        "inputs": [8, 4],
+        "targets": [4],
+        "targets_pretokenized": "ex 2"
+    }]
     dtypes = {
         "inputs": tf.int32,
         "targets": tf.int32,
-        "targets_plaintext": tf.string
+        "targets_pretokenized": tf.string
     }
-    shapes = {"inputs": [None], "targets": [None], "targets_plaintext": []}
+    shapes = {"inputs": [None], "targets": [None], "targets_pretokenized": []}
     ds = tf.data.Dataset.from_generator(
         lambda: x, output_types=dtypes, output_shapes=shapes)
     dataset_fn = lambda split, shuffle_files: ds
@@ -228,9 +242,13 @@ class EvaluatorTest(tf.test.TestCase):
         feature_converter=feature_converter,
         eval_split="validation")
     expected_examples = [{
-        "inputs": [7, 8, 1], "targets": [3, 9, 1], "targets_plaintext": b"ex 1"
+        "inputs": [7, 8, 1],
+        "targets": [3, 9, 1],
+        "targets_pretokenized": b"ex 1"
     }, {
-        "inputs": [8, 4, 1], "targets": [4, 1], "targets_plaintext": b"ex 2"
+        "inputs": [8, 4, 1],
+        "targets": [4, 1],
+        "targets_pretokenized": b"ex 2"
     }]
     np.testing.assert_equal(evaluator._cached_examples[task_name][1],
                             expected_examples[1])

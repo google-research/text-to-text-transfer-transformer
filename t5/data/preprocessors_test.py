@@ -1131,13 +1131,14 @@ class PreprocessorsTest(tf.test.TestCase):
     assert_dataset(
         prep.tokenize(og_dataset, output_features=output_features), {
             'prefix': [0, 1],
-            'prefix_plaintext': 'This is',
+            'prefix_pretokenized': 'This is',
             'suffix': [2, 3],
-            'suffix_plaintext': 'a test.'
+            'suffix_pretokenized': 'a test.'
         })
     assert_dataset(
         prep.tokenize(
-            og_dataset, output_features=output_features, copy_plaintext=False),
+            og_dataset, output_features=output_features,
+            copy_pretokenized=False),
         {
             'prefix': [0, 1],
             'suffix': [2, 3]

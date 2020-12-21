@@ -99,7 +99,7 @@ def wsc_simple(prediction, example=None, is_target=False):
 
   # We aren't using the label but rather using the extracted referent so that we
   # can see if the prediction is equivalent to the referent.
-  referent = clean(example["targets_plaintext"])
+  referent = clean(example["targets_pretokenized"])
   prediction = clean(prediction)
 
   if ("'" in prediction) != ("'" in referent):

@@ -85,38 +85,39 @@ class PostprocessorsTest(absltest.TestCase):
 
     self.assertEqual(
         postprocessors.wsc_simple(
-            "potato", example={"targets_plaintext": b"turnip"},
+            "potato", example={"targets_pretokenized": b"turnip"},
             is_target=False), 0)
     self.assertEqual(
         postprocessors.wsc_simple(
-            "turnip", example={"targets_plaintext": b"turnip"},
+            "turnip", example={"targets_pretokenized": b"turnip"},
             is_target=False), 1)
     self.assertEqual(
         postprocessors.wsc_simple(
-            "the cat", example={"targets_plaintext": b"cat"}, is_target=False),
+            "the cat", example={"targets_pretokenized": b"cat"},
+            is_target=False),
         1)
     self.assertEqual(
         postprocessors.wsc_simple(
-            "Bob's hat", example={"targets_plaintext": b"Bob"},
+            "Bob's hat", example={"targets_pretokenized": b"Bob"},
             is_target=False), 0)
     self.assertEqual(
         postprocessors.wsc_simple(
             "Bob's hat",
-            example={"targets_plaintext": b"Bob's hat"},
+            example={"targets_pretokenized": b"Bob's hat"},
             is_target=False), 1)
     self.assertEqual(
         postprocessors.wsc_simple(
-            "potato", example={"targets_plaintext": b"Potato"},
+            "potato", example={"targets_pretokenized": b"Potato"},
             is_target=False), 1)
     self.assertEqual(
         postprocessors.wsc_simple(
             "a potato",
-            example={"targets_plaintext": b"my potato"},
+            example={"targets_pretokenized": b"my potato"},
             is_target=False), 1)
     self.assertEqual(
         postprocessors.wsc_simple(
             "fuzzy bunny",
-            example={"targets_plaintext": b"fuzzy hungry bunny"},
+            example={"targets_pretokenized": b"fuzzy hungry bunny"},
             is_target=False), 1)
 
   def test_rank_classification(self):

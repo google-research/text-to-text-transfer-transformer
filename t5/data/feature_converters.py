@@ -602,7 +602,7 @@ class EncDecFeatureConverter(FeatureConverter):
     All the keys in the `task_feature_lengths` should be present in the input
     dataset, which may contain some extra features that are not in the
     `task_feature_lengths`. They will not be included in the output dataset.
-    One common scenario is the "inputs_plaintext" and "targets_plaintext"
+    One common scenario is the "inputs_pretokenized" and "targets_pretokenized"
     fields.
 
     Args:

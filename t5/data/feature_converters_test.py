@@ -127,9 +127,9 @@ class HelperFunctionsTest(tf.test.TestCase):
       list(ds.as_numpy_iterator())
 
   def test_check_lengths_extra_features(self):
-    x = [{"targets": [3, 9, 4, 5], "targets_plaintext": "some text"}]
-    output_types = {"targets": tf.int64, "targets_plaintext": tf.string}
-    output_shapes = {"targets": [4], "targets_plaintext": []}
+    x = [{"targets": [3, 9, 4, 5], "targets_pretokenized": "some text"}]
+    output_types = {"targets": tf.int64, "targets_pretokenized": tf.string}
+    output_shapes = {"targets": [4], "targets_pretokenized": []}
     ds = tf.data.Dataset.from_generator(
         lambda: x, output_types=output_types, output_shapes=output_shapes)
     task_feature_lengths = {"targets": 4}
@@ -273,10 +273,10 @@ class FeatureConvertersTest(tf.test.TestCase):
       with self.assertRaisesRegex(ValueError, expected_msg):
         converter(ds, task_feature_lengths)
 
-  def test_validate_dataset_plaintext_field(self):
-    x = [{"targets": [3, 9, 4, 5], "targets_plaintext": "some text"}]
-    output_types = {"targets": tf.int64, "targets_plaintext": tf.string}
-    output_shapes = {"targets": [4], "targets_plaintext": []}
+  def test_validate_dataset_pretokenized_field(self):
+    x = [{"targets": [3, 9, 4, 5], "targets_pretokenized": "some text"}]
+    output_types = {"targets": tf.int64, "targets_pretokenized": tf.string}
+    output_shapes = {"targets": [4], "targets_pretokenized": []}
     ds = tf.data.Dataset.from_generator(
         lambda: x, output_types=output_types, output_shapes=output_shapes)
 
@@ -284,7 +284,7 @@ class FeatureConvertersTest(tf.test.TestCase):
     with mock.patch.object(feature_converters.FeatureConverter,
                            "__abstractmethods__", set()):
       converter = feature_converters.FeatureConverter()
-      # _validate_dataset works even if ds has targets and targets_plaintext
+      # _validate_dataset works even if ds has targets and targets_pretokenized
       ds = converter._validate_dataset(
           ds,
           expected_features=task_feature_lengths.keys(),
@@ -395,28 +395,28 @@ class EncDecFeatureConverterTest(tf.test.TestCase):
     }]
     assert_dataset(converted_ds, expected)
 
-  def test_encoder_decoder_plaintext_field(self):
+  def test_encoder_decoder_pretokenized_field(self):
     x = [{
         "inputs": [7, 8, 5, 1],
         "targets": [3, 9, 1],
-        "targets_plaintext": "abc"
+        "targets_pretokenized": "abc"
     }, {
         "inputs": [8, 4, 9, 3, 1],
         "targets": [4, 1],
-        "targets_plaintext": "def"
+        "targets_pretokenized": "def"
     }]
     types = {
         "inputs": tf.int32,
         "targets": tf.int32,
-        "targets_plaintext": tf.string
+        "targets_pretokenized": tf.string
     }
-    shapes = {"inputs": [None], "targets": [None], "targets_plaintext": []}
+    shapes = {"inputs": [None], "targets": [None], "targets_pretokenized": []}
     ds = tf.data.Dataset.from_generator(
         lambda: x, output_types=types, output_shapes=shapes)
 
     task_feature_lengths = {"inputs": 10, "targets": 7}
     converter = feature_converters.EncDecFeatureConverter(pack=True)
-    # Check whether convert_features raise error because targets_plaintext is
+    # Check whether convert_features raise error because targets_pretokenized is
     # present in the ds but not in the task_feature_lengths
     converter(ds, task_feature_lengths)
 

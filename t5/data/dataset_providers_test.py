@@ -467,6 +467,16 @@ class TasksTest(test_utils.FakeTaskTest):
         split="train", use_cached=False, shuffle=False, seed=42)
     test_utils.assert_datasets_neq(dataset1, dataset2)
 
+  def test_plaintext_to_pretokenized_rename(self):
+    ds = self.cached_plaintext_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=True, shuffle=False)
+    keys = next(ds.as_numpy_iterator()).keys()
+    self.assertSetEqual(
+        set(keys),
+        set(["inputs", "inputs_pretokenized",
+             "targets", "targets_pretokenized"]))
+
 
 class MixturesTest(test_utils.FakeTaskTest):
 
@@ -581,7 +591,6 @@ class MixturesTest(test_utils.FakeTaskTest):
     self.assertEqual(names, ["task2_a", "task2_b", "task2_c"])
     self.assertEqual([supermix.get_rate(t) for t in supermix.tasks],
                      [1.5, 0.5, 1])
-
 
 if __name__ == "__main__":
   absltest.main()

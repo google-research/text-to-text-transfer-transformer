@@ -6,7 +6,7 @@
         null
       ]
     },
-    "inputs_pretokenized": {
+    "inputs_plaintext": {
       "dtype": "string",
       "shape": []
     },
@@ -16,7 +16,7 @@
         null
       ]
     },
-    "targets_pretokenized": {
+    "targets_plaintext": {
       "dtype": "string",
       "shape": []
     }

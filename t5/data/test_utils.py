@@ -79,6 +79,46 @@ _FAKE_TOKENIZED_DATASET = {
     "train": [
         {
             "inputs": (3, 13, 7, 14, 15, 9, 4, 16, 12, 11, 8, 6),
+            "inputs_pretokenized": "complete: this",
+            "targets": (3, 8, 6, 3, 5, 10),
+            "targets_pretokenized": "is a test"
+        }, {
+            "inputs": (3, 13, 7, 14, 15, 9, 4, 16, 12, 11, 18),
+            "inputs_pretokenized": "complete: that",
+            "targets": (17, 5, 6, 3, 5, 10),
+            "targets_pretokenized": "was a test"
+        }, {
+            "inputs": (3, 13, 7, 14, 15, 9, 4, 16, 12, 11, 7, 6, 4),
+            "inputs_pretokenized": "complete: those",
+            "targets": (17, 4, 23, 4, 10, 6),
+            "targets_pretokenized": "were tests"
+        },
+    ],
+    "validation": [
+        {
+            "idx": 0, "idxs": (100,), "id": "a", "ids": ("a1", "a2"),
+            "inputs": (3, 13, 7, 14, 15, 9, 4, 16, 12, 11, 8, 6),
+            "inputs_pretokenized": "complete: this",
+            "targets": (3, 8, 6, 3, 5, 3, 25, 5, 9, 8, 21, 18, 8, 7, 22),
+            "targets_pretokenized": "is a validation",
+        }, {
+            "idx": 1, "idxs": (200, 201), "id": "b", "ids": ("b1",),
+            "inputs": (3, 13, 7, 14, 15, 9, 4, 16, 12, 11, 18),
+            "inputs_pretokenized": "complete: that",
+            "targets": (17, 5, 6, 3, 5, 22, 7, 24, 20, 4, 23, 3, 25, 5, 9, 8,
+                        21, 18, 8, 7, 22),
+            "targets_pretokenized": "was another validation",
+        }
+    ]
+}
+
+# Text preprocessed and tokenized.
+# Simulates legacy cached dataset that used '_plaintext' suffix instead of
+# '_pretokenized'.
+_FAKE_PLAINTEXT_TOKENIZED_DATASET = {
+    "train": [
+        {
+            "inputs": (3, 13, 7, 14, 15, 9, 4, 16, 12, 11, 8, 6),
             "inputs_plaintext": "complete: this",
             "targets": (3, 8, 6, 3, 5, 10),
             "targets_plaintext": "is a test"
@@ -94,22 +134,6 @@ _FAKE_TOKENIZED_DATASET = {
             "targets_plaintext": "were tests"
         },
     ],
-    "validation": [
-        {
-            "idx": 0, "idxs": (100,), "id": "a", "ids": ("a1", "a2"),
-            "inputs": (3, 13, 7, 14, 15, 9, 4, 16, 12, 11, 8, 6),
-            "inputs_plaintext": "complete: this",
-            "targets": (3, 8, 6, 3, 5, 3, 25, 5, 9, 8, 21, 18, 8, 7, 22),
-            "targets_plaintext": "is a validation",
-        }, {
-            "idx": 1, "idxs": (200, 201), "id": "b", "ids": ("b1",),
-            "inputs": (3, 13, 7, 14, 15, 9, 4, 16, 12, 11, 18),
-            "inputs_plaintext": "complete: that",
-            "targets": (17, 5, 6, 3, 5, 22, 7, 24, 20, 4, 23, 3, 25, 5, 9, 8,
-                        21, 18, 8, 7, 22),
-            "targets_plaintext": "was another validation",
-        }
-    ]
 }
 
 # Text preprocessed and tokenized.
@@ -117,35 +141,35 @@ _FAKE_TOKEN_PREPROCESSED_DATASET = {
     "train": [
         {
             "inputs": (3, 13, 7, 14, 15, 9, 4, 50, 12, 11, 8, 6),
-            "inputs_plaintext": "complete: this",
+            "inputs_pretokenized": "complete: this",
             "targets": (3, 8, 6, 3, 5, 10),
-            "targets_plaintext": "is a test"
+            "targets_pretokenized": "is a test"
         }, {
             "inputs": (3, 13, 7, 14, 15, 9, 4, 50, 12, 11, 50),
-            "inputs_plaintext": "complete: that",
+            "inputs_pretokenized": "complete: that",
             "targets": (17, 5, 6, 3, 5, 10),
-            "targets_plaintext": "was a test"
+            "targets_pretokenized": "was a test"
         }, {
             "inputs": (3, 13, 7, 14, 15, 9, 4, 50, 12, 11, 7, 6, 4),
-            "inputs_plaintext": "complete: those",
+            "inputs_pretokenized": "complete: those",
             "targets": (17, 4, 23, 4, 10, 6),
-            "targets_plaintext": "were tests"
+            "targets_pretokenized": "were tests"
         },
     ],
     "validation": [
         {
             "idx": 0, "idxs": (100,), "id": "a", "ids": ("a1", "a2"),
             "inputs": (3, 13, 7, 14, 15, 9, 4, 50, 12, 11, 8, 6),
-            "inputs_plaintext": "complete: this",
+            "inputs_pretokenized": "complete: this",
             "targets": (3, 8, 6, 3, 5, 3, 25, 5, 9, 8, 21, 18, 8, 7, 22),
-            "targets_plaintext": "is a validation",
+            "targets_pretokenized": "is a validation",
         }, {
             "idx": 1, "idxs": (200, 201), "id": "b", "ids": ("b1",),
             "inputs": (3, 13, 7, 14, 15, 9, 4, 50, 12, 11, 50),
-            "inputs_plaintext": "complete: that",
+            "inputs_pretokenized": "complete: that",
             "targets": (17, 5, 6, 3, 5, 22, 7, 24, 20, 4, 23, 3, 25, 5, 9, 8,
                         21, 18, 8, 7, 22),
-            "targets_plaintext": "was another validation",
+            "targets_pretokenized": "was another validation",
         }
     ]
 }
@@ -217,7 +241,7 @@ def _assert_compare_to_fake_dataset(
 
   expected_output_shapes = {
       "inputs": [None], "targets": [None],
-      "inputs_plaintext": [], "targets_plaintext": []}
+      "inputs_pretokenized": [], "targets_pretokenized": []}
   if split == "validation":
     expected_output_shapes.update(
         {"id": [], "ids": [None], "idx": [], "idxs": [None]})
@@ -606,6 +630,17 @@ class FakeTaskTest(absltest.TestCase):
     shutil.copytree(
         cached_task_dir,
         os.path.join(self.test_data_dir, "cached_task_no_token_prep"))
+
+    # Prepare cached plaintext task.
+    add_tfds_task("cached_plaintext_task",
+                  token_preprocessor=test_token_preprocessor)
+    self.cached_plaintext_task = TaskRegistry.get("cached_plaintext_task")
+    cached_plaintext_task_dir = os.path.join(
+        self.test_data_dir, "cached_plaintext_task")
+    _dump_fake_dataset(
+        os.path.join(cached_plaintext_task_dir, "train.tfrecord"),
+        _FAKE_PLAINTEXT_TOKENIZED_DATASET["train"], [2, 1],
+        _dump_examples_to_tfrecord)
 
     # Prepare uncached TfdsTask.
     add_tfds_task("uncached_task", token_preprocessor=test_token_preprocessor)
