@@ -58,9 +58,10 @@ def normalize_squad(answer):
   return _normalize_answer(answer, punc_chars=string.punctuation, punc_repl="")
 
 
-def _metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
+def _metric_max_over_ground_truths(metric_fn, ground_truths, prediction):
+  """Computes the maximum of the metric over all ground truths."""
   return max(
-      metric_fn(prediction, ground_truth) for ground_truth in ground_truths
+      metric_fn(ground_truth, prediction) for ground_truth in ground_truths
   )
 
 
@@ -88,11 +89,11 @@ def qa_metrics(targets, predictions):
   if len(targets) != len(predictions):
     raise ValueError("Number of targets and predictions must match.")
   em = np.mean([
-      _metric_max_over_ground_truths(_exact_match_score, p, t)
+      _metric_max_over_ground_truths(_exact_match_score, t, p)
       for p, t in zip(predictions, targets)
   ])
   f1 = np.mean([
-      _metric_max_over_ground_truths(_f1_score, p, t)
+      _metric_max_over_ground_truths(_f1_score, t, p)
       for p, t in zip(predictions, targets)
   ])
   em *= 100
