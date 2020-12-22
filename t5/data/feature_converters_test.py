@@ -700,5 +700,182 @@ class LMFeatureConverter(tf.test.TestCase):
     converter(ds, task_feature_lengths)
 
 
+class PrefixLMFeatureConverter(tf.test.TestCase):
+
+  def test_prefix_lm_unpacked(self):
+    x = [{"inputs": [9, 4, 6, 1], "targets": [3, 9, 1]}]
+    ds = create_default_dataset(x)
+
+    task_feature_lengths = {"inputs": 5, "targets": 4}
+    converter = feature_converters.PrefixLMFeatureConverter(pack=False)
+    converted_ds = converter(ds, task_feature_lengths)
+
+    expected = {
+        "decoder_target_tokens": [9, 4, 6, 1, 3, 9, 1, 0, 0],
+        # The last EOS token is kept if unpacked.
+        "decoder_input_tokens": [0, 9, 4, 6, 1, 3, 9, 1, 0],
+        "decoder_loss_weights": [0, 0, 0, 0, 1, 1, 1, 0, 0],
+        "decoder_causal_attention": [1, 1, 1, 1, 1, 0, 0, 0, 0]
+    }
+    assert_dataset(converted_ds, expected)
+
+  def test_prefix_lm_packed(self):
+    x = [{"inputs": [7, 8, 5, 1], "targets": [3, 9, 1]},
+         {"inputs": [8, 4, 9, 3, 1], "targets": [4, 1]}]
+    ds = create_default_dataset(x)
+
+    task_feature_lengths = {"inputs": 8, "targets": 7}
+    converter = feature_converters.PrefixLMFeatureConverter(pack=True)
+    converted_ds = converter(ds, task_feature_lengths)
+
+    expected = {
+        "decoder_target_tokens": [7, 8, 5, 1, 3, 9, 1, 8, 4, 9, 3, 1, 4, 1, 0],
+        "decoder_input_tokens": [0, 7, 8, 5, 1, 3, 9, 0, 8, 4, 9, 3, 1, 4, 0],
+        "decoder_loss_weights": [0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0],
+        "decoder_positions": [0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6, 0],
+        "decoder_segment_ids": [1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 0],
+        "decoder_causal_attention": [
+            1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0
+        ]
+    }
+    assert_dataset(converted_ds, expected)
+
+  def test_prefix_lm_unpacked_additional_position_false(self):
+    x = [{"inputs": [9, 4, 6, 1], "targets": [3, 9, 1]}]
+    ds = create_default_dataset(x)
+
+    task_feature_lengths = {"inputs": 5, "targets": 4}
+    converter = feature_converters.PrefixLMFeatureConverter(
+        pack=False, additional_position=False)
+    converted_ds = converter(ds, task_feature_lengths)
+
+    expected = {
+        "decoder_target_tokens": [9, 4, 6, 1, 3, 9, 1, 0, 0],
+        # The last EOS token is kept if unpacked.
+        "decoder_input_tokens": [0, 9, 4, 6, 1, 3, 9, 1, 0],
+        "decoder_loss_weights": [0, 0, 0, 0, 1, 1, 1, 0, 0],
+        "decoder_causal_attention": [1, 1, 1, 1, 0, 0, 0, 0, 0]
+    }
+    assert_dataset(converted_ds, expected)
+
+  def test_prefix_lm_packed_additional_position_false(self):
+    x = [{"inputs": [7, 8, 5, 1], "targets": [3, 9, 1]},
+         {"inputs": [8, 4, 9, 3, 1], "targets": [4, 1]}]
+    ds = create_default_dataset(x)
+
+    task_feature_lengths = {"inputs": 8, "targets": 7}
+    converter = feature_converters.PrefixLMFeatureConverter(
+        pack=True, additional_position=False)
+    converted_ds = converter(ds, task_feature_lengths)
+
+    expected = {
+        "decoder_target_tokens": [7, 8, 5, 1, 3, 9, 1, 8, 4, 9, 3, 1, 4, 1, 0],
+        "decoder_input_tokens": [0, 7, 8, 5, 1, 3, 9, 0, 8, 4, 9, 3, 1, 4, 0],
+        "decoder_loss_weights": [0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0],
+        "decoder_positions": [0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6, 0],
+        "decoder_segment_ids": [1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 0],
+        "decoder_causal_attention": [
+            1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0
+        ]
+    }
+    assert_dataset(converted_ds, expected)
+
+  def test_prefix_lm_unpacked_loss_on_inputs_and_targets(self):
+    x = [{"inputs": [9, 4, 6, 1], "targets": [3, 9, 1]}]
+    ds = create_default_dataset(x)
+
+    task_feature_lengths = {"inputs": 5, "targets": 4}
+    converter = feature_converters.PrefixLMFeatureConverter(
+        pack=False, loss_on_targets_only=False)
+    converted_ds = converter(ds, task_feature_lengths)
+
+    expected = {
+        "decoder_target_tokens": [9, 4, 6, 1, 3, 9, 1, 0, 0],
+        "decoder_input_tokens": [0, 9, 4, 6, 1, 3, 9, 1, 0],
+        # Loss weights on the inputs portion and padding should be zeroed out.
+        "decoder_loss_weights": [1, 1, 1, 1, 1, 1, 1, 0, 0],
+        "decoder_causal_attention": [1, 1, 1, 1, 1, 0, 0, 0, 0]
+    }
+    assert_dataset(converted_ds, expected)
+
+  def test_prefix_lm_packed_loss_on_inputs_and_targets(self):
+    x = [{"inputs": [7, 8, 5, 1], "targets": [3, 9, 1]},
+         {"inputs": [8, 4, 9, 3, 1], "targets": [4, 1]}]
+    ds = create_default_dataset(x)
+
+    task_feature_lengths = {"inputs": 8, "targets": 7}
+    converter = feature_converters.PrefixLMFeatureConverter(
+        pack=True, loss_on_targets_only=False)
+    converted_ds = converter(ds, task_feature_lengths)
+
+    expected = {
+        "decoder_target_tokens": [7, 8, 5, 1, 3, 9, 1, 8, 4, 9, 3, 1, 4, 1, 0],
+        "decoder_input_tokens": [0, 7, 8, 5, 1, 3, 9, 0, 8, 4, 9, 3, 1, 4, 0],
+        "decoder_loss_weights": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+        "decoder_positions": [0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6, 0],
+        "decoder_segment_ids": [1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 0],
+        "decoder_causal_attention": [
+            1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0
+        ]
+    }
+    assert_dataset(converted_ds, expected)
+
+  def test_prefix_lm_long_inputs(self):
+    x = [{"inputs": [7, 8, 5, 6, 1], "targets": [3, 9, 7, 1]},
+         {"inputs": [8, 4, 9, 3, 8, 1], "targets": [4, 1]}]
+    ds = create_default_dataset(x)
+
+    task_feature_lengths = {"inputs": 4, "targets": 3}
+    expected_msg = (
+        r".*Feature \\'inputs\\' has length not less than or equal to the "
+        r"expected length of 4 during input_validation.*")
+    with self.assertRaisesRegex(tf.errors.InvalidArgumentError, expected_msg):
+      converter = feature_converters.PrefixLMFeatureConverter(pack=True)
+      converted_ds = converter(ds, task_feature_lengths)
+      list(converted_ds.as_numpy_iterator())
+
+  def test_prefix_lm_pack_long_sequences(self):
+    x = [{"inputs": [7, 8, 5, 1], "targets": [3, 9, 1]},
+         {"inputs": [8, 4, 1], "targets": [5, 1]}]
+    ds = create_default_dataset(x)
+
+    task_feature_lengths = {"inputs": 4, "targets": 3}
+    converter = feature_converters.PrefixLMFeatureConverter(pack=True)
+    converted_ds = converter(ds, task_feature_lengths)
+
+    # The examples should not be packed because examples are not short enough.
+    expected = [{
+        "decoder_target_tokens": [7, 8, 5, 1, 3, 9, 1],
+        "decoder_input_tokens": [0, 7, 8, 5, 1, 3, 9],
+        "decoder_loss_weights": [0, 0, 0, 0, 1, 1, 1],
+        "decoder_positions": [0, 1, 2, 3, 4, 5, 6],
+        "decoder_segment_ids": [1, 1, 1, 1, 1, 1, 1],
+        "decoder_causal_attention": [1, 1, 1, 1, 1, 0, 0]
+    }, {
+        "decoder_target_tokens": [8, 4, 1, 5, 1, 0, 0],
+        "decoder_input_tokens": [0, 8, 4, 1, 5, 0, 0],
+        "decoder_loss_weights": [0, 0, 0, 1, 1, 0, 0],
+        "decoder_positions": [0, 1, 2, 3, 4, 0, 0],
+        "decoder_segment_ids": [1, 1, 1, 1, 1, 0, 0],
+        "decoder_causal_attention": [1, 1, 1, 1, 0, 0, 0]
+    }]
+    assert_dataset(converted_ds, expected)
+
+  def test_convert_example(self):
+    features = {
+        "targets": tf.constant([7, 8, 5, 1, 3, 9, 1, 0]),
+        "inputs_width": tf.constant([4, 4, 4, 4, 4, 4, 4, 0]),
+        "inputs_width_add_pos": tf.constant([5, 5, 5, 5, 5, 5, 5, 0])
+    }
+    converter = feature_converters.PrefixLMFeatureConverter(pack=False)
+    expected = {"decoder_target_tokens": [7, 8, 5, 1, 3, 9, 1, 0],
+                "decoder_input_tokens": [0, 7, 8, 5, 1, 3, 9, 1],
+                "decoder_loss_weights": [0, 0, 0, 0, 1, 1, 1, 0],
+                "decoder_causal_attention":[1, 1, 1, 1, 1, 0, 0, 0]}
+    actual = converter._convert_example(features)
+    for feat, tensor in actual.items():
+      self.assertAllEqual(expected[feat], self.evaluate(tensor))
+
+
 if __name__ == "__main__":
   tf.test.main()

@@ -799,3 +799,250 @@ class LMFeatureConverter(FeatureConverter):
       model_feature_lengths["decoder_positions"] = decoder_length
 
     return model_feature_lengths
+
+
+class PrefixLMFeatureConverter(LMFeatureConverter):
+  """Feature converter for a prefix language model architecture.
+
+  The input dataset must have both "inputs" and "targets" fields. For language
+  modeling objective with "targets" only dataset, use LMFeatureConverter.
+
+  A decoder is a network which autoregressively produces an output sequence. It
+  can be used for an input dataset which has a notion of "inputs" as well as
+  "targets", (e.g., machine translation) by concatenating them to form the new
+  targets. See Raffel et al. (2020), https://arxiv.org/abs/1910.10683, Section
+  3.2.1 for a more detailed take on this topic.
+
+  In the Prefix LM architecture discussed in Raffel et al. (2020), the tokens
+  from the "inputs" portion are applied a fully visible self attention whereas
+  those from "targets" are applied the causal self attention. This makes the
+  contextual representation of the tokens from "inputs" bidirectional.
+
+  In order to provide this information, this class provides an additional
+  feature "decoder_causal_attention" on top of the model features returned by
+  LMFeatureConverter. "decoder_causal_attention" is a binary mask where a value
+  of 1 represents that the corresponding input token to the decoder belongs to
+  the "inputs" before concatenation. Note that this attention mask is optional.
+  For a model that does not require this feature, e.g., a fully causal masking
+  on the concatenated sequence, the attention mask can be simply ignored.
+
+  For "decoder_causal_attention", we provide an option for an additional
+  position, controlled by "additional_position", which is passed to the
+  constructor. If True, we include one additional position to the right, i.e.,
+  the position where the final EOS of the inputs is read and the first target
+  token is predicted. This follows mesh_tensorflow/transformer/transformer.py
+
+
+  Since "inputs" and "targets" are concatenated to form the new targets for the
+  decoder, we might want to compute the loss only on the tokens that belong to
+  "targets" before concatenation. This behavior is controlled by
+  "loss_on_targets_only" attribute, which is passed to the constructor. By
+  default, it is set to True. The resulting "decoder_loss_weights" therefore
+  zeros out "inputs" portion as well as the padding tokens while having 1's on
+  the targets token.
+
+  Example: a packed dataset with additional_position = False
+
+    ds = [{"inputs": [7, 8, 5, 1], "targets": [3, 9, 1]},
+          {"inputs": [8, 4, 9, 3, 1], "targets": [4, 1]}]
+
+    task_feature_lengths = {"inputs": 7, "targets": 8}
+
+    converted_ds = {
+        "decoder_target_tokens": [7, 8, 5, 1, 3, 9, 1, 8, 4, 9, 3, 1, 4, 1, 0],
+         "decoder_input_tokens": [0, 7, 8, 5, 1, 3, 9, 0, 8, 4, 9, 3, 1, 4, 0],
+         "decoder_loss_weights": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+            "decoder_positions": [0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6, 0],
+          "decoder_segment_ids": [1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 0],
+     "decoder_causal_attention": [1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0]
+    }
+
+    Note that if additional_position = True, the decoder_causal_attention is
+     "decoder_causal_attention": [1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0]
+
+  Attributes:
+    additional_position: whether to include an additional position to the right
+      in the inputs mask.
+    loss_on_targets_only: whether to compute loss on tokens which belonged to
+      "targets" before concatenation.
+  """
+  TASK_FEATURE_DTYPES = {"inputs": tf.int32, "targets": tf.int32}
+  MODEL_FEATURE_DTYPES = {
+      "decoder_target_tokens": tf.int32,
+      "decoder_input_tokens": tf.int32,
+      "decoder_loss_weights": tf.int32,
+      "decoder_causal_attention": tf.int32
+  }
+  PACKING_FEATURE_DTYPES = {
+      "decoder_segment_ids": tf.int32,
+      "decoder_positions": tf.int32
+  }
+
+  def __init__(self,
+               additional_position: bool = True,
+               loss_on_targets_only: bool = True,
+               **kwargs) -> None:
+    self._additional_position = additional_position
+    self._loss_on_targets_only = loss_on_targets_only
+    super().__init__(**kwargs)
+
+  def _convert_example(
+      self, features: Mapping[str, tf.Tensor]) -> Mapping[str, tf.Tensor]:
+    """Convert a Prefix LM example into an example with model features.
+
+    Example (unpacked):
+
+      Suppose the original dataset is
+
+      ds = [{"inputs": [9, 4, 6, 1], "targets": [3, 9, 1]}]
+      inputs_width = [4, 4, 4, 4, 4, 4, 4]
+      inputs_width_add_pos = [5, 5, 5, 5, 5, 5, 5]
+
+      The input features to this method (after padding) is
+
+      features = {
+                     "targets" = [9, 4, 6, 1, 3, 9, 1, 0, 0]
+                "inputs_width" = [4, 4, 4, 4, 4, 4, 4, 0, 0]
+        "inputs_width_add_pos" = [5, 5, 5, 5, 5, 5, 5, 0, 0]
+      }
+
+      First the parent class's _convert_example method is used to obtain the
+      standard LM features. Then we compute "decoder_causal_attention". For an
+      unpacked dataset, we need to define the "positions" feature. If
+      self.additional_position = True, positions < inputs_width_add_pos gives
+      the decoder_causal_attention.
+
+          "inputs_width_add_pos" = [5, 5, 5, 5, 5, 5, 5, 0, 0]
+                     "positions" = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+                             <     ---------------------------
+      "decoder_causal_attention" = [1, 1, 1, 1, 1, 0, 0, 0, 0]
+
+      Then, we compute the loss weights, which requires isolating the "targets"
+      position. Here we use "inputs_width" feature regardless of
+      self.additional_position value to filter out the "inputs" portion.
+      padding_mask has 1's on inputs and targets and 0's on padding. Taking XOR
+      filters out the targets portion.
+
+            "inputs_width" = [4, 4, 4, 4, 4, 4, 4, 0, 0]
+               "positions" = [0, 1, 2, 3, 4, 5, 6, 0, 0]
+                       <     ---------------------------
+                    inputs = [1, 1, 1, 1, 0, 0, 0, 0, 0]
+              padding_mask = [1, 1, 1, 1, 1, 1, 1, 0, 0]
+                      xor    ---------------------------
+      decoder_loss_weights = [0, 0, 0, 0, 1, 1, 1, 0, 0]
+
+      Note that decoder_loss_weights is computed by the LMFeatureConverter.
+
+    Args:
+      features: an input tf.data.Dataset to be converted.
+
+    Returns:
+      d: the converted features.
+    """
+    # First use the standard LM conversion.
+    lm_features = super()._convert_example(features)
+    d = dict(lm_features)
+
+    if self.pack:
+      positions = features["targets_positions"]
+    # Without packing, targets_positions field does not exist.
+    else:
+      positions = tf.range(tf.size(features["targets"]))
+
+    if self.additional_position:
+      inputs_width = features["inputs_width_add_pos"]
+    else:
+      inputs_width = features["inputs_width"]
+
+    # Binary mask where 1 represents a position in a non-causal attention region
+    d["decoder_causal_attention"] = tf.cast(
+        positions < inputs_width, dtype=features["targets"].dtype)
+
+    # When computing the loss weights with self.loss_on_targets_only = True, we
+    # always use features["inputs_width"] regardless of
+    # self.input_additional_position.
+    if self.loss_on_targets_only:
+      # 1's on inputs and 0's on targets and padding.
+      inputs = positions < features["inputs_width"]
+
+      # 1's on inputs and targets and 0's on padding.
+      padding_mask = tf.cast(d["decoder_loss_weights"], dtype=tf.bool)
+
+      # XOR picks targets only. See docstring for an example.
+      d["decoder_loss_weights"] = tf.cast(
+          tf.math.logical_xor(inputs, padding_mask),
+          dtype=features["targets"].dtype)
+
+    return d
+
+  def _convert_features(
+      self, ds: tf.data.Dataset,
+      task_feature_lengths: Mapping[str, int]) -> tf.data.Dataset:
+    """Convert the input dataset to an output dataset to be fed to the model.
+
+    The "inputs" and "targets" are concatenated to form the new targets. In
+    addition, the binary mask to distinguish "inputs" and "targets" token are
+    concatenated as well.
+
+    We define inputs_width to be a width (or a number of tokens) of "inputs" in
+    the concatenated sequence. This method computes the width corresponding with
+    and without additional position. Both of these are necessary
+    `_convert_example`.
+
+    Args:
+      ds: an input tf.data.Dataset to be converted.
+      task_feature_lengths: a mapping from task feature name to its length.
+
+    Returns:
+      ds: the converted dataset.
+    """
+    def concat_and_add_masks(features):
+      inputs = features["inputs"]
+      targets = features["targets"]
+
+      # Width of the "inputs" portion in the concatenated sequence.
+      width = tf.size(inputs)
+      inputs_width = tf.fill([tf.size(inputs) + tf.size(targets)], width)
+
+      # Width with an extra position to the right in the inputs mask. See
+      # docstring for details.
+      inputs_width_add_pos = tf.fill([tf.size(inputs) + tf.size(targets)],
+                                     width + 1)
+
+      return {
+          "targets": tf.concat([inputs, targets], axis=-1),
+          "inputs_width": inputs_width,
+          "inputs_width_add_pos": inputs_width_add_pos
+      }
+
+    ds = ds.map(
+        concat_and_add_masks, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+    concat_length = sum(task_feature_lengths.values())
+    concat_task_feature_lengths = {
+        "targets": concat_length,
+        "inputs_width": concat_length,
+        "inputs_width_add_pos": concat_length
+    }
+
+    ds = self._pack_or_pad(ds, concat_task_feature_lengths)
+    return ds.map(
+        self._convert_example, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+  def get_model_feature_lengths(
+      self, task_feature_lengths: Mapping[str, int]) -> Mapping[str, int]:
+    """Define the length relationship between task and model features."""
+    decoder_length = sum(task_feature_lengths.values())
+    concat_length = {"targets": decoder_length}
+    lm_model_feature_lengths = super().get_model_feature_lengths(concat_length)
+    model_feature_lengths = dict(lm_model_feature_lengths)
+    model_feature_lengths["decoder_causal_attention"] = decoder_length
+    return model_feature_lengths
+
+  @property
+  def additional_position(self) -> bool:
+    return self._additional_position
+
+  @property
+  def loss_on_targets_only(self) -> bool:
+    return self._loss_on_targets_only
