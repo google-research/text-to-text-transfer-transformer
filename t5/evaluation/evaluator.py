@@ -31,8 +31,8 @@ OutputsAndMetricsType = Tuple[AllOutputsType, Optional[AllMetricsType]]
 class PredictFnCallable(typing_extensions.Protocol):
   """Signature for `predict_fn` passed to `Evaluator.evaluate`."""
 
-  def __call__(self, ds: tf.data.Dataset,
-               **predict_fn_kwargs) -> Sequence[Tuple[int, Any]]: ...
+  def __call__(self, ds: tf.data.Dataset) -> Sequence[Tuple[int, Any]]:
+    ...
 
 
 class Evaluator:
@@ -145,8 +145,7 @@ class Evaluator:
                *,
                compute_metrics: bool,
                step: Optional[int] = None,
-               predict_fn: PredictFnCallable,
-               **predict_fn_kwargs) -> OutputsAndMetricsType:
+               predict_fn: PredictFnCallable) -> OutputsAndMetricsType:
     """Predict and optionally compute metrics of self.eval.tasks.
 
     Evaluation must preserve the example ordering. This requirement is satisfied
@@ -170,7 +169,6 @@ class Evaluator:
         dummy value of -1 will be used.
       predict_fn: a user-defined function, which takes in a tf.data.Dataset and
         outputs decoded predictions.
-      **predict_fn_kwargs: kwargs to be passed to `predict_fn`.
 
     Returns:
       A tuple of outputs and metrics where the former corresponds to the output
@@ -180,7 +178,7 @@ class Evaluator:
     all_outputs = {}
     all_metrics = None
     for task in self.eval_tasks:
-      outputs = predict_fn(self.cached_ds[task.name], **predict_fn_kwargs)
+      outputs = predict_fn(self.cached_ds[task.name])
 
       if len(outputs[0]) != 2:
         raise ValueError("Output from the predict_fn should be a sequence of "
