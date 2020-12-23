@@ -710,7 +710,7 @@ class FakeTaskTest(absltest.TestCase):
     TaskRegistry.add(
         "task_v3",
         dataset_providers.TaskV3,
-        source=dataset_providers.FunctionSource(
+        source=dataset_providers.FunctionDataSource(
             dataset_fn=get_fake_dataset,
             splits=["train", "validation"]
         ),
@@ -731,7 +731,7 @@ class FakeTaskTest(absltest.TestCase):
     TaskRegistry.add(
         "task_v3_tokenized_postcache",
         dataset_providers.TaskV3,
-        source=dataset_providers.FunctionSource(
+        source=dataset_providers.FunctionDataSource(
             dataset_fn=get_fake_dataset,
             splits=["train", "validation"]
         ),

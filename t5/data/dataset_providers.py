@@ -228,7 +228,7 @@ class DatasetFnCallable(typing_extensions.Protocol):
   ) -> tf.data.Dataset: ...
 
 
-class FunctionSource(DataSource):
+class FunctionDataSource(DataSource):
   """A `DataSource` that uses a function to provide the input data."""
 
   def __init__(
@@ -237,7 +237,7 @@ class FunctionSource(DataSource):
       splits: Iterable[str],
       num_input_examples: Optional[Mapping[str, int]] = None
   ):
-    """FunctionSource constructor.
+    """FunctionDataSource constructor.
 
     Args:
       dataset_fn: a function with the signature `dataset_fn(split,
@@ -261,7 +261,7 @@ class FunctionSource(DataSource):
   ) -> tf.data.Dataset:
     if shard_info and shard_info.num_shards > 1:
       raise ValueError(
-          "`FunctionSource` does not support low-level sharding. Use "
+          "`FunctionDataSource` does not support low-level sharding. Use "
           "tf.data.Dataset.shard instead.")
 
     if seed is None:
@@ -959,7 +959,7 @@ class Task(TaskV3):
       raise ValueError(
           "If `source` is provided, `splits` and `num_input_examples` should "
           "not also be provided to the Task.")
-    source = source or FunctionSource(
+    source = source or FunctionDataSource(
         dataset_fn=dataset_fn,
         splits=splits,
         num_input_examples=num_input_examples)

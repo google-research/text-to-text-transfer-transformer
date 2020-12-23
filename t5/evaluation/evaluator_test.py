@@ -41,7 +41,7 @@ def register_dummy_task(
   t5.data.TaskRegistry.add(
       task_name,
       t5.data.TaskV3,
-      source=t5.data.FunctionSource(
+      source=t5.data.FunctionDataSource(
           dataset_fn=dataset_fn, splits=["train", "validation"]),
       preprocessors=[t5.data.CacheDatasetPlaceholder()],
       postprocess_fn=postprocess_fn,

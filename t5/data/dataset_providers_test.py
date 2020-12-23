@@ -308,7 +308,7 @@ class TasksTest(test_utils.FakeTaskTest):
         "preprocessing pipeline. Found 2 in 'multiple_cache_placeholders'."):
       dataset_providers.TaskV3(
           "multiple_cache_placeholders",
-          source=dataset_providers.FunctionSource(
+          source=dataset_providers.FunctionDataSource(
               dataset_fn=dataset_fn,
               splits=["train", "validation"]
           ),
@@ -328,7 +328,7 @@ class TasksTest(test_utils.FakeTaskTest):
         "is not allowed since the sequence length is specified at run time."):
       dataset_providers.TaskV3(
           "sequence_length_pre_cache",
-          dataset_providers.FunctionSource(
+          dataset_providers.FunctionDataSource(
               dataset_fn=dataset_fn,
               splits=["train"],
           ),

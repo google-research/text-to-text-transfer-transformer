@@ -429,7 +429,7 @@ def register_dummy_task(
   dataset_providers.TaskRegistry.add(
       task_name,
       dataset_providers.TaskV3,
-      source=dataset_providers.FunctionSource(
+      source=dataset_providers.FunctionDataSource(
           dataset_fn=dataset_fn, splits=["train", "validation"]),
       preprocessors=[dataset_providers.CacheDatasetPlaceholder()],
       output_features={

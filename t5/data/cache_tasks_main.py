@@ -342,9 +342,9 @@ def run_pipeline(
 
     output_dirs.append(output_dir)
 
-    if isinstance(task.source, t5.data.FunctionSource):
+    if isinstance(task.source, t5.data.FunctionDataSource):
       logging.warning(
-          "Task '%s' using FunctionSource cannot be distributed. If your "
+          "Task '%s' using FunctionDataSource cannot be distributed. If your "
           "dataset is large, you may be able to speed up preprocessing by "
           "sharding it and using a TfdsSource, TFExampleSource, or "
           "TextLineSource instead.", task.name)
