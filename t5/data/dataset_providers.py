@@ -821,7 +821,8 @@ class TaskV3(DatasetProviderBase):
       logging.warning(("Global random seed is now set to %d. All TF operations "
                        "are now deterministic with respect to that seed."),
                       seed)
-      tf.random.set_seed(seed)
+    # Reset seed to None by default.
+    tf.random.set_seed(seed)
 
     if use_cached and not self.supports_caching:
       logging.warning(

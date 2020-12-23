@@ -178,6 +178,7 @@ class UtilsTest(parameterized.TestCase):
   def test_map_over_dataset_with_one_seed(self):
     inputs = tf.data.Dataset.range(2)
 
+    tf.random.set_seed(None)
     utils._NEXT_MAP_SEED = 42
     @utils.map_over_dataset(num_seeds=1)
     def test_fn(x, seed):
@@ -193,6 +194,7 @@ class UtilsTest(parameterized.TestCase):
   def test_map_over_dataset_with_seeds(self):
     inputs = tf.data.Dataset.range(2)
 
+    tf.random.set_seed(None)
     utils._NEXT_MAP_SEED = 42
     @utils.map_over_dataset(num_seeds=2)
     def test_fn(x, seeds):
