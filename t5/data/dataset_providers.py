@@ -889,6 +889,12 @@ class TaskV3(DatasetProviderBase):
     with tf.io.gfile.GFile(utils.get_info_path(self.cache_dir, split)) as f:
       split_info = json.load(f)
 
+    # int32 and bool are stored as int64 in the tf.train.Example protobuf.
+    # TODO(adarob): Support other conversions.
+    for feat in split_info["features"].values():
+      if feat["dtype"] in ("int32", "bool"):
+        feat["dtype"] = "int64"
+
     # Use `FixedLenSequenceFeature` for sequences with variable length.
     def _feature_config(shape, dtype):
       if shape and shape[0] is None:

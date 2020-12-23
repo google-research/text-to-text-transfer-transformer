@@ -11,11 +11,11 @@
       ]
     },
     "idx": {
-      "dtype": "int64",
+      "dtype": "int32",
       "shape": []
     },
     "idxs": {
-      "dtype": "int64",
+      "dtype": "int32",
       "shape": [
         null
       ]

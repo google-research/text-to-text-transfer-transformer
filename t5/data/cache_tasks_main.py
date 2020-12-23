@@ -224,8 +224,7 @@ class GetInfo(beam.PTransform):
     feature_dict = info["features"]
     for k, v in ex.items():
       t = tf.constant(v)
-      # Change int32 to int64 since the tf.Example proto will store it this way.
-      dtype = "int64" if t.dtype.name == "int32" else t.dtype.name
+      dtype = t.dtype.name
       shape = [None] * len(t.shape)
       feature_dict[k] = {"shape": shape, "dtype": dtype}
     return info
