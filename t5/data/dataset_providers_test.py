@@ -76,7 +76,7 @@ class TasksTest(test_utils.FakeTaskTest):
         r"'shuffle_files'\), got: \('split',\)"):
       def missing_shuff(split):
         del split
-      test_utils.add_task("fake_task", missing_shuff)
+      test_utils.add_task("missing_shuff", missing_shuff)
 
     with self.assertRaisesRegex(
         ValueError,
@@ -84,7 +84,7 @@ class TasksTest(test_utils.FakeTaskTest):
         r"'shuffle_files'\), got: \('shuffle_files',\)"):
       def missing_split(shuffle_files):
         del shuffle_files
-      test_utils.add_task("fake_task", missing_split)
+      test_utils.add_task("missing_split", missing_split)
 
     with self.assertRaisesRegex(
         ValueError,
@@ -93,7 +93,7 @@ class TasksTest(test_utils.FakeTaskTest):
       def extra_pos_arg(split, shuffle_files, unused_arg):
         del split
         del shuffle_files
-      test_utils.add_task("fake_task", extra_pos_arg)
+      test_utils.add_task("extra_pos_arg", extra_pos_arg)
 
   def test_dataset_fn(self):
     test_utils.add_task("fn_task", test_utils.get_fake_dataset)

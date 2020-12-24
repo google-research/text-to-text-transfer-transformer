@@ -92,11 +92,16 @@ class DatasetProviderBase(metaclass=abc.ABCMeta):
 class DatasetProviderRegistry(object):
   """Base for registry of data providers.
 
+  Providers are lazily instantiated when they are requested via `get` for the
+  first time.
+
   Subclasses must wrap `get` method to override the return type for pytype.
   TODO(adarob): Remove the need to override `get`.
   """
   # Class variables must be defined in subclasses.
-  _REGISTRY: MutableMapping[str, DatasetProviderBase]
+  _REGISTRY: MutableMapping[
+      str, Tuple[Type[DatasetProviderBase], Tuple[Any], Mapping[str, Any]]]
+  _MEMOIZED_PROVIDERS: MutableMapping[str, DatasetProviderBase]
   _PROVIDER_TYPE: Type[DatasetProviderBase]
 
   @classmethod
@@ -104,27 +109,32 @@ class DatasetProviderRegistry(object):
     """Adds provider to the registry."""
     if name in cls._REGISTRY:
       raise ValueError("Attempting to register duplicate provider: %s" % name)
-    provider = provider_cls(*provider_args, **provider_kwargs)
-    if not isinstance(provider, cls._PROVIDER_TYPE):
+    if not issubclass(provider_cls, cls._PROVIDER_TYPE):
       raise ValueError(
           "Attempting to register a class not of an invalid type. "
           "Expecting instance of %s, got %s" %
           (cls._PROVIDER_TYPE, provider_cls))
 
-    cls._REGISTRY[name] = provider
+    cls._REGISTRY[name] = (provider_cls, provider_args, provider_kwargs)
 
   @classmethod
   def remove(cls, name):
     """Remove provider from the registry, if it exists."""
     if name in cls._REGISTRY:
       del cls._REGISTRY[name]
+    if name in cls._MEMOIZED_PROVIDERS:
+      del cls._MEMOIZED_PROVIDERS[name]
 
   @classmethod
   def get(cls, name):
     """Returns provider from the registry."""
     if name not in cls._REGISTRY:
       raise ValueError("Provider name not registered: %s" % name)
-    return cls._REGISTRY[name]
+    if name not in cls._MEMOIZED_PROVIDERS:
+      (provider_cls, provider_args, provider_kwargs) = cls._REGISTRY[name]
+      cls._MEMOIZED_PROVIDERS[name] = provider_cls(
+          *provider_args, **provider_kwargs)  # pytype:disable=wrong-arg-count,not-instantiable
+    return cls._MEMOIZED_PROVIDERS[name]
 
   @classmethod
   def names(cls):
@@ -1153,6 +1163,7 @@ class TaskRegistry(DatasetProviderRegistry):
   """Registry of Tasks."""
   _REGISTRY = {}
   _PROVIDER_TYPE = TaskV3
+  _MEMOIZED_PROVIDERS = {}
 
   @classmethod
   def add(cls, name, task_cls=Task, **kwargs):
@@ -1212,7 +1223,7 @@ class Mixture(DatasetProviderBase):
         self._tasks.append(TaskRegistry.get(task_name))
         self._task_to_rate[task_name] = rate
       else:
-        self._sub_mixtures.append(MixtureRegistry.get(task_name))  # pytype:disable=name-error
+        self._sub_mixtures.append(MixtureRegistry.get(task_name))
         self._task_to_rate[task_name] = rate
 
     if len(set(tuple(t.output_features) for t in self.tasks)) != 1:
@@ -1439,6 +1450,7 @@ class MixtureRegistry(DatasetProviderRegistry):
   """Registry of Mixtures."""
   _REGISTRY = {}
   _PROVIDER_TYPE = Mixture
+  _MEMOIZED_PROVIDERS = {}
 
   @classmethod
   def add(cls, name, tasks, default_rate=None):
