@@ -876,5 +876,98 @@ class PrefixLMFeatureConverter(tf.test.TestCase):
       self.assertAllEqual(expected[feat], self.evaluate(tensor))
 
 
+class EncoderFeatureConverterTest(FeatureConvertersTest):
+
+  def test_encoder_unpacked(self):
+    x = [{
+        # Assume 9 is the sentinel used to indicate prediction-tokens (e.g., for
+        # MLM this would be [MASK] token).
+        "inputs": [8, 9, 4, 9, 1],
+        "targets": [8, 7, 4, 6, 1]
+    }]
+
+    ds = create_default_dataset(x)
+    input_lengths = {"inputs": 6, "targets": 6}
+    converter = feature_converters.EncoderFeatureConverter(mask_id=9, pack=False)
+    converted_ds = converter(ds, input_lengths)
+
+    # Determine the loss weight by tf.equal(inputs == mask_sentinel)
+    # Let 8 be the index of the sentinel used for classification. For BERT this
+    # corresponds to [CLS] token.
+    expected = {
+        "encoder_input_tokens": [8, 9, 4, 9, 1, 0],
+        "encoder_target_tokens": [8, 7, 4, 6, 1, 0],
+        "encoder_loss_weights": [0, 1, 0, 1, 0, 0],
+    }
+    assert_dataset(converted_ds, expected)
+
+  def test_encoder_packed(self):
+    x = [{"inputs": [8, 9, 9, 3, 4, 1], "targets": [8, 7, 4, 3, 4, 1]},
+         {"inputs": [8, 3, 9, 1], "targets": [8, 3, 6, 1]}]
+
+    ds = create_default_dataset(x)
+    input_lengths = {"inputs": 11, "targets": 11}
+    converter = feature_converters.EncoderFeatureConverter(mask_id=9)
+    converted_ds = converter(ds, input_lengths)
+
+    expected = {
+        "encoder_input_tokens": [8, 9, 9, 3, 4, 1, 8, 3, 9, 1, 0],
+        "encoder_target_tokens": [8, 7, 4, 3, 4, 1, 8, 3, 6, 1, 0],
+        "encoder_segment_ids": [1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 0],
+        "encoder_positions": [0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 0],
+        "encoder_loss_weights": [0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0],
+    }
+    assert_dataset(converted_ds, expected)
+
+  def test_encoder_pack_long_sequences(self):
+    x = [{"inputs": [8, 9, 9, 3, 1], "targets": [8, 7, 4, 3, 1]},
+         {"inputs": [8, 3, 9, 1], "targets": [8, 3, 6, 1]}]
+
+    ds = create_default_dataset(x)
+    input_lengths = {"inputs": 5, "targets": 5}
+    converter = feature_converters.EncoderFeatureConverter(mask_id=9)
+    converted_ds = converter(ds, input_lengths)
+
+    expected = [{
+        "encoder_input_tokens": [8, 9, 9, 3, 1],
+        "encoder_target_tokens": [8, 7, 4, 3, 1],
+        "encoder_segment_ids": [1, 1, 1, 1, 1],
+        "encoder_positions": [0, 1, 2, 3, 4],
+        "encoder_loss_weights": [0, 1, 1, 0, 0],
+    }, {
+        "encoder_input_tokens": [8, 3, 9, 1, 0],
+        "encoder_target_tokens": [8, 3, 6, 1, 0],
+        "encoder_segment_ids": [1, 1, 1, 1, 0],
+        "encoder_positions": [0, 1, 2, 3, 0],
+        "encoder_loss_weights": [0, 0, 1, 0, 0],
+    }]
+    assert_dataset(converted_ds, expected)
+
+  def test_encoder_plaintext_field(self):
+    x = [{
+        "inputs": [8, 9, 9, 3, 4, 1],
+        "targets": [8, 7, 4, 3, 4, 1],
+        "targets_plaintext": "abc"
+    }, {
+        "inputs": [8, 3, 9, 1],
+        "targets": [8, 3, 6, 1],
+        "targets_plaintext": "def"
+    }]
+    types = {
+        "inputs": tf.int32,
+        "targets": tf.int32,
+        "targets_plaintext": tf.string
+    }
+    shapes = {"inputs": [None], "targets": [None], "targets_plaintext": []}
+    ds = tf.data.Dataset.from_generator(
+        lambda: x, output_types=types, output_shapes=shapes)
+
+    input_lengths = {"inputs": 7, "targets": 7}
+    converter = feature_converters.EncoderFeatureConverter(mask_id=9)
+    # Check whether convert_features raise error because targets_plaintext is
+    # present in the ds but not in the output_features
+    converter(ds, input_lengths)
+
+
 if __name__ == "__main__":
   tf.test.main()

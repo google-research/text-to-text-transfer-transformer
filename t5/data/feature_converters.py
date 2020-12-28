@@ -1043,3 +1043,112 @@ class PrefixLMFeatureConverter(LMFeatureConverter):
   @property
   def loss_on_targets_only(self) -> bool:
     return self._loss_on_targets_only
+
+
+class EncoderFeatureConverter(FeatureConverter):
+  """Feature converter for encoder-only achitecture such as BERT.
+
+  The inputs and targets to the encoder are expected to be aligned.
+
+  Just like BERT (Devlin et al. 2019, https://arxiv.org/abs/1810.04805), a
+  sentinel token (e.g., [CLS]) is expected to be prepended to the inputs and
+  targets sequences. This ensures that the model can be used for a
+  classification task. For a packed dataset, each sequence has separate sentinel
+  tokens. In terms of segment_id, the classification sentinel is considered as a
+  part of the sequence to which it is appended.
+
+  Example for a packed dataset:
+
+    The input dataset has two examples each with algined "inputs" and "targets".
+
+    Here assume that mask_id = 9 and cls_id = 8
+
+    ds = [{"inputs": [8, 9, 9, 3, 4, 1], "targets": [8, 7, 4, 3, 4, 1]},
+          {"inputs": [8, 3, 9, 1], "targets": [8, 3, 6, 1]}]
+
+    task_feature_lengths = {"inputs": 11, "targets": 11}
+
+    converted_ds = [{
+         "encoder_input_tokens": [8, 9, 9, 3, 4, 1, 8, 3, 9, 1, 0],
+        "encoder_target_tokens": [8, 7, 4, 3, 4, 1, 8, 3, 6, 1, 0],
+          "encoder_segment_ids": [1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 0],
+            "encoder_positions": [0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 0],
+         "encoder_loss_weights": [0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0]
+    }]
+
+    Note that two examples are packed together into one example.
+
+  Attributes:
+    mask_id: an integer indicating the mask sentinel token. This id is used to
+      find the positions where the loss is taken.
+  """
+  TASK_FEATURE_DTYPES = {"inputs": tf.int32, "targets": tf.int32}
+  MODEL_FEATURE_DTYPES = {
+      "encoder_target_tokens": tf.int32,
+      "encoder_input_tokens": tf.int32,
+      "encoder_loss_weights": tf.int32,
+  }
+  PACKING_FEATURE_DTYPES = {
+      "encoder_segment_ids": tf.int32,
+      "encoder_positions": tf.int32
+  }
+
+  def __init__(self, mask_id: int, **kwargs):
+    self._mask_id = mask_id
+    super().__init__(**kwargs)
+
+  def _convert_features(self, ds: tf.data.Dataset,
+                        input_lengths: Mapping[str, int]) -> tf.data.Dataset:
+    """Convert the input dataset to an output dataset to be fed to the model.
+
+    The conversion process involves three steps
+
+    1. Each feature in the `input_lengths` is packed.
+    2. "inputs" fields are mapped to the encoder input and "targets" are mapped
+       to encoder target. Loss is taken only on the masked positions just as in
+       Masked Language Modeling objective.
+
+    Args:
+      ds: an input tf.data.Dataset to be converted.
+      input_lengths: a mapping from a feature to its length
+
+    Returns:
+      ds: the converted dataset.
+    """
+
+    @seqio.map_over_dataset
+    def convert_example(
+        features: Mapping[str, tf.Tensor]) -> Mapping[str, tf.Tensor]:
+      inputs = features["inputs"]
+      d = {"encoder_input_tokens": inputs,
+           "encoder_target_tokens": features["targets"],
+           "encoder_loss_weights": tf.cast(
+               tf.equal(inputs, self.mask_id), tf.int32)}
+
+      if self.pack:
+        d["encoder_segment_ids"] = features["inputs_segment_ids"]
+        d["encoder_positions"] = features["inputs_positions"]
+
+      return d
+
+    ds = self._pack_or_pad(ds, input_lengths)
+    return convert_example(ds)
+
+  def get_model_feature_lengths(
+      self, task_feature_lengths: Mapping[str, int]) -> Mapping[str, int]:
+    """Define the length relationship between input and output features."""
+    encoder_length = task_feature_lengths["inputs"]
+    model_feature_lengths = {
+        "encoder_target_tokens": encoder_length,
+        "encoder_input_tokens": encoder_length,
+        "encoder_loss_weights": encoder_length
+    }
+    if self.pack:
+      model_feature_lengths["encoder_segment_ids"] = encoder_length
+      model_feature_lengths["encoder_positions"] = encoder_length
+
+    return model_feature_lengths
+
+  @property
+  def mask_id(self):
+    return self._mask_id
