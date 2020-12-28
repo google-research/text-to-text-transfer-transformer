@@ -53,6 +53,20 @@ def register_dummy_task(
       metric_fns=metrics_fn)
 
 
+def get_mocked_task(
+    name: str = "mocked_test",
+    metric_fns: Sequence[Callable] = (metrics.sequence_accuracy,)) -> mock.Mock:
+  task = mock.Mock()
+  task.name = name
+  task.metric_fns = list(metric_fns)
+  # Identity postprocess function
+  task.postprocess_fn = lambda d, example, is_target: d
+
+  mock_vocab = mock.Mock()
+  task.output_features = {"targets": t5.data.Feature(mock_vocab)}
+  return task
+
+
 class EvaluatorTest(tf.test.TestCase):
 
   def assertDictClose(self, a, b, delta=None, places=None):
@@ -64,39 +78,64 @@ class EvaluatorTest(tf.test.TestCase):
         raise AssertionError(str(e) + " for key '%s'" % k)
 
   def test_evaluate_single_task(self):
-    task = mock.Mock()
-    task.name = "mocked_task"
-    task.metric_fns = [metrics.sequence_accuracy]
-    # Identity postprocess function
-    task.postprocess_fn = lambda d, example, is_target: d
+    task = get_mocked_task()
+    id_to_vocab = {5: "e5", 6: "e6", 7: "e7"}
+    mock_vocab = task.output_features["targets"].vocabulary
+    # Define a dummy decoding logic.
+    mock_vocab.decode = lambda ids: " ".join([id_to_vocab[i] for i in ids])
 
     def mock_init(self):
-      # dummy prediction function which always returns the same output
       self._cached_ds = {task.name: None}
       self._cached_examples = {task.name: [1, 1, 1]}  # values are not used.
-      self._cached_targets = {task.name: ["ex 1", "ex 1", "ex 3"]}
+      self._cached_targets = {task.name: ["e5 e6", "e6", "e7"]}
       self._eval_tasks = [task]
       self._summary_writer = None
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
-      predict_fn = lambda x: [(0, "ex 1"), (1, "ex 2"), (2, "ex 3")]
+      # A dummy prediction function which always returns the same output.
+      # The output tokens will be decoded into ["e5 e6", "e7", "e7"].
+      predict_fn = lambda x: [(0, [5, 6]), (1, [7]), (2, [7])]
       _, all_metrics = evaluator.evaluate(
           compute_metrics=True, predict_fn=predict_fn)
       expected = {"sequence_accuracy": 2.0 / 3 * 100}
       self.assertDictClose(expected, all_metrics[task.name][0])
 
-  def test_evaluate_single_task_with_postprocessor(self):
-    task = mock.Mock()
-    task.name = "mocked_task"
-    task.metric_fns = [metrics.accuracy]
-    # Identity postprocess function
-    task.postprocess_fn = functools.partial(
-        t5.data.postprocessors.string_label_to_class_id,
-        label_classes=["1", "2", "3"])
+  def test_evaluate_non_string(self):
+    task = get_mocked_task()
+    mock_vocab = task.output_features["targets"].vocabulary
+    # Identity decode function
+    mock_vocab.decode = lambda ids: ids
 
     def mock_init(self):
-      # The constant return values correspond to labels of [1, 1, 2].
+      self._cached_ds = {task.name: None}
+      self._cached_examples = {task.name: [1, 1, 1]}  # values are not used.
+      self._cached_targets = {task.name: [[5, 6], [6, 7]]}
+      self._eval_tasks = [task]
+      self._summary_writer = None
+
+    with mock.patch.object(Evaluator, "__init__", new=mock_init):
+      evaluator = Evaluator()
+      # A dummy prediction function which always returns the same output.
+      # The first example is correct but the second is not.
+      predict_fn = lambda x: [(0, [5, 6]), (1, [6, 8])]
+      _, all_metrics = evaluator.evaluate(
+          compute_metrics=True, predict_fn=predict_fn)
+      # expected = {"accuracy": 2.0 / 3 * 100}
+      expected = {"sequence_accuracy": 50}
+      self.assertDictClose(expected, all_metrics[task.name][0])
+
+  def test_evaluate_single_task_with_postprocessor(self):
+    task = get_mocked_task(metric_fns=[metrics.accuracy])
+    task.postprocess_fn = functools.partial(
+        t5.data.postprocessors.string_label_to_class_id,
+        label_classes=["e5", "e6", "e7"])
+
+    id_to_vocab = {5: "e5", 6: "e6", 7: "e7"}
+    mock_vocab = task.output_features["targets"].vocabulary
+    mock_vocab.decode = lambda ids: id_to_vocab[ids[0]]
+
+    def mock_init(self):
       self._cached_ds = {task.name: None}
       self._cached_examples = {task.name: [1, 1, 1]}  # values are not used.
       self._cached_targets = {task.name: [0, 1, 2]}
@@ -105,22 +144,27 @@ class EvaluatorTest(tf.test.TestCase):
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
-      predict_fn = lambda x: [(0, "2"), (1, "2"), (2, "3")]
+      # The output tokens will be docoded to ["e5", "e6", "e7"] and
+      # postprocessed to [0, 1, 2].
+      predict_fn = lambda x: [(0, [5]), (1, [6]), (2, [7])]
       _, all_metrics = evaluator.evaluate(
           compute_metrics=True, predict_fn=predict_fn)
-      expected = {"accuracy": 2.0 / 3 * 100}
+      expected = {"accuracy": 100}
       self.assertDictClose(expected, all_metrics[task.name][0])
 
   def test_evaluate_mixture(self):
-    task1 = mock.Mock()
-    task1.name = "mocked_task1"
-    task1.metric_fns = [metrics.sequence_accuracy]
-    task1.postprocess_fn = lambda d, example, is_target: d
+    id_to_vocab = {5: "e5", 6: "e6", 7: "e7"}
 
-    task2 = mock.Mock()
-    task2.name = "mocked_task2"
-    task2.metric_fns = [metrics.accuracy]
-    task2.postprocess_fn = lambda d, example, is_target: d
+    task1 = get_mocked_task()
+    mock_vocab1 = task1.output_features["targets"].vocabulary
+    mock_vocab1.decode = lambda ids: " ".join([id_to_vocab[i] for i in ids])
+
+    task2 = get_mocked_task(metric_fns=[metrics.accuracy])
+    task2.postprocess_fn = functools.partial(
+        t5.data.postprocessors.string_label_to_class_id,
+        label_classes=["e5", "e6", "e7"])
+    mock_vocab2 = task2.output_features["targets"].vocabulary
+    mock_vocab2.decode = lambda ids: id_to_vocab[ids[0]]
 
     mock_ds1 = mock.Mock()
     mock_ds2 = mock.Mock()
@@ -129,8 +173,8 @@ class EvaluatorTest(tf.test.TestCase):
       self._cached_ds = {task1.name: mock_ds1, task2.name: mock_ds2}
       self._cached_examples = {task1.name: [1, 1, 1], task2.name: [1, 1, 1]}
       self._cached_targets = {
-          task1.name: ["ex 1", "ex 1", "ex 3"],
-          task2.name: [0, 0, 2]
+          task1.name: ["e5 e6", "e6", "e7"],
+          task2.name: [0, 1, 2]
       }
       self._eval_tasks = [task1, task2]
       self._summary_writer = None
@@ -138,16 +182,16 @@ class EvaluatorTest(tf.test.TestCase):
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       def predict_fn(ds):
         if ds == mock_ds1:
-          return [(0, "ex 1"), (1, "ex 2"), (2, "ex 3")]
+          return [(0, [5, 6]), (1, [7]), (2, [7])]
         elif ds == mock_ds2:
-          return [(0, 0), (1, 2), (2, 1)]
+          return [(0, [5]), (1, [6]), (2, [7])]
 
       evaluator = Evaluator()
       _, all_metrics = evaluator.evaluate(
           compute_metrics=True, predict_fn=predict_fn)
       expected = {
           task1.name: [{"sequence_accuracy": 2.0 / 3 * 100}],
-          task2.name: [{"accuracy": 1.0 / 3 * 100}]
+          task2.name: [{"accuracy": 100}]
       }
       self.assertDictClose(expected[task1.name][0], all_metrics[task1.name][0])
       self.assertDictClose(expected[task2.name][0], all_metrics[task2.name][0])
@@ -257,17 +301,17 @@ class EvaluatorTest(tf.test.TestCase):
     self.assertEqual(evaluator._cached_targets[task_name], ["ex 1", "ex 2"])
 
   def test_order_preservation(self):
-    ds = tf.data.Dataset.from_tensor_slices(["ex 1", "ex 2", "ex 3"])
-    task = mock.Mock()
-    task.name = "mocked_task"
-    task.metric_fns = [metrics.sequence_accuracy]
-    # Identity postprocess function
-    task.postprocess_fn = lambda d, example, is_target: d
+    task = get_mocked_task()
+    id_to_vocab = {5: "e5", 6: "e6", 7: "e7"}
+    mock_vocab = task.output_features["targets"].vocabulary
+    mock_vocab.decode = lambda ids: id_to_vocab[ids[0]]
+
+    ds = tf.data.Dataset.from_tensor_slices([[5], [6], [7]])
 
     def mock_init(self):
       self._cached_ds = {task.name: ds.enumerate()}
       self._cached_examples = {task.name: [1, 1, 1]}  # dummy values
-      self._cached_targets = {task.name: [b"ex 1", b"ex 2", b"ex 3"]}
+      self._cached_targets = {task.name: ["e5", "e6", "e7"]}
       self._eval_tasks = [task]
       self._summary_writer = None
 
@@ -282,9 +326,22 @@ class EvaluatorTest(tf.test.TestCase):
       all_outputs, all_metrics = evaluator.evaluate(
           compute_metrics=True, predict_fn=mixing_order_predict_fn)
       expected_metric = {"sequence_accuracy": 100}
-      expected_outputs = [b"ex 1", b"ex 2", b"ex 3"]
+      expected_outputs = [np.array([5]), np.array([6]), np.array([7])]
       self.assertDictEqual(expected_metric, all_metrics[task.name][0])
       self.assertEqual(expected_outputs, all_outputs[task.name])
+
+  def test_task_with_no_metrics_fn(self):
+    task_name = "no_metrics_task"
+    x = [{"targets_pretokenized": "ex 1"}]
+    dtypes = {"targets_pretokenized": tf.string}
+    shapes = {"targets_pretokenized": []}
+    ds = tf.data.Dataset.from_generator(
+        lambda: x, output_types=dtypes, output_shapes=shapes)
+    dataset_fn = lambda split, shuffle_files: ds
+    register_dummy_task(task_name, dataset_fn=dataset_fn, metrics_fn=[])
+    evaluator = Evaluator(mixture_or_task_name=task_name)
+    ret = evaluator.evaluate(compute_metrics=True, predict_fn=mock.Mock())
+    self.assertEqual(({}, {}), ret)
 
   def test_log_eval_results(self):
     summary_dir = self.create_tempdir().full_path

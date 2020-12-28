@@ -31,8 +31,8 @@ OutputsAndMetricsType = Tuple[AllOutputsType, Optional[AllMetricsType]]
 class PredictFnCallable(typing_extensions.Protocol):
   """Signature for `predict_fn` passed to `Evaluator.evaluate`."""
 
-  def __call__(self, ds: tf.data.Dataset) -> Sequence[Tuple[int, Any]]:
-    ...
+  def __call__(self,
+               ds: tf.data.Dataset) -> Sequence[Tuple[int, Sequence[int]]]: ...
 
 
 class Evaluator:
@@ -44,6 +44,10 @@ class Evaluator:
 
   evaluation data is cached once and will be used for arbitrary number of
   evaluation runs.
+
+  If none of the evaluation tasks has metrics functions defined, the evaluation
+  will be skipped. `Evaluator.evaluate` will return ({}, {}) assuming that
+  compute_metrics is True.
 
   Attributes:
     eval_tasks: a mapping from a mixture or a task name to t5.data.Task
@@ -84,7 +88,9 @@ class Evaluator:
     self._eval_tasks = model_utils.get_valid_eval_tasks(eval_tasks, eval_split)
 
     if not self._eval_tasks:
-      raise ValueError("No eval task with valid split and metric fn found.")
+      logging.warning(
+          "No eval task with valid split and metric fn found. Skipping eval.")
+      return
 
     def dataset_fn(task: t5.data.TaskV3) -> tf.data.Dataset:
       return task.get_dataset(
@@ -154,14 +160,32 @@ class Evaluator:
     Therefore, each index serves as a unique integer id for the example.
 
     `predict_fn` takes as input the cached eval dataset. The output must be of
-    the form (index, decoded) where `decoded` is the results of decoding
-    `example` whose index matches `index`. Therefore, even if `predict_fn` mixes
-    the order of the examples during prediction, the order can be corrected as
-    long as the correct index for each example is maintained.
+    the form Sequence[(index, token_ids)] where `token_ids` is the sequence of
+    token ids output by the model with the input `example` whose index matches
+    `index`. Therefore, even if `predict_fn` mixes the order of the examples
+    during prediction, the order can be corrected as long as the correct index
+    for each example is maintained.
 
     A common example is the multi-host setup where the evaluation dataset is
     split into multiple hosts that independently make predictions and combine
     the results during which the ordering can be mixed.
+
+
+    Overall, there are 4 steps involved in the evaluation.
+
+    1. Model returns indices and output_tokens: Sequence[Tuple[int,
+       Sequence[int]]]
+    2. output tokens are decoded by `vocab.decode`
+    3. Postprocessors are applied to the decoded output. These are denoted as
+       predictions.
+    4. Each metric function is applied to the predictions and the cached
+       targets.
+
+    Note that non-string features are supported. For such use cases, users need
+    to ensure the type consistency across the 4 steps. In other words, the
+    return format of `vocab.decode` (which is not string in this case) is
+    consistent with the input format of the registered postprocessor whose
+    output format matches that of the input of the metric function.
 
     Args:
       compute_metrics: whether to compute metrics.
@@ -171,41 +195,51 @@ class Evaluator:
         outputs decoded predictions.
 
     Returns:
-      A tuple of outputs and metrics where the former corresponds to the output
-      from `predict_fn` and the latter the computed metrics.
+      A tuple of output_tokens and metrics where the former corresponds to the
+      output tokens from `predict_fn` and the latter the computed metrics.
     """
 
-    all_outputs = {}
+    all_output_tokens = {}
     all_metrics = None
-    for task in self.eval_tasks:
-      outputs = predict_fn(self.cached_ds[task.name])
 
-      if len(outputs[0]) != 2:
+    for task in self.eval_tasks:
+      indices_and_output_tokens = predict_fn(self.cached_ds[task.name])
+
+      if len(indices_and_output_tokens[0]) != 2:
         raise ValueError("Output from the predict_fn should be a sequence of "
                          "length-2 tuple with (index, decoding) format")
 
-      all_outputs[task.name]: Sequence[Any] = [
-          x[1] for x in sorted(outputs, key=lambda x: x[0])
+      all_output_tokens[task.name]: Sequence[Sequence[int]] = [
+          x[1] for x in sorted(indices_and_output_tokens, key=lambda x: x[0])
       ]
 
     if compute_metrics:
       all_metrics = {}
       for task in self.eval_tasks:
-        metrics = []
         task_examples = self.cached_examples[task.name]
-        for metric_fn in task.metric_fns:
-          targets = self.cached_targets[task.name]
-          predictions = [
-              task.postprocess_fn(  # pylint:disable=g-complex-comprehension
-                  d, example=ex, is_target=False)
-              for d, ex in zip(all_outputs[task.name], task_examples)
-          ]
-          metrics.append(metric_fn(targets, predictions))
+        targets = self.cached_targets[task.name]
+
+        # output_tokens is a list of token_ids where each token_ids corresponds
+        # to the model output of the input example.
+        output_tokens = all_output_tokens[task.name]
+        task_vocab = task.output_features["targets"].vocabulary
+        outputs = [
+            task_vocab.decode([int(token) for token in tokens])
+            for tokens in output_tokens
+        ]
+        predictions = [
+            task.postprocess_fn(d, example=ex, is_target=False)
+            for d, ex in zip(outputs, task_examples)
+        ]
+
+        metrics = [
+            metric_fn(targets, predictions) for metric_fn in task.metric_fns
+        ]
         all_metrics[task.name] = metrics
 
         self._log_eval_results(metrics, step, task_name=task.name)
 
-    return all_outputs, all_metrics
+    return all_output_tokens, all_metrics
 
   # TODO(hwchung): Support custom logging function metrics.
   def _log_eval_results(self, task_metrics: Sequence[Mapping[str, float]],
