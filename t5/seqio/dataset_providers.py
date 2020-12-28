@@ -1112,7 +1112,7 @@ class Mixture(DatasetProviderBase):
     output_feature_keys = set(self.output_features.keys())
     if copy_pretokenized:
       output_feature_keys.update(
-          {f + "_plaintext" for f in output_feature_keys})
+          {f + "_pretokenized" for f in output_feature_keys})
 
     def filter_features(ex):
       return {k: v for k, v in ex.items() if k in output_feature_keys}

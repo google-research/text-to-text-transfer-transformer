@@ -508,14 +508,54 @@ class MixturesTest(test_utils.FakeTaskTest):
         preprocessors=(functools.partial(_constant_preprocessor, val=3),)
     )
 
-    MixtureRegistry.add("test_mix4", [("two_task", 1), ("three_task", 1)])
+    MixtureRegistry.add("test_mix", [("two_task", 1), ("three_task", 1)])
 
     sequence_length = {"inputs": 2, "targets": 2}
-    mix_ds = MixtureRegistry.get("test_mix4").get_dataset(
+    mix_ds = MixtureRegistry.get("test_mix").get_dataset(
         sequence_length, "train", seed=13).take(1000)
 
     res = sum(int(item["inputs"][0]) for item in mix_ds.as_numpy_iterator())
     self.assertEqual(res, 2500)
+
+  def test_copy_pretokenized(self):
+    def _constant_preprocessor(_, val):
+      return tf.data.Dataset.from_tensors({
+          "targets": tf.constant([val], tf.int32),
+          "targets_pretokenized": tf.constant(f"targets_{val}"),
+          "inputs": tf.constant([val], tf.int32),
+          "inputs_pretokenized": tf.constant(f"inputs_{val}")
+      })
+
+    self.add_task(
+        "two_task",
+        self.function_source,
+        preprocessors=(functools.partial(_constant_preprocessor, val=2),)
+    )
+
+    self.add_task(
+        "three_task",
+        self.function_source,
+        preprocessors=(functools.partial(_constant_preprocessor, val=3),)
+    )
+
+    MixtureRegistry.add("test_mix", [("two_task", 1), ("three_task", 1)])
+
+    sequence_length = {"inputs": 2, "targets": 2}
+
+    mix_ds = MixtureRegistry.get("test_mix").get_dataset(
+        sequence_length, "train", seed=13, copy_pretokenized=True).take(1000)
+    inputs_pretokenized = set(
+        ex["inputs_pretokenized"] for ex in mix_ds.as_numpy_iterator())
+    targets_pretokenized = set(
+        ex["targets_pretokenized"] for ex in mix_ds.as_numpy_iterator())
+    self.assertCountEqual([b"inputs_2", b"inputs_3"], inputs_pretokenized)
+    self.assertCountEqual([b"targets_2", b"targets_3"], targets_pretokenized)
+
+    mix_ds = MixtureRegistry.get("test_mix").get_dataset(
+        sequence_length, "train", seed=13, copy_pretokenized=False).take(1000)
+    for ex in mix_ds.as_numpy_iterator():
+      self.assertNoCommonElements(
+          ["inputs_pretokenized", "targets_pretokenized"], ex.keys())
 
   def test_get_rate_with_callable(self):
     def fn(t):

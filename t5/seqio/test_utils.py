@@ -534,6 +534,7 @@ class FakeTaskTest(absltest.TestCase):
 
   def _prepare_sources_and_tasks(self):
     clear_tasks()
+    clear_mixtures()
     # Prepare TfdsSource
     # Note we don't use mock.Mock since they fail to pickle.
     fake_tfds_paths = {
