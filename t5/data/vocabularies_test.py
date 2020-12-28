@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for seqio.vocabularies."""
+"""Tests for t5.data.vocabularies."""
 
 from absl.testing import absltest
-from t5.seqio import test_utils
-from t5.seqio import vocabularies
+from t5.data import test_utils
+from t5.data import vocabularies
 import tensorflow.compat.v2 as tf
 
 tf.compat.v1.enable_eager_execution()

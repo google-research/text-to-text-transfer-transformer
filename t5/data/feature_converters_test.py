@@ -17,9 +17,9 @@
 import re
 from typing import Mapping, Sequence, Callable
 from unittest import mock
-from t5 import seqio
+from t5.data import dataset_providers
 from t5.data import feature_converters
-from t5.seqio import test_utils
+from t5.data import test_utils
 import tensorflow.compat.v2 as tf
 
 tf.compat.v1.enable_eager_execution()
@@ -426,13 +426,14 @@ def register_dummy_task(
     dataset_fn: Callable[[str, str], tf.data.Dataset],
     output_feature_names: Sequence[str] = ("inputs", "targets")) -> None:
   """Register a dummy task for GetDatasetTest."""
-  seqio.TaskRegistry.add(
+  dataset_providers.TaskRegistry.add(
       task_name,
-      source=seqio.FunctionDataSource(
+      dataset_providers.TaskV3,
+      source=dataset_providers.FunctionDataSource(
           dataset_fn=dataset_fn, splits=["train", "validation"]),
-      preprocessors=[seqio.CacheDatasetPlaceholder()],
+      preprocessors=[dataset_providers.CacheDatasetPlaceholder()],
       output_features={
-          feat: seqio.Feature(test_utils.sentencepiece_vocab())
+          feat: dataset_providers.Feature(test_utils.sentencepiece_vocab())
           for feat in output_feature_names
       },
       metric_fns=[])
@@ -570,7 +571,7 @@ class GetDatasetTest(tf.test.TestCase):
 
     task_feature_lengths = {"inputs": 7, "targets": 5}
     converter = feature_converters.EncDecFeatureConverter(pack=False)
-    shard_info = seqio.ShardInfo(index=0, num_shards=2)
+    shard_info = dataset_providers.ShardInfo(index=0, num_shards=2)
     output_ds = feature_converters.get_dataset(
         mixture_or_task_name=mixture_or_task_name,
         task_feature_lengths=task_feature_lengths,
@@ -605,7 +606,7 @@ class GetDatasetTest(tf.test.TestCase):
 
     task_feature_lengths = {"inputs": 7, "targets": 5}
     converter = feature_converters.EncDecFeatureConverter(pack=True)
-    shard_info = seqio.ShardInfo(index=0, num_shards=2)
+    shard_info = dataset_providers.ShardInfo(index=0, num_shards=2)
     output_ds = feature_converters.get_dataset(
         mixture_or_task_name=mixture_or_task_name,
         task_feature_lengths=task_feature_lengths,
@@ -870,7 +871,7 @@ class PrefixLMFeatureConverter(tf.test.TestCase):
     expected = {"decoder_target_tokens": [7, 8, 5, 1, 3, 9, 1, 0],
                 "decoder_input_tokens": [0, 7, 8, 5, 1, 3, 9, 1],
                 "decoder_loss_weights": [0, 0, 0, 0, 1, 1, 1, 0],
-                "decoder_causal_attention": [1, 1, 1, 1, 1, 0, 0, 0]}
+                "decoder_causal_attention":[1, 1, 1, 1, 1, 0, 0, 0]}
     actual = converter._convert_example(features)
     for feat, tensor in actual.items():
       self.assertAllEqual(expected[feat], self.evaluate(tensor))

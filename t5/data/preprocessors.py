@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Preprocessors for T5 Tasks."""
-# TODO(adarob): Move some of the more general preprocessors to seqio.
+"""Preprocess tensorflow.data.Dataset()."""
 
 import collections
 import functools
@@ -25,20 +24,18 @@ import uuid
 from absl import logging
 import babel
 import gin
-from t5 import seqio
+from t5.data import utils
 import tensorflow.compat.v2 as tf
 
-# We disable no-value-for-parameter since the seqio.map_over_dataset leads to
+# We disable no-value-for-parameter since the utils.map_over_dataset leads to
 # a false positive when seeds are provided.
 # pylint:disable=no-value-for-parameter
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 
 FeatureType = Mapping[str, tf.Tensor]
 
-tokenize = seqio.preprocessors.tokenize
 
-
-@seqio.map_over_dataset
+@utils.map_over_dataset
 def rekey(x, key_map=None):
   """Replace the feature keys according to the mapping in `key_map`.
 
@@ -63,7 +60,7 @@ def rekey(x, key_map=None):
   return x
 
 
-@seqio.map_over_dataset
+@utils.map_over_dataset
 def translate(x, source_language, target_language):
   """Convert a translation dataset to a text2text pair.
 
@@ -101,7 +98,7 @@ def translate(x, source_language, target_language):
   }
 
 
-@seqio.map_over_dataset
+@utils.map_over_dataset
 def summarize(x, article_key, summary_key):
   """Convert a summarization dataset to a text2text pair.
 
@@ -150,7 +147,7 @@ NON_SPACED_LANGUAGE_RANGES = (
 )
 
 
-@seqio.map_over_dataset
+@utils.map_over_dataset
 def pad_nonspaced_languages(x, text_key='text'):
   """Pad non-spaced languages with spaces around each character.
 
@@ -284,7 +281,7 @@ def trivia_qa(dataset):
   return dataset.unbatch()
 
 
-@seqio.map_over_dataset
+@utils.map_over_dataset
 def squad(x, include_context=True):
   """Convert SQuAD examples to a text2text pair.
 
@@ -452,7 +449,7 @@ def random_split_text(dataset,
         dtype=tf.int32)
     return x[chunk_size * chunk_num:chunk_size * (chunk_num + 1)]
 
-  @seqio.map_over_dataset(num_seeds=2)
+  @utils.map_over_dataset(num_seeds=2)
   def my_fn(x, seeds):
     """Split one string into multiple strings.
 
@@ -550,7 +547,7 @@ def fill_in_the_blank(dataset,
   Returns:
     a tf.data.Dataset
   """
-  @seqio.map_over_dataset(num_seeds=3)
+  @utils.map_over_dataset(num_seeds=3)
   def my_fn(x, seeds):
     """Generates two preprocessed examples that are roughly inverses.
 
@@ -643,7 +640,7 @@ def fill_in_the_blank_sized(
   """
   bins = sorted(size_bins)
 
-  @seqio.map_over_dataset(num_seeds=2)
+  @utils.map_over_dataset(num_seeds=2)
   def my_fn(x, seeds):
     """Apply transformation."""
     words = x['words']
@@ -754,7 +751,7 @@ def neighboring_pairs(dataset, text_key='text', reuse_sentences=True):
   return dataset
 
 
-@seqio.map_over_dataset
+@utils.map_over_dataset
 def glue(x, benchmark_name, label_names, feature_names=None, id_key='idx'):
   """Convert a dataset from glue to text2text examples.
 
@@ -836,7 +833,7 @@ def glue(x, benchmark_name, label_names, feature_names=None, id_key='idx'):
   return ex
 
 
-@seqio.map_over_dataset
+@utils.map_over_dataset
 def stsb(x):
   """Convert STSB examples to text2text format.
 
@@ -879,7 +876,7 @@ def stsb(x):
   return {'inputs': joined, 'targets': label_string, 'idx': x['idx']}
 
 
-@seqio.map_over_dataset
+@utils.map_over_dataset
 def wsc(x):
   """Convert WSC examples to text2text format.
 
@@ -1076,7 +1073,7 @@ def multi_translate(dataset, source_language, target_language):
   return translate(dataset, source_language, target_language)
 
 
-@seqio.map_over_dataset
+@utils.map_over_dataset
 def definite_pronoun_resolution_simple(x, label='wsc:'):
   """Converts DPR examples to a simple text to text format.
 
@@ -1173,7 +1170,7 @@ def next_sentence_prediction(dataset,
     empty = [tf.equal(tf.size(t), 0) for t in tensors]
     return tf.reduce_any(empty)
 
-  @seqio.map_over_dataset(num_seeds=1)
+  @utils.map_over_dataset(num_seeds=1)
   def my_fn(x, seed):
     """Function to be applied to each example in dataset."""
     use_neighbors = (
@@ -1226,7 +1223,7 @@ def next_sentence_prediction(dataset,
   return dataset.filter(lambda x: example_len(x) > 0)
 
 
-@seqio.map_over_dataset
+@utils.map_over_dataset
 def lm(x):
   """Basic language modeling objective for text - empty inputs.
 
@@ -1355,7 +1352,7 @@ def wsc_simple(dataset,
   return dataset.map(map_fn, num_parallel_calls=AUTOTUNE)
 
 
-@seqio.map_over_dataset
+@utils.map_over_dataset
 def wnli_simple(x, label='wsc:'):
   """Converts GLUE WNLI examples to a simple text to text format.
 
@@ -1781,7 +1778,7 @@ def rank_classification_formatter(
       mode=mode)
 
 
-@seqio.map_over_dataset
+@utils.map_over_dataset
 def parse_tsv(line, field_names=None, field_delim='\t'):
   """Splits TSV lines into dict examples mapping field name to string value.
 
@@ -1804,7 +1801,7 @@ def parse_tsv(line, field_names=None, field_delim='\t'):
               use_quote_delim=False)))
 
 
-@seqio.map_over_dataset
+@utils.map_over_dataset
 def preprocess_tsv(line,
                    field_delim='\t',
                    num_fields=2,
@@ -1868,6 +1865,44 @@ def preprocess_tsv(line,
 
 
 # ======================Token Preprocessors=====================================
+
+
+def tokenize(dataset, output_features, copy_pretokenized=True):
+  """Encode specified string features.
+
+  Passes through non-string features unchanged. Optionally passes through copy
+  of original features with "_pretokenized" suffix added to the key.
+
+  Args:
+    dataset: a tf.data.Dataset
+    output_features: a dict of Feature objects; their vocabulary attribute will
+      be used to tokenize the specified features.
+    copy_pretokenized: bool, whether to pass through copies of original features
+      with "_pretokenized" suffix added to the key.
+
+  Returns:
+    a tf.data.Dataset
+  """
+
+  def my_fn(features):
+    """Encode all specified feature that are strings and return a dictionary.
+
+    Args:
+      features: a dictionary
+
+    Returns:
+      a dictionary
+    """
+    ret = {}
+    for k, v in features.items():
+      if k in output_features:
+        if copy_pretokenized:
+          ret[f'{k}_pretokenized'] = v
+        v = output_features[k].vocabulary.encode_tf(v)
+      ret[k] = v
+    return ret
+
+  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 
 # TODO(adarob): Add a test.
@@ -1977,7 +2012,7 @@ def select_random_chunk(dataset: tf.data.Dataset,
   if max_length is None:
     raise ValueError('Must specify max_length or sequence_length.')
 
-  @seqio.map_over_dataset(num_seeds=1)
+  @utils.map_over_dataset(num_seeds=1)
   def _my_fn(x, seed):
     """Select a random chunk of tokens.
 
@@ -2056,7 +2091,7 @@ def reduce_concat_tokens(dataset,
   return dataset.map(_my_fn, num_parallel_calls=AUTOTUNE)
 
 
-@seqio.map_over_dataset
+@utils.map_over_dataset
 def trim_tokens_at_front(x,
                          sequence_length,
                          keys_to_trim=None,
@@ -2159,7 +2194,7 @@ def trivia_qa_truncate_inputs(dataset, output_features, sequence_length):
 
   del output_features
 
-  @seqio.map_over_dataset(num_seeds=1)
+  @utils.map_over_dataset(num_seeds=1)
   def my_fn(features, seed):
     """Function to map original dataset to the new dataset."""
     inputs = features['inputs']
@@ -2312,7 +2347,7 @@ def split_tokens(dataset: tf.data.Dataset,
   Returns:
     a dataset
   """
-  @seqio.map_over_dataset(num_seeds=1)
+  @utils.map_over_dataset(num_seeds=1)
   def _split_tokens(x, seed):
     """Split one token sequence into multiple sequences."""
     tokens = x[feature_key]
@@ -2527,7 +2562,7 @@ def denoise(dataset,
   Returns:
     A preprocessed tf.data.Dataset.
   """
-  @seqio.map_over_dataset(num_seeds=6)
+  @utils.map_over_dataset(num_seeds=6)
   def my_fn(features, seeds):
     """Map function."""
     tokens = features['targets']
@@ -2659,7 +2694,7 @@ def random_spans_noise_mask(length,
       up to num_items
     """
     first_in_segment = tf.pad(
-        seqio.stateless_shuffle(
+        utils.stateless_shuffle(
             to_int(tf.range(num_items - 1) < num_segments - 1),
             seed),
         [[1, 0]])
@@ -2871,7 +2906,7 @@ def permute_noise_tokens(tokens, noise_mask, vocabulary, seeds):
   del vocabulary
 
   masked_only = tf.boolean_mask(tokens, noise_mask)
-  permuted = seqio.stateless_shuffle(masked_only, seeds[0])
+  permuted = utils.stateless_shuffle(masked_only, seeds[0])
   # pad to avoid errors when it has size 0
   permuted = tf.pad(permuted, [[0, 1]])
   indices = tf.cumsum(tf.cast(noise_mask, tf.int32), exclusive=True)
