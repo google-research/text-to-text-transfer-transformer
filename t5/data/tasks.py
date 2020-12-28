@@ -15,6 +15,7 @@
 """Add Tasks to registry."""
 import functools
 
+import t5.data
 from t5.data import postprocessors
 from t5.data import preprocessors
 from t5.data.dataset_providers import Feature
@@ -24,8 +25,6 @@ from t5.data.glue_utils import get_glue_metric
 from t5.data.glue_utils import get_glue_postprocess_fn
 from t5.data.glue_utils import get_glue_text_preprocessor
 from t5.data.glue_utils import get_super_glue_metric
-from t5.data.utils import get_default_vocabulary
-from t5.data.utils import set_global_cache_dirs
 from t5.evaluation import metrics
 import tensorflow_datasets as tfds
 
@@ -33,8 +32,10 @@ import tensorflow_datasets as tfds
 
 DEFAULT_OUTPUT_FEATURES = {
     "inputs": Feature(
-        vocabulary=get_default_vocabulary(), add_eos=True, required=False),
-    "targets": Feature(vocabulary=get_default_vocabulary(), add_eos=True)
+        vocabulary=t5.data.get_default_vocabulary(), add_eos=True,
+        required=False),
+    "targets": Feature(
+        vocabulary=t5.data.get_default_vocabulary(), add_eos=True)
 }
 
 # ==================================== C4 ======================================
