@@ -13,14 +13,14 @@
 # limitations under the License.
 
 """Add Tasks to registry."""
+# TODO(adarob): Switch to seqio.Task.
+
 import functools
 
+from t5 import seqio
 import t5.data
 from t5.data import postprocessors
 from t5.data import preprocessors
-from t5.data.dataset_providers import Feature
-from t5.data.dataset_providers import TaskRegistry
-from t5.data.dataset_providers import TfdsTask
 from t5.data.glue_utils import get_glue_metric
 from t5.data.glue_utils import get_glue_postprocess_fn
 from t5.data.glue_utils import get_glue_text_preprocessor
@@ -28,13 +28,16 @@ from t5.data.glue_utils import get_super_glue_metric
 from t5.evaluation import metrics
 import tensorflow_datasets as tfds
 
+TaskRegistry = t5.data.TaskRegistry
+TfdsTask = t5.data.TfdsTask
+
 
 
 DEFAULT_OUTPUT_FEATURES = {
-    "inputs": Feature(
+    "inputs": seqio.Feature(
         vocabulary=t5.data.get_default_vocabulary(), add_eos=True,
         required=False),
-    "targets": Feature(
+    "targets": seqio.Feature(
         vocabulary=t5.data.get_default_vocabulary(), add_eos=True)
 }
 

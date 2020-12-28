@@ -15,7 +15,7 @@
 """Tests for asserts."""
 
 from absl.testing import absltest
-from t5.data.test_utils import assert_dataset
+from t5.seqio.test_utils import assert_dataset
 import tensorflow.compat.v2 as tf
 
 tf.compat.v1.enable_eager_execution()

@@ -18,10 +18,9 @@ import functools
 
 from absl.testing import absltest
 import gin
+from t5 import seqio
 from t5.data import preprocessors as prep
-from t5.data import test_utils
-from t5.data import utils
-from t5.data.dataset_providers import Feature
+from t5.seqio import test_utils
 import tensorflow.compat.v2 as tf
 
 tf.compat.v1.enable_eager_execution()
@@ -134,6 +133,7 @@ class PreprocessorsTest(tf.test.TestCase):
     output = self.evaluate(prep.permute_noise_tokens(
         tokens, noise_mask, vocabulary, [(0, 1)]))
     self.assertAllEqual(output, expected_output)
+    tf.random.set_seed(None)
 
   def test_noise_token_to_gathered_token(self):
     vocabulary = test_utils.MockVocabulary({'foo': [10]}, vocab_size=1000)
@@ -1118,32 +1118,6 @@ class PreprocessorsTest(tf.test.TestCase):
     dataset = prep.parse_tsv(og_dataset, field_names=['f1', 'f2'])
     assert_dataset(dataset, [{'f1': 'a', 'f2': 'b'}, {'f1': 'c', 'f2': 'd'}])
 
-  def test_tokenize(self):
-    og_dataset = tf.data.Dataset.from_tensors({
-        'prefix': 'This is',
-        'suffix': 'a test.'
-    })
-    output_features = {
-        'prefix': Feature(test_utils.MockVocabulary({'This is': [0, 1]})),
-        'suffix': Feature(test_utils.MockVocabulary({'a test.': [2, 3]})),
-    }
-
-    assert_dataset(
-        prep.tokenize(og_dataset, output_features=output_features), {
-            'prefix': [0, 1],
-            'prefix_pretokenized': 'This is',
-            'suffix': [2, 3],
-            'suffix_pretokenized': 'a test.'
-        })
-    assert_dataset(
-        prep.tokenize(
-            og_dataset, output_features=output_features,
-            copy_pretokenized=False),
-        {
-            'prefix': [0, 1],
-            'suffix': [2, 3]
-        })
-
   def test_denoise(self):
     vocab = test_utils.sentencepiece_vocab()
     target_tokens = vocab.encode('The quick brown fox.')
@@ -1158,13 +1132,13 @@ class PreprocessorsTest(tf.test.TestCase):
     })
 
     output_features = {
-        'targets': Feature(vocab),
+        'targets': seqio.Feature(vocab),
     }
 
     # These are the parameters of denoise in the operative config of 'base'.
     # Except noise_density, bumped up from 0.15 to 0.3 in order to demonstrate
     # multiple corrupted spans.
-    with utils.map_seed_manager(42):
+    with seqio.map_seed_manager(42):
       denoised_dataset = prep.denoise(
           og_dataset,
           output_features,
@@ -1196,7 +1170,9 @@ class PreprocessorsTest(tf.test.TestCase):
     """
     gin.parse_config(bindings)
     og_dataset = tf.data.Dataset.from_tensor_slices({'targets': [1, 2, 3]})
-    output_features = {'targets': Feature(test_utils.sentencepiece_vocab())}
+    output_features = {
+        'targets': seqio.Feature(test_utils.sentencepiece_vocab())
+    }
     # Test denoise function when it is used as a gin-configurable of another
     # gin-configurable, prep.unsupervised.
     dataset = prep.unsupervised(og_dataset, output_features=output_features)
@@ -1207,7 +1183,7 @@ class PreprocessorsTest(tf.test.TestCase):
     inp = list(range(1, 101))
     og_dataset = tf.data.Dataset.from_tensor_slices({'targets': [inp]})
     og_dataset = og_dataset.repeat(100)
-    output_features = {'targets': Feature(vocab)}
+    output_features = {'targets': seqio.Feature(vocab)}
     output_dataset = prep.prefix_lm(
         og_dataset,
         {'inputs': 100, 'targets': 100},

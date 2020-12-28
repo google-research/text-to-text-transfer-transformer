@@ -14,20 +14,8 @@
 
 """Import data modules."""
 # pylint:disable=wildcard-import
-from t5.data.dataset_providers import *
-from t5.data.feature_converters import *
-from t5.data.glue_utils import *
-import t5.data.postprocessors
-import t5.data.preprocessors
-from t5.data.utils import *
 
-
-# For backward compatibility
-# TODO(adarob): Remove need for these imports.
 from t5.seqio.dataset_providers import *
-from t5.seqio.dataset_providers import Task as TaskV3
-from t5.data.dataset_providers import TaskRegistry  # pylint:disable=g-bad-import-order
-from t5.data.dataset_providers import FunctionTask as Task  # pylint:disable=g-bad-import-order
-from t5.seqio.test_utils import assert_dataset
+import t5.seqio.test_utils
 from t5.seqio.utils import *
 from t5.seqio.vocabularies import *

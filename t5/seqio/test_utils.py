@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Lint as: python3
-"""T5 test utilities."""
+"""SeqIO test utilities."""
 
 import collections
 import copy
@@ -27,10 +27,10 @@ from absl import flags
 from absl import logging
 from absl.testing import absltest
 import numpy as np
-from t5.data import dataset_providers
-from t5.data import preprocessors
-from t5.data import utils as dataset_utils
-from t5.data import vocabularies
+from t5.seqio import dataset_providers
+from t5.seqio import preprocessors
+from t5.seqio import utils as dataset_utils
+from t5.seqio import vocabularies
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
 
@@ -54,8 +54,6 @@ class _ProxyTest(absltest.TestCase):
 
 
 _pyunit_proxy = _ProxyTest()
-
-_SEQUENCE_LENGTH = {"inputs": 13, "targets": 13}
 
 _FAKE_DATASET = {
     "train": [
@@ -180,6 +178,29 @@ _FAKE_DATASETS = {
     "token_preprocessed": _FAKE_TOKEN_PREPROCESSED_DATASET
 }
 
+_DEFAULT_SEQUENCE_LENGTH = {"inputs": 13, "targets": 13}
+
+
+def get_fake_dataset(split, shuffle_files=False, seed=None, shard_info=None):
+  """Returns a tf.data.Dataset with fake data."""
+  del shuffle_files  # Unused, to be compatible with TFDS API.
+  del seed
+
+  output_types = {"prefix": tf.string, "suffix": tf.string}
+  if split == "validation":
+    output_types.update(
+        {"idx": tf.int32, "idxs": tf.int32,
+         "id": tf.string, "ids": tf.string})
+  output_shapes = {k: [] for k in output_types}
+  if split == "validation":
+    output_shapes.update({"idxs": [None], "ids": [None]})
+
+  ds = tf.data.Dataset.from_generator(
+      lambda: _FAKE_DATASET[split], output_types, output_shapes)
+  if shard_info:
+    ds = ds.shard(num_shards=shard_info.num_shards, index=shard_info.index)
+  return ds
+
 
 def _get_comparable_examples_from_ds(ds):
   """Puts dataset into format that allows examples to be compared in Py2/3."""
@@ -223,65 +244,6 @@ def _dump_fake_dataset(path, fake_examples, shard_sizes, dump_fn):
     start, end = offsets[i:i+2]
     shard_path = "%s-%05d-of-%05d" % (path, i, len(shard_sizes))
     dump_fn(shard_path, fake_examples[start:end])
-
-
-def _assert_compare_to_fake_dataset(
-    ds, split, features, token_preprocessed=False
-):
-  """Calls assertion to compare fake examples to actual dataaset."""
-  fake_examples = copy.deepcopy(_FAKE_DATASETS[
-      "token_preprocessed" if token_preprocessed else "tokenized"][split])
-
-  for key, feat in features.items():
-    for n, ex in enumerate(fake_examples):
-      if feat.add_eos:
-        fake_examples[n][key] = ex[key][:_SEQUENCE_LENGTH[key] - 1] + (1,)
-      else:
-        fake_examples[n][key] = ex[key][:_SEQUENCE_LENGTH[key]]
-
-  expected_output_shapes = {
-      "inputs": [None], "targets": [None],
-      "inputs_pretokenized": [], "targets_pretokenized": []}
-  if split == "validation":
-    expected_output_shapes.update(
-        {"id": [], "ids": [None], "idx": [], "idxs": [None]})
-  _pyunit_proxy.assertDictEqual(
-      expected_output_shapes,
-      {k: v.shape.as_list() for k, v in ds.element_spec.items()})
-
-  expected_output_dtypes = {k: f.dtype for k, f in features.items()}
-  _pyunit_proxy.assertDictContainsSubset(
-      expected_output_dtypes,
-      {k: v.dtype for k, v in ds.element_spec.items()})
-
-  actual_examples = _get_comparable_examples_from_ds(ds)
-  expected_examples = [
-      tuple(sorted(ex.items())) for ex in fake_examples]
-  _pyunit_proxy.assertCountEqual(expected_examples, actual_examples)
-
-
-def verify_task_matches_fake_datasets(
-    task, use_cached, token_preprocessed=False, splits=("train", "validation"),
-    num_shards=None
-):
-  """Assert all splits for both tokenized datasets are correct."""
-  for split in splits:
-    get_dataset = functools.partial(
-        task.get_dataset, _SEQUENCE_LENGTH, split, use_cached=use_cached,
-        shuffle=False)
-    if num_shards:
-      ds = get_dataset(shard_info=dataset_providers.ShardInfo(0, num_shards))
-      for i in range(1, num_shards):
-        ds = ds.concatenate(
-            get_dataset(shard_info=dataset_providers.ShardInfo(i, num_shards)))
-    else:
-      ds = get_dataset()
-    _assert_compare_to_fake_dataset(
-        ds,
-        split,
-        task.output_features,
-        token_preprocessed=token_preprocessed,
-    )
 
 
 def _maybe_as_bytes(v):
@@ -373,24 +335,38 @@ def assert_datasets_neq(dataset1, dataset2):
                              assert_datasets_eq, dataset1, dataset2)
 
 
-def get_fake_dataset(split, shuffle_files=False, seed=None, shard_info=None):
-  """Returns a tf.data.Dataset with fake data."""
-  del shuffle_files  # Unused, to be compatible with TFDS API.
-  del seed
+def _assert_compare_to_fake_dataset(
+    ds, split, features, sequence_length, token_preprocessed=False):
+  """Calls assertion to compare fake examples to actual dataaset."""
+  fake_examples = copy.deepcopy(_FAKE_DATASETS[
+      "token_preprocessed" if token_preprocessed else "tokenized"][split])
 
-  output_types = {"prefix": tf.string, "suffix": tf.string}
-  if split == "validation":
-    output_types.update(
-        {"idx": tf.int32, "idxs": tf.int32, "id": tf.string, "ids": tf.string})
-  output_shapes = {k: [] for k in output_types}
-  if split == "validation":
-    output_shapes.update({"idxs": [None], "ids": [None]})
+  for key, feat in features.items():
+    for n, ex in enumerate(fake_examples):
+      if sequence_length:
+        fake_examples[n][key] = ex[key][:sequence_length[key] - feat.add_eos]
+      if feat.add_eos:
+        fake_examples[n][key] = fake_examples[n][key] + (1,)
 
-  ds = tf.data.Dataset.from_generator(
-      lambda: _FAKE_DATASET[split], output_types, output_shapes)
-  if shard_info:
-    ds = ds.shard(num_shards=shard_info.num_shards, index=shard_info.index)
-  return ds
+  expected_output_shapes = {
+      "inputs": [None], "targets": [None],
+      "inputs_pretokenized": [], "targets_pretokenized": []}
+  if split == "validation":
+    expected_output_shapes.update(
+        {"id": [], "ids": [None], "idx": [], "idxs": [None]})
+  _pyunit_proxy.assertDictEqual(
+      expected_output_shapes,
+      {k: v.shape.as_list() for k, v in ds.element_spec.items()})
+
+  expected_output_dtypes = {k: f.dtype for k, f in features.items()}
+  _pyunit_proxy.assertDictContainsSubset(
+      expected_output_dtypes,
+      {k: v.dtype for k, v in ds.element_spec.items()})
+
+  actual_examples = _get_comparable_examples_from_ds(ds)
+  expected_examples = [
+      tuple(sorted(ex.items())) for ex in fake_examples]
+  _pyunit_proxy.assertCountEqual(expected_examples, actual_examples)
 
 
 def test_text_preprocessor(dataset):
@@ -409,7 +385,7 @@ def test_text_preprocessor(dataset):
   return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 
-def _split_tsv_preprocessor(dataset, field_names=("prefix", "suffix")):
+def split_tsv_preprocessor(dataset, field_names=("prefix", "suffix")):
   """Splits TSV into dictionary."""
 
   def parse_line(line):
@@ -488,57 +464,12 @@ def sentencepiece_vocab(extra_ids=0):
       extra_ids=extra_ids)
 
 
-def add_tfds_task(
-    name,
-    tfds_name="fake:0.0.0",
-    text_preprocessor=test_text_preprocessor,
-    token_preprocessor=None,
-    splits=None):
-  TaskRegistry.add(
-      name,
-      dataset_providers.TfdsTask,
-      tfds_name=tfds_name,
-      text_preprocessor=text_preprocessor,
-      token_preprocessor=token_preprocessor,
-      output_features=dataset_providers.Feature(sentencepiece_vocab()),
-      metric_fns=[],
-      splits=splits)
-
-
-def add_task(
-    name,
-    dataset_fn,
-    text_preprocessor=test_text_preprocessor,
-    token_preprocessor=None,
-    splits=("train", "validation"),
-    **kwargs):
-  if "output_features" not in kwargs:
-    kwargs["output_features"] = dataset_providers.Feature(sentencepiece_vocab())
-  TaskRegistry.add(
-      name,
-      dataset_providers.Task,
-      dataset_fn=dataset_fn,
-      splits=splits,
-      text_preprocessor=text_preprocessor,
-      token_preprocessor=token_preprocessor,
-      metric_fns=[],
-      **kwargs)
-
-
 def clear_tasks():
   TaskRegistry._REGISTRY = {}  # pylint:disable=protected-access
 
 
 def clear_mixtures():
   MixtureRegistry._REGISTRY = {}  # pylint:disable=protected-access
-
-
-def mark_completed(cache_dir, task_name):
-  dirname = os.path.join(cache_dir, task_name)
-  if not tf.io.gfile.isdir(dirname):
-    tf.io.gfile.mkdir(dirname)
-  with tf.io.gfile.GFile(os.path.join(dirname, "COMPLETED"), "w") as f:
-    f.write("")
 
 
 # pylint:disable=invalid-name
@@ -552,6 +483,33 @@ FakeTfdsInfo = collections.namedtuple("FakeTfdsInfo", ["splits"])
 class FakeTaskTest(absltest.TestCase):
   """TestCase that sets up fake cached and uncached tasks."""
 
+  DEFAULT_PREPROCESSORS = (
+      test_text_preprocessor,
+      preprocessors.tokenize,
+      dataset_providers.CacheDatasetPlaceholder()
+  )
+
+  def add_task(
+      self,
+      name,
+      source,
+      preprocessors=DEFAULT_PREPROCESSORS,  # pylint:disable=redefined-outer-name
+      output_features=None,
+      **kwargs):
+
+    if not output_features:
+      output_features = {
+          "inputs": dataset_providers.Feature(sentencepiece_vocab()),
+          "targets": dataset_providers.Feature(sentencepiece_vocab())
+      }
+
+    return TaskRegistry.add(
+        name,
+        source=source,
+        preprocessors=preprocessors,
+        output_features=output_features,
+        **kwargs)
+
   def get_tempdir(self):
     try:
       flags.FLAGS.test_tmpdir
@@ -564,7 +522,19 @@ class FakeTaskTest(absltest.TestCase):
     super().setUp()
     self.maxDiff = None  # pylint:disable=invalid-name
 
-    # Mock TFDS
+    # Set up data directory.
+    self.test_tmpdir = self.get_tempdir()
+    self.test_data_dir = os.path.join(self.test_tmpdir, "test_data")
+    shutil.copytree(TEST_DATA_DIR, self.test_data_dir)
+    for root, dirs, _ in os.walk(self.test_data_dir):
+      for d in dirs + [""]:
+        os.chmod(os.path.join(root, d), 0o777)
+
+    self._prepare_sources_and_tasks()
+
+  def _prepare_sources_and_tasks(self):
+    clear_tasks()
+    # Prepare TfdsSource
     # Note we don't use mock.Mock since they fail to pickle.
     fake_tfds_paths = {
         "train": [
@@ -586,10 +556,11 @@ class FakeTaskTest(absltest.TestCase):
       del seed
       fname = shard_instruction["filename"]
       if "train" in fname:
+        ds = get_fake_dataset("train")
         if fname.endswith("00000-of-00002"):
-          return get_fake_dataset("train").take(2)
+          return ds.take(2)
         else:
-          return get_fake_dataset("train").skip(2)
+          return ds.skip(2)
       else:
         return get_fake_dataset("validation")
 
@@ -601,7 +572,8 @@ class FakeTaskTest(absltest.TestCase):
         files=fake_tfds_paths.get,
         size=lambda x: 30 if x == "train" else 10)
     self._tfds_patcher = mock.patch(
-        "t5.data.utils.LazyTfdsLoader", new=mock.Mock(return_value=fake_tfds))
+        "t5.seqio.utils.LazyTfdsLoader",
+        new=mock.Mock(return_value=fake_tfds))
     self._tfds_patcher.start()
 
     # Set up data directory.
@@ -612,144 +584,147 @@ class FakeTaskTest(absltest.TestCase):
       for d in dirs + [""]:
         os.chmod(os.path.join(root, d), 0o777)
 
-    # Register a cached test Task.
-    dataset_utils.set_global_cache_dirs([self.test_data_dir])
-    clear_tasks()
-    add_tfds_task("cached_task", token_preprocessor=test_token_preprocessor)
-    add_tfds_task("cached_task_no_token_prep")
-
-    # Prepare cached tasks.
-    self.cached_task = TaskRegistry.get("cached_task")
-    cached_task_dir = os.path.join(self.test_data_dir, "cached_task")
-    _dump_fake_dataset(
-        os.path.join(cached_task_dir, "train.tfrecord"),
-        _FAKE_TOKENIZED_DATASET["train"], [2, 1], _dump_examples_to_tfrecord)
-    _dump_fake_dataset(
-        os.path.join(cached_task_dir, "validation.tfrecord"),
-        _FAKE_TOKENIZED_DATASET["validation"], [2], _dump_examples_to_tfrecord)
-    shutil.copytree(
-        cached_task_dir,
-        os.path.join(self.test_data_dir, "cached_task_no_token_prep"))
-
-    # Prepare cached plaintext task.
-    add_tfds_task("cached_plaintext_task",
-                  token_preprocessor=test_token_preprocessor)
-    self.cached_plaintext_task = TaskRegistry.get("cached_plaintext_task")
-    cached_plaintext_task_dir = os.path.join(
-        self.test_data_dir, "cached_plaintext_task")
-    _dump_fake_dataset(
-        os.path.join(cached_plaintext_task_dir, "train.tfrecord"),
-        _FAKE_PLAINTEXT_TOKENIZED_DATASET["train"], [2, 1],
-        _dump_examples_to_tfrecord)
-
-    # Prepare uncached TfdsTask.
-    add_tfds_task("uncached_task", token_preprocessor=test_token_preprocessor)
-    add_tfds_task("uncached_task_no_token_prep")
-    self.uncached_task = TaskRegistry.get("uncached_task")
-    # Prepare uncached, random TfdsTask
-    add_tfds_task("uncached_random_task",
-                  token_preprocessor=random_token_preprocessor)
-    self.uncached_random_task = TaskRegistry.get("uncached_random_task")
-
     # Prepare uncached TextLineTask.
+    self.tfds_source = dataset_providers.TfdsDataSource(
+        tfds_name="fake:0.0.0",
+        splits=("train", "validation")
+    )
+    self.add_task("tfds_task", source=self.tfds_source)
+
+    # Prepare TextLineSource.
     _dump_fake_dataset(
         os.path.join(self.test_data_dir, "train.tsv"),
         _FAKE_DATASET["train"], [2, 1], _dump_examples_to_tsv)
-    TaskRegistry.add(
-        "text_line_task",
-        dataset_providers.TextLineTask,
+    self.text_line_source = dataset_providers.TextLineDataSource(
         split_to_filepattern={
             "train": os.path.join(self.test_data_dir, "train.tsv*"),
         },
         skip_header_lines=1,
-        text_preprocessor=[_split_tsv_preprocessor, test_text_preprocessor],
-        output_features=dataset_providers.Feature(sentencepiece_vocab()),
-        metric_fns=[])
-    self.text_line_task = TaskRegistry.get("text_line_task")
+    )
+    self.add_task(
+        "text_line_task",
+        source=self.text_line_source,
+        preprocessors=(split_tsv_preprocessor,) + self.DEFAULT_PREPROCESSORS)
 
-    # Prepare uncached TFExampleTask
+    # Prepare TFExampleSource.
     _dump_fake_dataset(
         os.path.join(self.test_data_dir, "train.tfrecord"),
         _FAKE_DATASET["train"], [2, 1], _dump_examples_to_tfrecord)
-    TaskRegistry.add(
-        "tf_example_task",
-        dataset_providers.TFExampleTask,
+    self.tf_example_source = dataset_providers.TFExampleDataSource(
         split_to_filepattern={
             "train": os.path.join(self.test_data_dir, "train.tfrecord*"),
         },
         feature_description={
             "prefix": tf.io.FixedLenFeature([], tf.string),
             "suffix": tf.io.FixedLenFeature([], tf.string),
-        },
-        text_preprocessor=[test_text_preprocessor],
-        output_features=dataset_providers.Feature(sentencepiece_vocab()),
-        metric_fns=[])
-    self.tf_example_task = TaskRegistry.get("tf_example_task")
+        }
+    )
+    self.add_task("tf_example_task", source=self.tf_example_source)
 
-    # Prepare uncached Task.
-    def _dataset_fn(split,
-                    shuffle_files,
-                    filepattern=os.path.join(self.test_data_dir, "train.tsv*")):
-      del split
-      files = tf.data.Dataset.list_files(filepattern, shuffle=shuffle_files)
-      return files.interleave(
-          lambda f: tf.data.TextLineDataset(f).skip(1),
-          num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    # Prepare FunctionDataSource
+    self.function_source = dataset_providers.FunctionDataSource(
+        dataset_fn=get_fake_dataset,
+        splits=["train", "validation"]
+    )
+    self.add_task("function_task", source=self.function_source)
 
-    TaskRegistry.add(
-        "general_task",
-        dataset_providers.Task,
-        dataset_fn=_dataset_fn,
-        splits=["train"],
-        text_preprocessor=[_split_tsv_preprocessor, test_text_preprocessor],
-        output_features=dataset_providers.Feature(sentencepiece_vocab()),
-        metric_fns=[])
-    self.general_task = TaskRegistry.get("general_task")
-
-    # Prepare uncached TaskV3.
-    TaskRegistry.add(
-        "task_v3",
-        dataset_providers.TaskV3,
-        source=dataset_providers.FunctionDataSource(
-            dataset_fn=get_fake_dataset,
-            splits=["train", "validation"]
-        ),
-        preprocessors=[
+    # Prepare Task that is tokenized and preprocessed before caching.
+    self.add_task(
+        "fully_processed_precache",
+        source=self.function_source,
+        preprocessors=(
             test_text_preprocessor,
             preprocessors.tokenize,
             token_preprocessor_no_sequence_length,
             dataset_providers.CacheDatasetPlaceholder(),
-        ],
-        output_features={
-            "inputs": dataset_providers.Feature(sentencepiece_vocab()),
-            "targets": dataset_providers.Feature(sentencepiece_vocab()),
-        },
-        metric_fns=[])
-    self.task_v3 = TaskRegistry.get("task_v3")
+        )
+    )
 
-    # Prepare uncached TaskV3 with no caching before tokenization.
-    TaskRegistry.add(
-        "task_v3_tokenized_postcache",
-        dataset_providers.TaskV3,
-        source=dataset_providers.FunctionDataSource(
-            dataset_fn=get_fake_dataset,
-            splits=["train", "validation"]
-        ),
-        preprocessors=[
+    # Prepare Task that is tokenized after caching.
+    self.add_task(
+        "tokenized_postcache",
+        source=self.function_source,
+        preprocessors=(
             test_text_preprocessor,
             dataset_providers.CacheDatasetPlaceholder(),
             preprocessors.tokenize,
             token_preprocessor_no_sequence_length,
-        ],
-        output_features={
-            "inputs": dataset_providers.Feature(sentencepiece_vocab()),
-            "targets": dataset_providers.Feature(sentencepiece_vocab()),
-        },
-        metric_fns=[])
+        )
+    )
+
+    # Prepare Task with randomization.
+    self.random_task = self.add_task(
+        "random_task",
+        source=self.function_source,
+        preprocessors=(
+            test_text_preprocessor,
+            dataset_providers.CacheDatasetPlaceholder(),
+            preprocessors.tokenize,
+            random_token_preprocessor,
+        )
+    )
+
+    self.uncached_task = self.add_task("uncached_task", source=self.tfds_source)
+
+    # Prepare cached task.
+    dataset_utils.set_global_cache_dirs([self.test_data_dir])
+    self.cached_task_dir = os.path.join(self.test_data_dir, "cached_task")
+    _dump_fake_dataset(
+        os.path.join(self.cached_task_dir, "train.tfrecord"),
+        _FAKE_TOKENIZED_DATASET["train"], [2, 1],
+        _dump_examples_to_tfrecord)
+    _dump_fake_dataset(
+        os.path.join(self.cached_task_dir, "validation.tfrecord"),
+        _FAKE_TOKENIZED_DATASET["validation"], [2],
+        _dump_examples_to_tfrecord)
+    self.cached_task = self.add_task("cached_task", source=self.tfds_source)
+
+    # Prepare cached plaintext task.
+    _dump_fake_dataset(
+        os.path.join(
+            self.test_data_dir, "cached_plaintext_task", "train.tfrecord"),
+        _FAKE_PLAINTEXT_TOKENIZED_DATASET["train"], [2, 1],
+        _dump_examples_to_tfrecord)
+    self.cached_plaintext_task = self.add_task(
+        "cached_plaintext_task",
+        source=self.tfds_source,
+        preprocessors=self.DEFAULT_PREPROCESSORS + (test_token_preprocessor,))
 
   def tearDown(self):
     super().tearDown()
     self._tfds_patcher.stop()
+    tf.random.set_seed(None)
+
+  def verify_task_matches_fake_datasets(  # pylint:disable=dangerous-default-value
+      self,
+      task_name,
+      use_cached,
+      token_preprocessed=False,
+      splits=("train", "validation"),
+      sequence_length=_DEFAULT_SEQUENCE_LENGTH,
+      num_shards=None
+  ):
+    """Assert all splits for both tokenized datasets are correct."""
+    task = TaskRegistry.get(task_name)
+    for split in splits:
+      get_dataset = functools.partial(
+          task.get_dataset, sequence_length, split, use_cached=use_cached,
+          shuffle=False)
+      if num_shards:
+        ds = get_dataset(shard_info=dataset_providers.ShardInfo(0, num_shards))
+        for i in range(1, num_shards):
+          ds = ds.concatenate(
+              get_dataset(
+                  shard_info=dataset_providers.ShardInfo(i, num_shards)))
+      else:
+        ds = get_dataset()
+      _assert_compare_to_fake_dataset(
+          ds,
+          split,
+          task.output_features,
+          sequence_length,
+          token_preprocessed=token_preprocessed,
+      )
 
 
 class FakeMixtureTest(FakeTaskTest):
@@ -771,7 +746,7 @@ class FakeMixtureTest(FakeTaskTest):
     self.cached_mixture = MixtureRegistry.get("cached_mixture")
     MixtureRegistry.add(
         "uncached_random_mixture",
-        [("uncached_random_task", 1.0)],
+        [("random_task", 1.0)],
     )
     self.uncached_mixture = MixtureRegistry.get(
         "uncached_random_mixture")

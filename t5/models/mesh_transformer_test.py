@@ -15,16 +15,15 @@
 """Tests for t5.models.mesh_transformer."""
 
 from absl.testing import absltest
-from t5.data import test_utils
+from t5 import seqio
 from t5.models import mesh_transformer
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
 
-tf.disable_v2_behavior()
 tf.enable_eager_execution()
 
 
-class MeshDatasetFnsTest(test_utils.FakeMixtureTest):
+class MeshDatasetFnsTest(seqio.test_utils.FakeMixtureTest):
 
   def check_ds_shape(self, ds, sequence_length):
     for k, v in tf.data.get_output_shapes(ds).items():
