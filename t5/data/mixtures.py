@@ -16,12 +16,14 @@
 
 This module contains different mixtures for training T5 models.
 """
-from t5.data.dataset_providers import MixtureRegistry
+from t5 import seqio
 from t5.data.glue_utils import get_glue_weight_mapping
 from t5.data.glue_utils import get_super_glue_weight_mapping
 import t5.data.tasks  # pylint: disable=unused-import
 from t5.data.utils import rate_num_examples
 from t5.data.utils import rate_unsupervised
+
+MixtureRegistry = seqio.MixtureRegistry
 
 _GLUE_WEIGHT_MAPPING = get_glue_weight_mapping()
 _SUPER_GLUE_WEIGHT_MAPPING = get_super_glue_weight_mapping()

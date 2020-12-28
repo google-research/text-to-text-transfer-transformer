@@ -13,14 +13,14 @@
 # limitations under the License.
 
 # Lint as: python3
-"""Tests for t5.data.utils."""
+"""Tests for seqio.utils."""
 from typing import Mapping, Sequence
 
 from absl.testing import absltest
 from absl.testing import parameterized
 import numpy as np
-from t5.data import test_utils
-from t5.data import utils
+from t5.seqio import test_utils
+from t5.seqio import utils
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
 
@@ -317,6 +317,41 @@ class UtilsTest(parameterized.TestCase):
     }]
     assert_dataset(
         packed_ds, expected, {"inputs": tf.int32, "targets": tf.int32})
+
+
+class MixtureRateTest(test_utils.FakeTaskTest):
+
+  def test_mixing_rate_num_examples(self):
+    self.assertEqual(
+        3.0,
+        utils.mixing_rate_num_examples(self.cached_task))
+
+    self.assertEqual(
+        81.0,
+        utils.mixing_rate_num_examples(self.cached_task, scale=27))
+
+    self.assertEqual(
+        9.0,
+        utils.mixing_rate_num_examples(
+            self.cached_task, scale=27, temperature=2))
+
+    self.assertEqual(
+        2550.25,
+        utils.mixing_rate_num_examples(
+            self.cached_task, scale=27, temperature=0.5, maximum=50.5))
+
+    # Test fallback.
+    self.assertEqual(
+        3.0,
+        utils.mixing_rate_num_examples(
+            self.cached_task, fallback_to_num_input_examples=False))
+    with self.assertRaises(AssertionError):
+      utils.mixing_rate_num_examples(
+          self.uncached_task, fallback_to_num_input_examples=False)
+    self.assertEqual(
+        30.0,
+        utils.mixing_rate_num_examples(
+            self.uncached_task, fallback_to_num_input_examples=True))
 
 
 def create_default_dataset(

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for t5.data.cache_tasks_main."""
+"""Tests for seqio.scripts.cache_tasks_main."""
 
 import os
 
@@ -21,15 +21,21 @@ import apache_beam as beam
 from apache_beam.testing.test_pipeline import TestPipeline
 from apache_beam.testing.util import assert_that
 from apache_beam.testing.util import equal_to
-import t5
-from t5.data import cache_tasks_main
+from t5 import seqio
+from t5.seqio.scripts import cache_tasks_main
 import tensorflow.compat.v2 as tf
 
 tf.compat.v1.enable_eager_execution()
 
+TaskRegistry = seqio.TaskRegistry
+test_utils = seqio.test_utils
 
-test_utils = t5.data.test_utils
-TaskRegistry = t5.data.TaskRegistry
+def mark_completed(cache_dir, task_name):
+  dirname = os.path.join(cache_dir, task_name)
+  if not tf.io.gfile.isdir(dirname):
+    tf.io.gfile.mkdir(dirname)
+  with tf.io.gfile.GFile(os.path.join(dirname, "COMPLETED"), "w") as f:
+    f.write("")
 
 
 class ProcessTaskBeamTest(test_utils.FakeTaskTest):
@@ -94,36 +100,39 @@ class ProcessTaskBeamTest(test_utils.FakeTaskTest):
                                          fname)).read().replace(", ", ","))
 
     # Add COMPLETED file so that we can load `uncached_task`.
-    test_utils.mark_completed(self.test_data_dir, task_name)
-
-    # Load task.
-    uncached_task = TaskRegistry.get(task_name)
+    mark_completed(self.test_data_dir, task_name)
 
     # Check datasets.
-    test_utils.verify_task_matches_fake_datasets(
-        uncached_task,
+    self.verify_task_matches_fake_datasets(
+        task_name,
         use_cached=True,
         splits=task.splits,
         token_preprocessed=token_preprocessed)
 
   def test_tfds_pipeline(self):
-    self.validate_pipeline("uncached_task", token_preprocessed=True)
+    self.validate_pipeline("tfds_task")
 
   def test_text_line_pipeline(self):
     self.validate_pipeline("text_line_task")
 
-  def test_general_pipeline(self):
-    self.validate_pipeline("general_task", num_shards=1)
+  def test_function_pipeline(self):
+    self.validate_pipeline("function_task", num_shards=1)
 
   def test_tf_example_pipeline(self):
     self.validate_pipeline("tf_example_task")
 
-  def test_v3_pipeline(self):
-    self.validate_pipeline("task_v3", num_shards=1, token_preprocessed=True)
-
-  def test_v3_cache_before_tokenization_pipeline(self):
+  def test_cache_before_tokenization_pipeline(self):
+    self.add_task(
+        "task_tokenized_postcache",
+        self.function_source,
+        preprocessors=[
+            test_utils.test_text_preprocessor,
+            seqio.CacheDatasetPlaceholder(),
+            seqio.preprocessors.tokenize,
+            test_utils.token_preprocessor_no_sequence_length,
+        ])
     self.validate_pipeline(
-        "task_v3_tokenized_postcache",
+        "task_tokenized_postcache",
         expected_task_dir="cached_untokenized_task",
         num_shards=1,
         token_preprocessed=True)
@@ -133,7 +142,7 @@ class ProcessTaskBeamTest(test_utils.FakeTaskTest):
       _ = cache_tasks_main.run_pipeline(
           p, ["uncached_task"], cache_dir=self.test_data_dir, overwrite=True)
     # Add COMPLETED file so that we can load `uncached_task`.
-    test_utils.mark_completed(self.test_data_dir, "uncached_task")
+    mark_completed(self.test_data_dir, "uncached_task")
 
     actual_task_dir = os.path.join(self.test_data_dir, "uncached_task")
     stat_old = tf.io.gfile.stat(

@@ -17,7 +17,7 @@
 
 import abc
 import hashlib
-from typing import Iterable, List, Optional, Sequence
+from typing import Iterable, Optional, Sequence
 
 import tensorflow.compat.v2 as tf
 import tensorflow_text as tf_text
@@ -125,8 +125,7 @@ class Vocabulary(metaclass=abc.ABCMeta):
     raise NotImplementedError
 
   def decode_tf(self, ids: tf.Tensor) -> tf.Tensor:
-    """Detokenizes int32 N-D Tensor to string (N-1)-D Tensor, through first EOS.
-    """
+    """Detokenizes int32 ND Tensor to string (N-1)D Tensor through first EOS."""
     clean_ids = ids
 
     if self.unk_id is not None:

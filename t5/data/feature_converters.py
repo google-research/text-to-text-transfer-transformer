@@ -83,8 +83,7 @@ import abc
 import functools
 from typing import Mapping, Sequence
 from absl import logging
-from t5.data import dataset_providers
-from t5.data import utils
+from t5 import seqio
 import tensorflow.compat.v2 as tf
 
 
@@ -320,8 +319,6 @@ class FeatureConverter(abc.ABC):
                         expected_rank: int = 1) -> tf.data.Dataset:
     """Validate properties of the dataset, raising Exceptions if needed.
 
-    Expanded from `t5.data.dataset_providers.TaskV3._validate_dataset`.
-
     This method is used to validate whether the input dataset is compatiable
     with the desired specifications. In particular, the following aspects are
     checked.
@@ -506,10 +503,10 @@ class FeatureConverter(abc.ABC):
                    packed_lengths: Mapping[str, int]) -> tf.data.Dataset:
     """Trim/pad to packed_lengths and optionally pack the input dataset."""
     if self.pack:
-      ds = utils.trim_and_pack_dataset(ds, packed_lengths,
+      ds = seqio.trim_and_pack_dataset(ds, packed_lengths,
                                        self._use_custom_packing_ops)
     else:
-      ds = utils.trim_and_pad_dataset(ds, packed_lengths)
+      ds = seqio.trim_and_pad_dataset(ds, packed_lengths)
     return ds
 
   @abc.abstractmethod
@@ -666,7 +663,7 @@ def get_dataset(
     dataset_split: str = "train",
     use_cached: bool = False,
     shuffle: bool = True,
-    shard_info: dataset_providers.ShardInfo = None,
+    shard_info: seqio.ShardInfo = None,
     verbose: bool = True
 ) -> tf.data.Dataset:
   """Get processed dataset with the model features.
@@ -701,7 +698,7 @@ def get_dataset(
     raise TypeError(
         "feature_converter should be an instance of FeatureConverter.")
 
-  mixture_or_task = dataset_providers.get_mixture_or_task(mixture_or_task_name)
+  mixture_or_task = seqio.get_mixture_or_task(mixture_or_task_name)
 
   ds = mixture_or_task.get_dataset(
       task_feature_lengths,

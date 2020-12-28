@@ -38,7 +38,7 @@ from absl import logging
 import apache_beam as beam
 import apache_beam.metrics as metrics
 import numpy as np
-import t5
+from t5 import seqio
 import tensorflow.compat.v2 as tf
 
 
@@ -123,7 +123,7 @@ class PreprocessTask(beam.PTransform):
 
     ds = self._task.source.get_dataset(
         split=self._split,
-        shard_info=t5.data.ShardInfo(
+        shard_info=seqio.ShardInfo(
             index=shard_index, num_shards=len(self.shards)
         ),
         shuffle=False)
@@ -165,7 +165,7 @@ class WriteExampleTfRecord(beam.PTransform):
   def expand(self, pcoll):
     return (
         pcoll
-        | beam.Map(t5.data.dict_to_tfexample)
+        | beam.Map(seqio.dict_to_tfexample)
         | beam.Reshuffle()
         | beam.io.tfrecordio.WriteToTFRecord(
             self._output_path,
@@ -301,10 +301,10 @@ def run_pipeline(
   # Excludes only empty names by default.
   excluded_regex = re.compile(r"(%s\Z)" % r"\Z|".join(excluded_tasks or []))
   task_names = [
-      t for t in t5.data.TaskRegistry.names()
+      t for t in seqio.TaskRegistry.names()
       if included_regex.match(t) and not excluded_regex.match(t)]
   for task_name in task_names:
-    task = t5.data.TaskRegistry.get(task_name)
+    task = seqio.TaskRegistry.get(task_name)
     if not task.supports_caching:
       logging.info(
           "Skipping task that does not support caching: '%s'", task.name)
@@ -342,7 +342,7 @@ def run_pipeline(
 
     output_dirs.append(output_dir)
 
-    if isinstance(task.source, t5.data.FunctionDataSource):
+    if isinstance(task.source, seqio.FunctionDataSource):
       logging.warning(
           "Task '%s' using FunctionDataSource cannot be distributed. If your "
           "dataset is large, you may be able to speed up preprocessing by "
@@ -359,18 +359,18 @@ def run_pipeline(
           | "%s_pat" % label >> pat)
       _ = (examples
            | "%s_write_tfrecord" % label >> WriteExampleTfRecord(
-               t5.data.get_tfrecord_prefix(output_dir, split),
+               seqio.get_cached_tfrecord_prefix(output_dir, split),
                num_shards=num_shards))
       _ = (
           examples
           | "%s_info" % label >> GetInfo(num_shards)
           | "%s_write_info" % label >> WriteJson(
-              t5.data.get_info_path(output_dir, split)))
+              seqio.get_cached_info_path(output_dir, split)))
       _ = (
           examples
           | "%s_stats" % label >> GetStats(task.output_features)
           | "%s_write_stats" % label >> WriteJson(
-              t5.data.get_stats_path(output_dir, split)))
+              seqio.get_cached_stats_path(output_dir, split)))
   return output_dirs
 
 
@@ -379,7 +379,7 @@ def main(_):
 
   _import_modules(FLAGS.module_import)
 
-  t5.data.add_global_cache_dirs(
+  seqio.add_global_cache_dirs(
       [FLAGS.output_cache_dir] + FLAGS.tasks_additional_cache_dirs)
 
   output_dirs = []
