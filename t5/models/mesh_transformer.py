@@ -28,6 +28,7 @@ import tensorflow_datasets as tfds
 DEPRECATED_GIN_REFERENCES = (
     "configurable_vocabulary",
     "get_sentencepiece_model_path",
+    "maybe_print_dataset",
     "num_parallel_calls",
     "SentencePieceVocabulary",
     "t5.data.sentencepiece_vocabulary.SentencePieceVocabulary",
