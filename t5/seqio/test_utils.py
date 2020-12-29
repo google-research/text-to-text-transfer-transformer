@@ -457,6 +457,10 @@ class MockVocabulary(object):
   def vocab_size(self):
     return self._vocab_size
 
+  @property
+  def eos_id(self):
+    return 1
+
 
 def sentencepiece_vocab(extra_ids=0):
   return vocabularies.SentencePieceVocabulary(
@@ -486,7 +490,8 @@ class FakeTaskTest(absltest.TestCase):
   DEFAULT_PREPROCESSORS = (
       test_text_preprocessor,
       preprocessors.tokenize,
-      dataset_providers.CacheDatasetPlaceholder()
+      dataset_providers.CacheDatasetPlaceholder(),
+      preprocessors.append_eos_after_trim
   )
 
   def add_task(

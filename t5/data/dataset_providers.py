@@ -25,7 +25,6 @@ between.
 
 import re
 
-import gin
 from t5 import seqio
 from t5.data import utils
 import tensorflow.compat.v2 as tf
@@ -86,6 +85,7 @@ class FunctionTask(seqio.Task):
     if supports_caching:
       preprocessors.append(seqio.CacheDatasetPlaceholder())
     preprocessors.extend(token_preprocessor or [])
+    preprocessors.append(seqio.preprocessors.append_eos_after_trim)
 
     if hasattr(output_features, "__len__") and not output_features:
       raise ValueError("output_features must be non-empty.")

@@ -32,8 +32,10 @@ class PreprocessorsTest(absltest.TestCase):
         'suffix': 'a test.'
     })
     output_features = {
-        'prefix': Feature(test_utils.MockVocabulary({'This is': [0, 1]})),
-        'suffix': Feature(test_utils.MockVocabulary({'a test.': [2, 3]})),
+        'prefix': Feature(
+            test_utils.MockVocabulary({'This is': [0, 1]}), add_eos=True),
+        'suffix': Feature(
+            test_utils.MockVocabulary({'a test.': [2, 3]}), add_eos=False),
     }
 
     assert_dataset(
@@ -50,6 +52,67 @@ class PreprocessorsTest(absltest.TestCase):
         {
             'prefix': [0, 1],
             'suffix': [2, 3]
+        })
+
+    assert_dataset(
+        preprocessors.tokenize_and_append_eos(
+            og_dataset, output_features=output_features,
+            copy_pretokenized=False),
+        {
+            'prefix': [0, 1, 1],
+            'suffix': [2, 3]
+        })
+
+  def test_append_eos(self):
+    og_dataset = tf.data.Dataset.from_tensors({
+        'inputs': [1, 2, 3],
+        'targets': [4, 5, 6, 7],
+        'arrows': [8, 9, 10, 11],
+        'bows': [12, 13],
+    })
+    vocab = test_utils.sentencepiece_vocab()
+    output_features = {
+        'inputs': Feature(vocab, add_eos=False),
+        'targets': Feature(vocab, add_eos=True),
+        'arrows': Feature(vocab, add_eos=True),
+    }
+    sequence_length = {
+        'inputs': 4,
+        'targets': 3,
+        'arrows': 5,
+        'bows': 1
+    }
+
+    # Add eos only.
+    assert_dataset(
+        preprocessors.append_eos(og_dataset, output_features),
+        {
+            'inputs': [1, 2, 3],
+            'targets': [4, 5, 6, 7, 1],
+            'arrows': [8, 9, 10, 11, 1],
+            'bows': [12, 13],
+        })
+
+    # Trim to sequence lengths.
+    assert_dataset(
+        preprocessors.append_eos_after_trim(
+            og_dataset, sequence_length, output_features),
+        {
+            'inputs': [1, 2, 3],
+            'targets': [4, 5, 1],
+            'arrows': [8, 9, 10, 11, 1],
+            'bows': [12, 13],
+        })
+
+    # Don't trim to sequence lengths.
+    assert_dataset(
+        preprocessors.append_eos_after_trim(
+            og_dataset, None, output_features),
+        {
+            'inputs': [1, 2, 3],
+            'targets': [4, 5, 6, 7, 1],
+            'arrows': [8, 9, 10, 11, 1],
+            'bows': [12, 13],
         })
 
 

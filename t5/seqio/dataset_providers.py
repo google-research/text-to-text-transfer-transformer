@@ -622,7 +622,6 @@ class Task(DatasetProviderBase):
       fn_args = set(inspect.signature(prep_fn).parameters.keys())
       kwargs = {}
       if "sequence_length" in fn_args:
-        assert sequence_length is not None
         kwargs["sequence_length"] = sequence_length
       if "output_features" in fn_args:
         kwargs["output_features"] = self.output_features
@@ -670,33 +669,19 @@ class Task(DatasetProviderBase):
         lambda x: {k: tf.cast(v, dtypes.get(k, v.dtype)) for k, v in x.items()},
         num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-  def _trim_and_ensure_eos(
+  def _trim_output_features(
       self,
       dataset: tf.data.Dataset,
       sequence_length: Optional[Mapping[str, int]]
     ) -> tf.data.Dataset:
-    """Trim and append EOS=1 token to model features."""
-    def _trim_and_append_eos(k: str, v: tf.Tensor) -> tf.Tensor:
-      if k not in self.output_features:
+    """Trim output features to sequence length."""
+    def _trim(k: str, v: tf.Tensor) -> tf.Tensor:
+      if k not in self.output_features or not sequence_length:
         return v
-      feat = self.output_features[k]
-      max_len = sequence_length[k] if sequence_length else None
-
-      if feat.add_eos:
-        tf.debugging.assert_none_equal(
-            v, tf.constant(1, feat.dtype),
-            message=f"Feature '{k}' unexpectedly contains EOS=1 token "
-                    "after preprocessing.")
-        if max_len:
-          v = tf.concat([v[:max_len-1], [1]], axis=0)
-        else:
-          v = tf.concat([v, [1]], axis=0)
-      elif max_len:
-        v = v[:max_len]
-      return v
+      return v[:sequence_length[k]]
 
     return dataset.map(
-        lambda ex: {k: _trim_and_append_eos(k, v) for k, v in ex.items()},
+        lambda ex: {k: _trim(k, v) for k, v in ex.items()},
         num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
   def preprocess_precache(
@@ -874,7 +859,7 @@ class Task(DatasetProviderBase):
       # "_pretokenized".
       ds = _rename_plaintext_to_pretokenized(ds)
     ds = self._validate_preprocessing(ds)
-    ds = self._trim_and_ensure_eos(ds, sequence_length=sequence_length)
+    ds = self._trim_output_features(ds, sequence_length=sequence_length)
 
     if shuffle:
       # Shuffle before mixing since preprocessor can output multiple

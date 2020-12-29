@@ -14,18 +14,69 @@
 
 """Preprocessors for SeqIO Tasks."""
 
+from typing import Mapping, Optional
+
+from t5.seqio import dataset_providers
 from t5.seqio import utils
 import tensorflow.compat.v2 as tf
 
 
-def tokenize(dataset, output_features, copy_pretokenized=True):
-  """Encode specified string features.
+OutputFeaturesType = Mapping[str, dataset_providers.Feature]
+SequenceLengthType = Mapping[str, int]
+
+
+def tokenize(
+    dataset: tf.data.Dataset,
+    output_features: OutputFeaturesType,
+    copy_pretokenized: bool = True,
+    with_eos: bool = False
+) -> tf.data.Dataset:
+  """Encode output features with specified vocbularies.
+
+  Passes through other features unchanged. Optionally passes through copy
+  of original features with "_pretokenized" suffix added to the key.
+
+  Args:
+    dataset: a tf.data.Dataset of examples to tokenize.
+    output_features: a dict of Feature objects; their vocabulary attribute will
+      be used to tokenize the specified features.
+    copy_pretokenized: bool, whether to pass through copies of original features
+      with "_pretokenized" suffix added to the key.
+    with_eos: bool, whether to append EOS to the end of the sequence.
+
+  Returns:
+    a tf.data.Dataset
+  """
+
+  def _tokenize(features):
+    ret = {}
+    for k, v in features.items():
+      if k in output_features:
+        if copy_pretokenized:
+          ret[f'{k}_pretokenized'] = v
+        vocab = output_features[k].vocabulary
+        v = vocab.encode_tf(v)
+        if with_eos and output_features[k].add_eos:
+          v = tf.concat([v, [vocab.eos_id]], axis=-1)
+      ret[k] = v
+    return ret
+
+  return dataset.map(
+      _tokenize, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+
+def tokenize_and_append_eos(
+    dataset: tf.data.Dataset,
+    output_features: OutputFeaturesType,
+    copy_pretokenized: bool = True,
+) -> tf.data.Dataset:
+  """Encode output features with specified vocbularies and append EOS.
 
   Passes through non-string features unchanged. Optionally passes through copy
   of original features with "_pretokenized" suffix added to the key.
 
   Args:
-    dataset: a tf.data.Dataset
+    dataset: a tf.data.Dataset of examples to tokenize.
     output_features: a dict of Feature objects; their vocabulary attribute will
       be used to tokenize the specified features.
     copy_pretokenized: bool, whether to pass through copies of original features
@@ -34,29 +85,80 @@ def tokenize(dataset, output_features, copy_pretokenized=True):
   Returns:
     a tf.data.Dataset
   """
-
-  def my_fn(features):
-    """Encode all specified feature that are strings and return a dictionary.
-
-    Args:
-      features: a dictionary
-
-    Returns:
-      a dictionary
-    """
-    ret = {}
-    for k, v in features.items():
-      if k in output_features:
-        if copy_pretokenized:
-          ret[f'{k}_pretokenized'] = v
-        v = output_features[k].vocabulary.encode_tf(v)
-      ret[k] = v
-    return ret
-
-  return dataset.map(my_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  return tokenize(dataset, output_features, copy_pretokenized, with_eos=True)
 
 
 @utils.map_over_dataset
-def print_dataset(ex):
+def print_dataset(features):
   """tf.Print dataset fields for debugging purposes."""
-  return {k: tf.Print(v, [v], k + ': ') for k, v in ex.items()}
+  return {k: tf.Print(v, [v], k + ': ') for k, v in features.items()}
+
+
+def append_eos(
+    dataset: tf.data.Dataset,
+    output_features: OutputFeaturesType,
+) -> tf.data.Dataset:
+  """Appends EOS to output feature token sequences with `add_eos` set to True.
+
+  Respects the `add_eos` field of the seqio.Features in `output_features`.
+
+  Args:
+    dataset: a tf.data.Dataset of tokenized examples to preprocess.
+    output_features: a mapping of output feature names to Feature objects.
+
+  Returns:
+    a tf.data.Dataset of tokenized examples with EOS added to specified output
+    features.
+  """
+  def _maybe_add_eos(key: str, value: tf.Tensor) -> tf.Tensor:
+    if key not in output_features or not output_features[key].add_eos:
+      return value
+    else:
+      eos_id = output_features[key].vocabulary.eos_id
+      return tf.concat([value, [eos_id]], axis=0)
+
+  return dataset.map(
+      lambda ex: {k: _maybe_add_eos(k, v) for k, v in ex.items()},
+      num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+
+def append_eos_after_trim(
+    dataset: tf.data.Dataset,
+    sequence_length: Optional[SequenceLengthType],
+    output_features: OutputFeaturesType,
+) -> tf.data.Dataset:
+  """Trims output feature token sequences and then appends EOS.
+
+  Respects the `add_eos` field of the seqio.Features in `output_features`.
+  Truncates features before adding the EOS to ensure they fit in the max length
+  specified by `sequence_length` once the EOS is added. If `sequence_length` is
+  None, no trimming is performed.
+
+  Note that sequences are automatically trimmed at the end of the Task pipeline,
+  so unless you want the features to always end in EOS, use `append_eos`
+  instead.
+
+  Args:
+    dataset: a tf.data.Dataset of tokenized examples to preprocess.
+    sequence_length: a mapping from output feature names to max lengths.
+      If provided, output feature sequences will be trimmed to ensure they are
+      not longer than this length once EOS is added.
+    output_features: a mapping of output feature names to Feature objects.
+
+  Returns:
+    a tf.data.Dataset of tokenized examples with EOS added to specified output
+    features.
+  """
+  def _maybe_add_eos_and_trim(key: str, value: tf.Tensor) -> tf.Tensor:
+    if key not in output_features or not output_features[key].add_eos:
+      return value
+    eos_id = output_features[key].vocabulary.eos_id
+    if sequence_length is not None:
+      max_length = sequence_length[key]
+      return tf.concat([value[:max_length-1], [eos_id]], axis=0)
+    else:
+      return tf.concat([value, [eos_id]], axis=0)
+
+  return dataset.map(
+      lambda ex: {k: _maybe_add_eos_and_trim(k, v) for k, v in ex.items()},
+      num_parallel_calls=tf.data.experimental.AUTOTUNE)

@@ -30,6 +30,7 @@ tf.compat.v1.enable_eager_execution()
 TaskRegistry = seqio.TaskRegistry
 test_utils = seqio.test_utils
 
+
 def mark_completed(cache_dir, task_name):
   dirname = os.path.join(cache_dir, task_name)
   if not tf.io.gfile.isdir(dirname):
@@ -130,6 +131,7 @@ class ProcessTaskBeamTest(test_utils.FakeTaskTest):
             seqio.CacheDatasetPlaceholder(),
             seqio.preprocessors.tokenize,
             test_utils.token_preprocessor_no_sequence_length,
+            seqio.preprocessors.append_eos_after_trim
         ])
     self.validate_pipeline(
         "task_tokenized_postcache",

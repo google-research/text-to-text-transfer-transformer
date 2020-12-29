@@ -430,7 +430,10 @@ def register_dummy_task(
       task_name,
       source=seqio.FunctionDataSource(
           dataset_fn=dataset_fn, splits=["train", "validation"]),
-      preprocessors=[seqio.CacheDatasetPlaceholder()],
+      preprocessors=[
+          seqio.CacheDatasetPlaceholder(),
+          seqio.preprocessors.append_eos_after_trim,
+      ],
       output_features={
           feat: seqio.Feature(test_utils.sentencepiece_vocab())
           for feat in output_feature_names

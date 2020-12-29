@@ -248,13 +248,6 @@ class TasksTest(test_utils.FakeTaskTest):
         "preprocessing: Got 0, expected 1"):
       _materialize({"targets": 0})
 
-    # Has EOS
-    with self.assertRaisesRegex(
-        tf.errors.InvalidArgumentError,
-        r".*Feature \\'targets\\' unexpectedly contains EOS=1 token after "
-        r"preprocessing\..*"):
-      _materialize({"targets": tf.constant([1, 3], tf.int32)})
-
   def test_value_errors(self):
     dataset_fn = (
         lambda split, shuffle_files: tf.data.Dataset.from_tensors(["test"]))

@@ -20,6 +20,7 @@ from typing import Callable, Sequence
 from unittest import mock
 
 import numpy as np
+from t5 import seqio
 import t5.data
 from t5.evaluation import metrics
 from t5.evaluation.evaluator import Evaluator
@@ -38,16 +39,15 @@ def register_dummy_task(
     postprocess_fn=None,
     metrics_fn=None) -> None:
   """Register a dummy task for GetDatasetTest."""
-  t5.data.TaskRegistry.add(
+  seqio.TaskRegistry.add(
       task_name,
-      t5.data.TaskV3,
-      source=t5.data.FunctionDataSource(
+      source=seqio.FunctionDataSource(
           dataset_fn=dataset_fn, splits=["train", "validation"]),
-      preprocessors=[t5.data.CacheDatasetPlaceholder()],
+      preprocessors=[seqio.preprocessors.append_eos_after_trim],
       postprocess_fn=postprocess_fn,
       output_features={
           # Mock the sentencepiece vocabulary.
-          feat: t5.data.Feature(mock.Mock())
+          feat: seqio.Feature(mock.Mock(eos_id=True))
           for feat in output_feature_names
       },
       metric_fns=metrics_fn)
@@ -63,7 +63,7 @@ def get_mocked_task(
   task.postprocess_fn = lambda d, example, is_target: d
 
   mock_vocab = mock.Mock()
-  task.output_features = {"targets": t5.data.Feature(mock_vocab)}
+  task.output_features = {"targets": seqio.Feature(mock_vocab)}
   return task
 
 
