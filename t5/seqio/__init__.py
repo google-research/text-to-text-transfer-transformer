@@ -16,6 +16,9 @@
 # pylint:disable=wildcard-import
 
 from t5.seqio.dataset_providers import *
+import t5.seqio.evaluation
+from t5.seqio.evaluation import Evaluator
+from t5.seqio.feature_converters import *
 import t5.seqio.test_utils
 from t5.seqio.utils import *
 from t5.seqio.vocabularies import *

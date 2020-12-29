@@ -17,9 +17,11 @@
 
 import functools
 import os
+from typing import Callable, Sequence
 
 from absl.testing import absltest
 from t5.seqio import dataset_providers
+from t5.seqio import feature_converters
 from t5.seqio import preprocessors
 from t5.seqio import test_utils
 from t5.seqio import utils
@@ -30,6 +32,8 @@ tf.compat.v1.enable_eager_execution()
 TaskRegistry = dataset_providers.TaskRegistry
 MixtureRegistry = dataset_providers.MixtureRegistry
 mock = absltest.mock
+assert_dataset = test_utils.assert_dataset
+create_default_dataset = test_utils.create_default_dataset
 
 
 class TasksTest(test_utils.FakeTaskTest):
@@ -584,6 +588,217 @@ class MixturesTest(test_utils.FakeTaskTest):
     self.assertEqual(names, ["task2_a", "task2_b", "task2_c"])
     self.assertEqual([supermix.get_rate(t) for t in supermix.tasks],
                      [1.5, 0.5, 1])
+
+
+class GetDatasetTest(tf.test.TestCase):
+
+  def test_get_dataset_enc_dec_unpacked(self):
+    mixture_or_task_name = "enc_dec_unpacked"
+    x = [{"inputs": [7, 8, 5, 6, 9, 4, 3], "targets": [3, 9]},
+         {"inputs": [8, 4], "targets": [4]},
+         {"inputs": [5, 6, 7], "targets": [6, 5]}]
+    ds = create_default_dataset(x)
+    dataset_fn = lambda split, shuffle_files: ds
+    register_dummy_task(mixture_or_task_name, dataset_fn=dataset_fn)
+
+    task_feature_lengths = {"inputs": 7, "targets": 5}
+    converter = feature_converters.EncDecFeatureConverter(pack=False)
+    output_ds = dataset_providers.get_dataset(
+        mixture_or_task_name=mixture_or_task_name,
+        task_feature_lengths=task_feature_lengths,
+        dataset_split="train",
+        shuffle=False,
+        feature_converter=converter)
+
+    expected = [{
+        "encoder_input_tokens": [7, 8, 5, 6, 9, 4, 1],
+        "decoder_target_tokens": [3, 9, 1, 0, 0],
+        "decoder_input_tokens": [0, 3, 9, 1, 0],
+        "decoder_loss_weights": [1, 1, 1, 0, 0],
+    }, {
+        "encoder_input_tokens": [8, 4, 1, 0, 0, 0, 0],
+        "decoder_target_tokens": [4, 1, 0, 0, 0],
+        "decoder_input_tokens": [0, 4, 1, 0, 0],
+        "decoder_loss_weights": [1, 1, 0, 0, 0],
+    }, {
+        "encoder_input_tokens": [5, 6, 7, 1, 0, 0, 0],
+        "decoder_target_tokens": [6, 5, 1, 0, 0],
+        "decoder_input_tokens": [0, 6, 5, 1, 0],
+        "decoder_loss_weights": [1, 1, 1, 0, 0],
+    }]
+    expected_dtypes = {feat: tf.int32 for feat in expected[0].keys()}
+    assert_dataset(output_ds, expected, expected_dtypes=expected_dtypes)
+
+  def test_get_dataset_enc_dec_packed(self):
+    mixture_or_task_name = "enc_dec_packed"
+    x = [{"inputs": [7, 8, 5, 6, 9, 4, 3], "targets": [3, 9]},
+         {"inputs": [8, 4], "targets": [4]},
+         {"inputs": [5, 6, 7], "targets": [6, 5]}]
+    ds = create_default_dataset(x)
+    dataset_fn = lambda split, shuffle_files: ds
+    register_dummy_task(mixture_or_task_name, dataset_fn=dataset_fn)
+
+    task_feature_lengths = {"inputs": 7, "targets": 5}
+    converter = feature_converters.EncDecFeatureConverter(pack=True)
+    output_ds = dataset_providers.get_dataset(
+        mixture_or_task_name=mixture_or_task_name,
+        task_feature_lengths=task_feature_lengths,
+        dataset_split="train",
+        shuffle=False,
+        feature_converter=converter)
+
+    expected = [{
+        # Example 1 is trimmed
+        "encoder_input_tokens": [7, 8, 5, 6, 9, 4, 1],
+        "encoder_segment_ids": [1, 1, 1, 1, 1, 1, 1],
+        "encoder_positions": [0, 1, 2, 3, 4, 5, 6],
+        "decoder_target_tokens": [3, 9, 1, 0, 0],
+        "decoder_input_tokens": [0, 3, 9, 0, 0],
+        "decoder_loss_weights": [1, 1, 1, 0, 0],
+        "decoder_segment_ids": [1, 1, 1, 0, 0],
+        "decoder_positions": [0, 1, 2, 0, 0],
+    }, {
+        # Example 2 and 3 are packed together
+        "encoder_input_tokens": [8, 4, 1, 5, 6, 7, 1],
+        "encoder_segment_ids": [1, 1, 1, 2, 2, 2, 2],
+        "encoder_positions": [0, 1, 2, 0, 1, 2, 3],
+        "decoder_target_tokens": [4, 1, 6, 5, 1],
+        "decoder_input_tokens": [0, 4, 0, 6, 5],
+        "decoder_loss_weights": [1, 1, 1, 1, 1],
+        "decoder_segment_ids": [1, 1, 2, 2, 2],
+        "decoder_positions": [0, 1, 0, 1, 2],
+    }]
+    expected_dtypes = {feat: tf.int32 for feat in expected[0].keys()}
+    assert_dataset(output_ds, expected, expected_dtypes=expected_dtypes)
+
+  def test_get_dataset_both_train_and_validation_splits(self):
+    mixture_or_task_name = "both_train_and_validation_splits"
+    x_train = [{"inputs": [7, 8, 5, 6, 9, 4, 3], "targets": [3, 9]}]
+    x_val = [{"inputs": [8, 4], "targets": [4]}]
+    datasets = {
+        "train": create_default_dataset(x_train),
+        "validation": create_default_dataset(x_val)
+    }
+    dataset_fn = lambda split, shuffle_files: datasets[split]
+    register_dummy_task(mixture_or_task_name, dataset_fn=dataset_fn)
+
+    task_feature_lengths = {"inputs": 7, "targets": 5}
+    output_ds = {}
+    for split in ["train", "validation"]:
+      converter = feature_converters.EncDecFeatureConverter(pack=False)
+      output_ds[split] = dataset_providers.get_dataset(
+          mixture_or_task_name=mixture_or_task_name,
+          task_feature_lengths=task_feature_lengths,
+          dataset_split=split,
+          shuffle=False,
+          feature_converter=converter)
+
+    expected_train = {
+        "encoder_input_tokens": [7, 8, 5, 6, 9, 4, 1],
+        "decoder_target_tokens": [3, 9, 1, 0, 0],
+        "decoder_input_tokens": [0, 3, 9, 1, 0],
+        "decoder_loss_weights": [1, 1, 1, 0, 0],
+    }
+    expected_val = {
+        "encoder_input_tokens": [8, 4, 1, 0, 0, 0, 0],
+        "decoder_target_tokens": [4, 1, 0, 0, 0],
+        "decoder_input_tokens": [0, 4, 1, 0, 0],
+        "decoder_loss_weights": [1, 1, 0, 0, 0],
+    }
+    expected_dtypes = {feat: tf.int32 for feat in expected_train.keys()}
+    assert_dataset(
+        output_ds["train"], expected_train, expected_dtypes=expected_dtypes)
+    assert_dataset(
+        output_ds["validation"], expected_val, expected_dtypes=expected_dtypes)
+
+  def test_get_dataset_enc_dec_sharded(self):
+    mixture_or_task_name = "enc_dec_sharded"
+    x = [{"inputs": [7, 8, 5, 6, 9, 4, 3], "targets": [3, 9]},
+         {"inputs": [8, 4], "targets": [4]},
+         {"inputs": [5, 6, 7], "targets": [6, 5]}]
+    ds = create_default_dataset(x)
+    dataset_fn = lambda split, shuffle_files: ds
+    register_dummy_task(mixture_or_task_name, dataset_fn=dataset_fn)
+
+    task_feature_lengths = {"inputs": 7, "targets": 5}
+    converter = feature_converters.EncDecFeatureConverter(pack=False)
+    shard_info = dataset_providers.ShardInfo(index=0, num_shards=2)
+    output_ds = dataset_providers.get_dataset(
+        mixture_or_task_name=mixture_or_task_name,
+        task_feature_lengths=task_feature_lengths,
+        dataset_split="train",
+        shuffle=False,
+        feature_converter=converter,
+        shard_info=shard_info)
+
+    # Example index 1 should not be present in the sharded dataset.
+    expected = [{
+        "encoder_input_tokens": [7, 8, 5, 6, 9, 4, 1],
+        "decoder_target_tokens": [3, 9, 1, 0, 0],
+        "decoder_input_tokens": [0, 3, 9, 1, 0],
+        "decoder_loss_weights": [1, 1, 1, 0, 0],
+    }, {
+        "encoder_input_tokens": [5, 6, 7, 1, 0, 0, 0],
+        "decoder_target_tokens": [6, 5, 1, 0, 0],
+        "decoder_input_tokens": [0, 6, 5, 1, 0],
+        "decoder_loss_weights": [1, 1, 1, 0, 0],
+    }]
+    expected_dtypes = {feat: tf.int32 for feat in expected[0].keys()}
+    assert_dataset(output_ds, expected, expected_dtypes=expected_dtypes)
+
+  def test_get_dataset_enc_dec_sharded_and_packed(self):
+    mixture_or_task_name = "enc_dec_sharded_and_packed"
+    x = [{"inputs": [7, 8], "targets": [3, 9]},
+         {"inputs": [8, 4], "targets": [4]},
+         {"inputs": [5, 6, 7], "targets": [6]}]
+    ds = create_default_dataset(x)
+    dataset_fn = lambda split, shuffle_files: ds
+    register_dummy_task(mixture_or_task_name, dataset_fn=dataset_fn)
+
+    task_feature_lengths = {"inputs": 7, "targets": 5}
+    converter = feature_converters.EncDecFeatureConverter(pack=True)
+    shard_info = dataset_providers.ShardInfo(index=0, num_shards=2)
+    output_ds = dataset_providers.get_dataset(
+        mixture_or_task_name=mixture_or_task_name,
+        task_feature_lengths=task_feature_lengths,
+        dataset_split="train",
+        shuffle=False,
+        feature_converter=converter,
+        shard_info=shard_info)
+
+    # Packing should be done after the sharding.
+    expected = {
+        "encoder_input_tokens": [7, 8, 1, 5, 6, 7, 1],
+        "encoder_segment_ids": [1, 1, 1, 2, 2, 2, 2],
+        "encoder_positions": [0, 1, 2, 0, 1, 2, 3],
+        "decoder_target_tokens": [3, 9, 1, 6, 1],
+        "decoder_input_tokens": [0, 3, 9, 0, 6],
+        "decoder_loss_weights": [1, 1, 1, 1, 1],
+        "decoder_segment_ids": [1, 1, 1, 2, 2],
+        "decoder_positions": [0, 1, 2, 0, 1],
+    }
+    expected_dtypes = {feat: tf.int32 for feat in expected.keys()}
+    assert_dataset(output_ds, expected, expected_dtypes=expected_dtypes)
+
+
+def register_dummy_task(
+    task_name: str,
+    dataset_fn: Callable[[str, str], tf.data.Dataset],
+    output_feature_names: Sequence[str] = ("inputs", "targets")) -> None:
+  """Register a dummy task for GetDatasetTest."""
+  dataset_providers.TaskRegistry.add(
+      task_name,
+      source=dataset_providers.FunctionDataSource(
+          dataset_fn=dataset_fn, splits=["train", "validation"]),
+      preprocessors=[
+          dataset_providers.CacheDatasetPlaceholder(),
+          preprocessors.append_eos_after_trim,
+      ],
+      output_features={
+          feat: dataset_providers.Feature(test_utils.sentencepiece_vocab())
+          for feat in output_feature_names
+      },
+      metric_fns=[])
 
 
 if __name__ == "__main__":

@@ -369,6 +369,20 @@ def _assert_compare_to_fake_dataset(
   _pyunit_proxy.assertCountEqual(expected_examples, actual_examples)
 
 
+def create_default_dataset(
+    x: Sequence[Mapping[str, int]],
+    feature_names: Sequence[str] = ("inputs", "targets"),
+    output_types: Mapping[str, tf.dtypes.DType] = None) -> tf.data.Dataset:
+  """Creates a dataset from the given sequence."""
+  if output_types is None:
+    output_types = {feature_name: tf.int32 for feature_name in feature_names}
+
+  output_shapes = {feature_name: [None] for feature_name in feature_names}
+  ds = tf.data.Dataset.from_generator(
+      lambda: x, output_types=output_types, output_shapes=output_shapes)
+  return ds
+
+
 def test_text_preprocessor(dataset):
   """Performs preprocessing on the text dataset."""
 

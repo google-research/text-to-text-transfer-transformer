@@ -23,10 +23,12 @@ from typing import Any, Callable, Iterable, Mapping, MutableSequence, Optional, 
 from absl import logging
 import numpy as np
 import pandas as pd
+from t5 import seqio
 import t5.data
 from t5.models import mesh_transformer
 from t5.models import utils as model_utils
 import tensorflow.compat.v1 as tf
+import tensorflow_datasets as tfds
 import typing_extensions
 
 
@@ -249,8 +251,7 @@ class PredictOrScoreFnCallable(typing_extensions.Protocol):
       self,
       checkpoint_step: int,
       vocabulary: Any,
-      tasks: Sequence[t5.data.Task],
-      examples: Sequence[Mapping[str, Mapping[str, str]]],
+      tasks: Sequence[seqio.Task],
       datasets: Mapping[str, tf.data.Dataset],
       sequence_length: Union[None, Mapping[str, int]]
   ) -> MutableSequence[Union[str, float]]: ...
@@ -296,7 +297,7 @@ def run_eval(
 
   tasks = t5.data.get_subtasks(
       t5.data.get_mixture_or_task(mixture_or_task_name))
-  tasks = model_utils.get_valid_eval_tasks(tasks, split)
+  tasks = seqio.evaluation.get_valid_eval_tasks(tasks, split)
 
   if not tasks:
     logging.info(
@@ -319,15 +320,15 @@ def run_eval(
 
   summary_writer = None
 
-  cached_examples, cached_targets, cached_datasets, max_sequence_length = \
-      model_utils.get_targets_and_examples(
+  cached_targets, cached_datasets, max_sequence_length = \
+      seqio.evaluation.get_targets_and_examples(
           tasks=tasks,
           dataset_fn=functools.partial(
               dataset_fn, split=split, sequence_length=None))
 
   if summary_dir:
     model_utils.write_targets_and_examples(
-        summary_dir, cached_targets, cached_examples)
+        summary_dir, cached_targets, cached_datasets)
 
   if sequence_length is None:
     logging.info("Setting sequence lengths to %s", max_sequence_length)
@@ -355,22 +356,19 @@ def run_eval(
         checkpoint_step=step,
         vocabulary=vocabulary,
         tasks=tasks,
-        examples=cached_examples,
         datasets=cached_datasets,
         sequence_length=sequence_length)
 
     for task in tasks:
       # Extract the portion of decodes corresponding to this dataset
-      examples = cached_examples[task.name]
-      dataset_size = len(examples)
-
+      dataset = cached_datasets[task.name]
       predictions = [
           task.postprocess_fn(d, example=ex)
-          for d, ex in zip(outputs[:dataset_size], examples)
+          for d, ex in zip(outputs[:len(dataset)], tfds.as_numpy(dataset))
       ]
 
       # Remove the used decodes.
-      del outputs[:dataset_size]
+      del outputs[:len(dataset)]
 
       if summary_dir:
         predictions_filename = os.path.join(

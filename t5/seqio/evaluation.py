@@ -14,18 +14,99 @@
 
 """Utilities for the class-based evaluation."""
 
-from typing import Any, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 
 from absl import logging
-import t5.data
-from t5.models import utils as model_utils
+from t5.seqio import dataset_providers
+from t5.seqio import feature_converters
 import tensorflow.compat.v2 as tf
+import tensorflow_datasets as tfds
 import typing_extensions
 
+Task = dataset_providers.Task
+EncDecFeatureConverter = feature_converters.EncDecFeatureConverter
+FeatureConverter = feature_converters.FeatureConverter
 
 AllOutputsType = Mapping[str, Sequence[Any]]
 AllMetricsType = Mapping[str, Sequence[Mapping[str, Any]]]
 OutputsAndMetricsType = Tuple[AllOutputsType, Optional[AllMetricsType]]
+
+
+def get_valid_eval_tasks(tasks: Sequence[Task], split: str) -> Sequence[Task]:
+  """Get tasks that have the specified split and a metric function."""
+
+  valid_tasks = []
+
+  for task in tasks:
+    if split not in task.splits:
+      logging.info(
+          "Task %s has no '%s' split; skipping eval.", task.name, split
+      )
+      continue
+    if not task.metric_fns:
+      logging.info("Task %s has no metric_fns; skipping eval.", task.name)
+      continue
+    valid_tasks.append(task)
+
+  return valid_tasks
+
+
+def get_targets_and_examples(
+    tasks: Sequence[Task],
+    dataset_fn: Callable[[Task], tf.data.Dataset]
+) -> Tuple[
+    Mapping[str, Any],
+    Mapping[str, tf.data.Dataset],
+    Mapping[str, int]]:
+  """Get targets, cached datasets, and maximum sequence lengths per feature.
+
+  Args:
+    tasks: tasks objects to get targets and examples for.
+    dataset_fn: function, returns the dataset from the task object.
+  Returns:
+    cached_targets: unpreprocessed targets for each task
+    cached_datasets: cached datasets for each task, with cardinality set
+    max_sequence_length: maximum sequence lengths for inputs and targets across
+      all tasks.
+  """
+  # Pre-load in all of the targets once before entering continuous eval loop
+  cached_targets = {}
+  cached_datasets = {}
+
+  max_sequence_length = {"inputs": 0, "targets": 0}
+
+  for task in tasks:
+    ds = dataset_fn(task).cache()
+
+    targets = []
+
+    for ex in tfds.as_numpy(ds):
+      max_sequence_length["inputs"] = max(
+          max_sequence_length["inputs"], len(ex["inputs"]))
+      max_sequence_length["targets"] = max(
+          max_sequence_length["targets"], len(ex["targets"]))
+
+
+      # Create list of postprocessed targets
+      if "targets_pretokenized" in ex:
+        targets_pretokenized = ex["targets_pretokenized"]
+        if isinstance(targets_pretokenized, bytes):
+          targets_pretokenized = targets_pretokenized.decode("utf-8")
+        targets.append(task.postprocess_fn(
+            targets_pretokenized, example=ex, is_target=True))
+      # TODO(hwchung): if fjord@ is using targets_pretokenized key for
+      # evaluation, this else statement is no longer necessary. We may add the
+      # detokenization logic here, i.e., detokenize ex["targets"] and
+      # postprocess that instead of "targets_pretokenized".
+      else:
+        targets.append(task.postprocess_fn(
+            tf.compat.as_text(ex["targets"]), example=ex, is_target=True))
+
+    cached_targets[task.name] = targets
+    cached_datasets[task.name] = ds.apply(
+        tf.data.experimental.assert_cardinality(len(targets)))
+
+  return cached_targets, cached_datasets, max_sequence_length
 
 
 class PredictFnCallable(typing_extensions.Protocol):
@@ -50,18 +131,16 @@ class Evaluator:
   compute_metrics is True.
 
   Attributes:
-    eval_tasks: a mapping from a mixture or a task name to t5.data.Task
+    eval_tasks: a mapping from a mixture or a task name to seqio.Task
       object(s).
-    cached_ds: cached evaluation datasets.
-    cached_examples: cached evaluation examples.
+    cached_datasets: cached evaluation datasets.
     cached_targets: cached evaluation targets.
     summary_writer: a tf summary writer for writing the evaluation results.
   """
 
   def __init__(self,
                mixture_or_task_name: str,
-               feature_converter: t5.data.FeatureConverter = t5.data
-               .EncDecFeatureConverter,
+               feature_converter: FeatureConverter = EncDecFeatureConverter,
                eval_split: str = "validation",
                use_cached: bool = False,
                sequence_lengths: Mapping[str, int] = None,
@@ -72,7 +151,7 @@ class Evaluator:
       mixture_or_task_name: a registered task or mixture name.
       feature_converter: a feature converter object to use to convert the task
         features to model features. Must be a subclass of
-        t5.data.FeatureConverter.
+        seqio.FeatureConverter.
       eval_split: evaluation split. Typically "validation" or "test".
       use_cached: whether to use the cached dataset instead of processing it on
         the fly.
@@ -83,27 +162,24 @@ class Evaluator:
       summary_dir: an optional directory to save the evaluation results in Event
         protocol buffer format.
     """
-    eval_tasks = t5.data.get_subtasks(
-        t5.data.get_mixture_or_task(mixture_or_task_name))
-    self._eval_tasks = model_utils.get_valid_eval_tasks(eval_tasks, eval_split)
+    eval_tasks = dataset_providers.get_subtasks(
+        dataset_providers.get_mixture_or_task(mixture_or_task_name))
+    self._eval_tasks = get_valid_eval_tasks(eval_tasks, eval_split)
 
     if not self._eval_tasks:
       logging.warning(
           "No eval task with valid split and metric fn found. Skipping eval.")
       return
 
-    def dataset_fn(task: t5.data.TaskV3) -> tf.data.Dataset:
+    def dataset_fn(task: Task) -> tf.data.Dataset:
       return task.get_dataset(
           sequence_length=None,
           split=eval_split,
           shuffle=False,
           use_cached=use_cached)
 
-    # TODO(hwchung): move this function to eval or data utils.
-    cached_examples, cached_targets, task_datasets, max_lengths = \
-        model_utils.get_targets_and_examples(
-            tasks=self._eval_tasks,
-            dataset_fn=dataset_fn)
+    cached_targets, cached_datasets, max_lengths = (
+        get_targets_and_examples(tasks=self._eval_tasks, dataset_fn=dataset_fn))
 
     if sequence_lengths is None:
       logging.info("Setting sequence lengths to %s", max_lengths)
@@ -127,20 +203,15 @@ class Evaluator:
           sequence_lengths, max_lengths)
       lengths = sequence_lengths
 
-    self._cached_ds = {}
     # Convert the task features to model features
     for task in self._eval_tasks:
-      eval_ds = feature_converter(task_datasets[task.name], lengths)
+      eval_ds = feature_converter(cached_datasets[task.name], lengths)
 
       # The eval dataset is enumerated to ensure that the order is preserved
       # throughout the entire evaluation process.
       eval_ds = eval_ds.enumerate()
 
-      # Instead of caching a list of examples, we can cache in the form of
-      # tf.data.Dataset.
-      self._cached_ds[task.name] = eval_ds.cache()
-
-    self._cached_examples = cached_examples
+    self._cached_datasets = cached_datasets
     self._cached_targets = cached_targets
 
     if summary_dir:
@@ -203,7 +274,7 @@ class Evaluator:
     all_metrics = None
 
     for task in self.eval_tasks:
-      indices_and_output_tokens = predict_fn(self.cached_ds[task.name])
+      indices_and_output_tokens = predict_fn(self.cached_datasets[task.name])
 
       if len(indices_and_output_tokens[0]) != 2:
         raise ValueError("Output from the predict_fn should be a sequence of "
@@ -216,7 +287,7 @@ class Evaluator:
     if compute_metrics:
       all_metrics = {}
       for task in self.eval_tasks:
-        task_examples = self.cached_examples[task.name]
+        task_dataset = self.cached_datasets[task.name]
         targets = self.cached_targets[task.name]
 
         # output_tokens is a list of token_ids where each token_ids corresponds
@@ -229,7 +300,7 @@ class Evaluator:
         ]
         predictions = [
             task.postprocess_fn(d, example=ex, is_target=False)
-            for d, ex in zip(outputs, task_examples)
+            for d, ex in zip(outputs, tfds.as_numpy(task_dataset))
         ]
 
         metrics = [
@@ -266,16 +337,12 @@ class Evaluator:
       self.summary_writer.flush()
 
   @property
-  def eval_tasks(self) -> Sequence[t5.data.TaskV3]:
+  def eval_tasks(self) -> Sequence[Task]:
     return self._eval_tasks
 
   @property
-  def cached_ds(self) -> Mapping[str, tf.data.Dataset]:
-    return self._cached_ds
-
-  @property
-  def cached_examples(self):
-    return self._cached_examples
+  def cached_datasets(self) -> Mapping[str, tf.data.Dataset]:
+    return self._cached_datasets
 
   @property
   def cached_targets(self) -> Mapping[str, Sequence[str]]:

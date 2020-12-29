@@ -25,7 +25,6 @@ import t5.data
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
 
-
 # List of features used by model.
 _MODEL_FEATURES = [
     "inputs", "inputs_position", "inputs_segmentation", "targets",
@@ -71,35 +70,16 @@ def get_step_from_checkpoint_path(checkpoint_path):
   return int(match.group(1))
 
 
-def get_valid_eval_tasks(tasks, split):
-  """Get tasks that have the specified split and a metric function."""
-
-  valid_tasks = []
-
-  for task in tasks:
-    if split not in task.splits:
-      logging.info(
-          "Task %s has no '%s' split; skipping eval.", task.name, split
-      )
-      continue
-    if not task.metric_fns:
-      logging.info("Task %s has no metric_fns; skipping eval.", task.name)
-      continue
-    valid_tasks.append(task)
-
-  return valid_tasks
-
-
-def write_targets_and_examples(summary_dir, targets, examples):
+def write_targets_and_examples(summary_dir, targets, datasets):
   """Writes plaintext targets and inputs to the summary directory.
 
   Args:
     summary_dir: str, directory to store plaintext targets and examples
     targets: dict, task_name -> targets for each task.
-    examples: dict, task_name -> examples for each task.
+    datasets: dict, task_name -> tf.data.Dataset for each task.
   """
-  if targets.keys() != examples.keys():
-    raise ValueError("Targets and examples must have the same tasks.")
+  if targets.keys() != datasets.keys():
+    raise ValueError("Targets and datasets must have the same tasks.")
 
   for task in targets.keys():
     targets_filename = os.path.join(
@@ -109,7 +89,7 @@ def write_targets_and_examples(summary_dir, targets, examples):
     write_lines_to_file(targets[task], targets_filename)
 
     inputs = []
-    for ex in examples[task]:
+    for ex in tfds.as_numpy(datasets[task]):
       if "inputs_pretokenized" in ex:
         inputs.append(ex["inputs_pretokenized"])
       else:
@@ -120,60 +100,6 @@ def write_targets_and_examples(summary_dir, targets, examples):
         "{}_inputs".format(task))
 
     write_lines_to_file(inputs, inputs_filename)
-
-
-def get_targets_and_examples(tasks, dataset_fn):
-  """Get targets and examples.
-
-  Args:
-    tasks: list, contains tasks objects.
-    dataset_fn: function, returns the dataset from the task object.
-  Returns:
-    Dict of unpreprocessed examples for each task, list of unpreprocessed
-    targets for each task, a dict of datasets for each task, and a dict with max
-    sequence lengths for inputs and targets.
-  """
-  # Pre-load in all of the targets once before entering continuous eval loop
-  cached_targets = {}
-  cached_examples = {}
-  cached_datasets = {}
-
-  max_sequence_length = {"inputs": 0, "targets": 0}
-
-  for task in tasks:
-    ds = dataset_fn(task)
-
-    examples = []
-    targets = []
-
-    for ex in tfds.as_numpy(ds):
-      max_sequence_length["inputs"] = max(
-          max_sequence_length["inputs"], len(ex["inputs"]))
-      max_sequence_length["targets"] = max(
-          max_sequence_length["targets"], len(ex["targets"]))
-
-      examples.append(ex)
-
-      # Create list of postprocessed targets
-      if "targets_pretokenized" in ex:
-        targets_pretokenized = ex["targets_pretokenized"]
-        if isinstance(targets_pretokenized, bytes):
-          targets_pretokenized = targets_pretokenized.decode("utf-8")
-        targets.append(task.postprocess_fn(
-            targets_pretokenized, example=ex, is_target=True))
-      # TODO(hwchung): if fjord@ is using targets_pretokenized key for
-      # evaluation, this else statement is no longer necessary. We may add the
-      # detokenization logic here, i.e., detokenize ex["targets"] and
-      # postprocess that instead of "targets_pretokenized".
-      else:
-        targets.append(task.postprocess_fn(
-            tf.compat.as_text(ex["targets"]), example=ex, is_target=True))
-
-    cached_targets[task.name] = targets
-    cached_examples[task.name] = examples
-    cached_datasets[task.name] = ds
-
-  return cached_examples, cached_targets, cached_datasets, max_sequence_length
 
 
 def get_vocabulary(mixture_or_task_name=None):

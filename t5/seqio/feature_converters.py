@@ -82,8 +82,7 @@ input dataset.
 import abc
 import functools
 from typing import Mapping, Sequence
-from absl import logging
-from t5 import seqio
+from t5.seqio import utils
 import tensorflow.compat.v2 as tf
 
 
@@ -503,10 +502,10 @@ class FeatureConverter(abc.ABC):
                    packed_lengths: Mapping[str, int]) -> tf.data.Dataset:
     """Trim/pad to packed_lengths and optionally pack the input dataset."""
     if self.pack:
-      ds = seqio.trim_and_pack_dataset(ds, packed_lengths,
+      ds = utils.trim_and_pack_dataset(ds, packed_lengths,
                                        self._use_custom_packing_ops)
     else:
-      ds = seqio.trim_and_pad_dataset(ds, packed_lengths)
+      ds = utils.trim_and_pad_dataset(ds, packed_lengths)
     return ds
 
   @abc.abstractmethod
@@ -654,68 +653,6 @@ class EncDecFeatureConverter(FeatureConverter):
       model_feature_lengths["decoder_positions"] = decoder_length
 
     return model_feature_lengths
-
-
-def get_dataset(
-    mixture_or_task_name: str,
-    task_feature_lengths: Mapping[str, int],
-    feature_converter: FeatureConverter,
-    dataset_split: str = "train",
-    use_cached: bool = False,
-    shuffle: bool = True,
-    shard_info: seqio.ShardInfo = None,
-    verbose: bool = True
-) -> tf.data.Dataset:
-  """Get processed dataset with the model features.
-
-  In order to use options specific to a feature converter, e.g., packing,
-  `feature_converter` instance should be instantiated with those options before
-  being pased to this function.
-
-  Getting sharded datasets is supported. To use this feature, pass in
-  `shard_info`, with shard_index and num_shards information. Sharding is done
-  before the feature converter stage. Therefore, if packing is used it will be
-  done on the sharded dataset.
-
-  Args:
-    mixture_or_task_name: mixture or task name for the Task API.
-    task_feature_lengths: dict mapping task feature key to its sequence length.
-      This specifies the sequence length of the dataset from the Task API.
-    feature_converter: a feature converter object to use to convert the task
-      features to model features.
-      Must be a subclass of FeatureConverter.
-    dataset_split: the split to use.
-    use_cached: whether to use the cached dataset instead of processing it on
-      the fly.
-    shuffle: whether to shuffle the dataset.
-    shard_info: number of shards and shard index information.
-    verbose: if true, log the feature shapes.
-
-  Returns:
-    ds: the processed dataset.
-  """
-  if not isinstance(feature_converter, FeatureConverter):
-    raise TypeError(
-        "feature_converter should be an instance of FeatureConverter.")
-
-  mixture_or_task = seqio.get_mixture_or_task(mixture_or_task_name)
-
-  ds = mixture_or_task.get_dataset(
-      task_feature_lengths,
-      split=dataset_split,
-      use_cached=use_cached,
-      shuffle=shuffle,
-      shard_info=shard_info)
-
-  ds = feature_converter(ds, task_feature_lengths=task_feature_lengths)
-
-  if verbose:
-    logging.info(
-        "The output dataset from t5.get_dataset has the following features")
-    for feature_name, tensor_spec in ds.element_spec.items():
-      logging.info("feature: %s \t shape: %s \t dtype: %s", feature_name,
-                   tensor_spec.shape.as_list(), tensor_spec.dtype.name)
-  return ds
 
 
 class LMFeatureConverter(FeatureConverter):
@@ -1116,7 +1053,7 @@ class EncoderFeatureConverter(FeatureConverter):
       ds: the converted dataset.
     """
 
-    @seqio.map_over_dataset
+    @utils.map_over_dataset
     def convert_example(
         features: Mapping[str, tf.Tensor]) -> Mapping[str, tf.Tensor]:
       inputs = features["inputs"]
