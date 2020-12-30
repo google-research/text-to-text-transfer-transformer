@@ -240,7 +240,6 @@ class MtfModel(T5Model):
                            vocabulary,
                            checkpoint_step,
                            sequence_length,
-                           examples,
                            split,
                            eval_with_score=False,
                            **unused_kwargs):
@@ -253,7 +252,6 @@ class MtfModel(T5Model):
       checkpoint_step: integer, step to evaluate the tasks.
       sequence_length: a dict, dictionary with sequence length for inputs and
         targets.
-      examples: dict, cached examples for each task.
       split: string, split to run the evaluation on.
       eval_with_score: bool, whether to compute log likelihood of targets
         instead of predictions.
@@ -293,8 +291,7 @@ class MtfModel(T5Model):
           estimator_input_fn,
           checkpoint_step,
           self._model_dir,
-          vocabulary,
-          num_examples=sum(len(cex) for cex in examples.values()))
+          vocabulary)
     else:
       outputs = [
           tf.compat.as_text(d) for d in mtf_utils.decode(

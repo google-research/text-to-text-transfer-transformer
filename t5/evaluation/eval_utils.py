@@ -362,13 +362,14 @@ def run_eval(
     for task in tasks:
       # Extract the portion of decodes corresponding to this dataset
       dataset = cached_datasets[task.name]
+      dataset_size = len(cached_targets[task.name])
       predictions = [
           task.postprocess_fn(d, example=ex)
-          for d, ex in zip(outputs[:len(dataset)], tfds.as_numpy(dataset))
+          for d, ex in zip(outputs[:dataset_size], tfds.as_numpy(dataset))
       ]
 
       # Remove the used decodes.
-      del outputs[:len(dataset)]
+      del outputs[:dataset_size]
 
       if summary_dir:
         predictions_filename = os.path.join(
