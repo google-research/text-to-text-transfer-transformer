@@ -22,6 +22,7 @@ from typing import Iterable, Optional, Sequence
 import tensorflow.compat.v2 as tf
 import tensorflow_text as tf_text
 
+from sentencepiece import sentencepiece_model_pb2
 import sentencepiece as sentencepiece_processor
 
 
@@ -148,6 +149,14 @@ class SentencePieceVocabulary(Vocabulary):
   Assumes the model was built using flags to reserve ID=0 for padding, ID=1 for
   EOS, and ID=2 for UNK.
 
+  If using extra ids, you can represent them in string-form as `<extra_id_0>`,
+  `<extra_id_1>`, etc. They will be indexed starting from the end of the
+  vocabulary to match how the masking preprocessors are set up.
+
+  IMPORTANT NOTE: these placeholders only work properly when they are used at
+  word starts (e.g., "I like peanut butter and <extra_id_0> sandwiches." or
+  "I like peanut butter and <extra_id_0>ly sandwiches" are both okay, but
+  "I like peanut butter and jel<extra_id_0> sandwiches is not.").
   """
 
   def __init__(self, sentencepiece_model_file, extra_ids=None):
@@ -170,8 +179,17 @@ class SentencePieceVocabulary(Vocabulary):
     # Handle cases where SP can't load the file, but gfile can.
     with tf.io.gfile.GFile(self._sentencepiece_model_file, "rb") as f:
       self._sp_model = f.read()
+      # Add placeholde strings for extra IDs.
+      if self._extra_ids:
+        model = sentencepiece_model_pb2.ModelProto.FromString(self._sp_model)
+        # We name them in reverse order to match their use in span corruption.
+        for i in reversed(range(self._extra_ids)):
+          model.pieces.add(
+              piece=f"▁<extra_id_{i}>", score=0.0,
+              type=
+              sentencepiece_model_pb2.ModelProto.SentencePiece.USER_DEFINED)
+        self._sp_model = model.SerializeToString()
     # Load Python tokenizer and ensure the EOS and PAD IDs are correct.
-    # TODO(adarob): Add support for arbitrary EOS and PAD IDs.
     self._tokenizer = sentencepiece_processor.SentencePieceProcessor()
     self._tokenizer.LoadFromSerializedProto(self._sp_model)
     if self._tokenizer.pad_id() != 0:
@@ -207,6 +225,9 @@ class SentencePieceVocabulary(Vocabulary):
     """Instantiate and return a TF tokenizer."""
     return tf_text.SentencepieceTokenizer(model=self.sp_model)
 
+  @property
+  def vocab_size(self):
+    return self._base_vocab_size
 
   @property
   def _base_vocab_size(self):

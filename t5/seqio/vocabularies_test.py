@@ -151,9 +151,14 @@ class SentencepieceVocabularyTest(absltest.TestCase):
     vocab = test_utils.sentencepiece_vocab(extra_ids=10)
     self.assertEqual(36, vocab.vocab_size)
     self.assertEqual("v", vocab.decode([25]))
-    self.assertEqual(self.UNK_STRING, vocab.decode([35]))
-    self.assertEqual(self.UNK_STRING, _decode_tf(vocab, [35]))
-
+    test_string = "<extra_id_0> <extra_id_1> v <extra_id_9>"
+    test_tokens = (35, 34, 3, 25, 26)
+    self.assertEqual(test_string, vocab.decode(test_tokens))
+    self.assertEqual(test_string, _decode_tf(vocab, test_tokens))
+    self.assertSequenceEqual(test_tokens, vocab.encode(test_string))
+    self.assertSequenceEqual(
+        test_tokens,
+        tuple(vocab.encode_tf(test_string).numpy()))
 
   def test_equal(self):
     vocab1 = test_utils.sentencepiece_vocab()
