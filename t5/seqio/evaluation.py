@@ -65,13 +65,13 @@ def get_targets_and_examples(
     dataset_fn: function, returns the dataset from the task object.
   Returns:
     cached_targets: unpreprocessed targets for each task
-    cached_datasets: cached datasets for each task, with cardinality set
+    cached_task_datasets: cached datasets for each task, with cardinality set
     max_sequence_length: maximum sequence lengths for inputs and targets across
       all tasks.
   """
   # Pre-load in all of the targets once before entering continuous eval loop
   cached_targets = {}
-  cached_datasets = {}
+  cached_task_datasets = {}
 
   max_sequence_length = {"inputs": 0, "targets": 0}
 
@@ -85,7 +85,6 @@ def get_targets_and_examples(
           max_sequence_length["inputs"], len(ex["inputs"]))
       max_sequence_length["targets"] = max(
           max_sequence_length["targets"], len(ex["targets"]))
-
 
       # Create list of postprocessed targets
       if "targets_pretokenized" in ex:
@@ -103,10 +102,10 @@ def get_targets_and_examples(
             tf.compat.as_text(ex["targets"]), example=ex, is_target=True))
 
     cached_targets[task.name] = targets
-    cached_datasets[task.name] = ds.apply(
+    cached_task_datasets[task.name] = ds.apply(
         tf.data.experimental.assert_cardinality(len(targets)))
 
-  return cached_targets, cached_datasets, max_sequence_length
+  return cached_targets, cached_task_datasets, max_sequence_length
 
 
 class PredictFnCallable(typing_extensions.Protocol):
@@ -130,10 +129,19 @@ class Evaluator:
   will be skipped. `Evaluator.evaluate` will return ({}, {}) assuming that
   compute_metrics is True.
 
+  Note that we cache two versions of the datasets. The first version
+  (self.cached_task_datasets) has the task features (e.g., "inputs" and
+  "targets"), which are returned from `seqio.Task.get_dataset`. The second
+  version (self.cached_model_datasets) has model features (e.g.,
+  "decoder_target_tokens"). This is returned from the feature converter. The
+  former is used for postprocessing associated with the Task that requires the
+  original task datasets. The latter is passed to `predict_fn` for evaluation.
+
   Attributes:
     eval_tasks: a mapping from a mixture or a task name to seqio.Task
       object(s).
-    cached_datasets: cached evaluation datasets.
+    cached_model_datasets: cached evaluation datasets with model features.
+    cached_task_datasets: cached evaluation datasets with task features.
     cached_targets: cached evaluation targets.
     summary_writer: a tf summary writer for writing the evaluation results.
   """
@@ -178,7 +186,10 @@ class Evaluator:
           shuffle=False,
           use_cached=use_cached)
 
-    cached_targets, cached_datasets, max_lengths = (
+    # `task_datasets` have the output features from seqio.Task.get_dataset.
+    # These features will be converted to "model features" by the feature
+    # converter before being cached.
+    cached_targets, cached_task_datasets, max_lengths = (
         get_targets_and_examples(tasks=self._eval_tasks, dataset_fn=dataset_fn))
 
     if sequence_lengths is None:
@@ -203,16 +214,17 @@ class Evaluator:
           sequence_lengths, max_lengths)
       lengths = sequence_lengths
 
+    self._cached_model_datasets = {}
     # Convert the task features to model features
     for task in self._eval_tasks:
-      eval_ds = feature_converter(cached_datasets[task.name], lengths)
+      eval_ds = feature_converter(cached_task_datasets[task.name], lengths)
 
       # The eval dataset is enumerated to ensure that the order is preserved
       # throughout the entire evaluation process.
-      eval_ds = eval_ds.enumerate()
+      self._cached_model_datasets[task.name] = eval_ds.enumerate()
 
-    self._cached_datasets = cached_datasets
     self._cached_targets = cached_targets
+    self._cached_task_datasets = cached_task_datasets
 
     if summary_dir:
       with tf.compat.v1.Graph().as_default():
@@ -274,7 +286,8 @@ class Evaluator:
     all_metrics = None
 
     for task in self.eval_tasks:
-      indices_and_output_tokens = predict_fn(self.cached_datasets[task.name])
+      indices_and_output_tokens = predict_fn(
+          self.cached_model_datasets[task.name])
 
       if len(indices_and_output_tokens[0]) != 2:
         raise ValueError("Output from the predict_fn should be a sequence of "
@@ -287,7 +300,7 @@ class Evaluator:
     if compute_metrics:
       all_metrics = {}
       for task in self.eval_tasks:
-        task_dataset = self.cached_datasets[task.name]
+        task_dataset = self.cached_task_datasets[task.name]
         targets = self.cached_targets[task.name]
 
         # output_tokens is a list of token_ids where each token_ids corresponds
@@ -341,8 +354,12 @@ class Evaluator:
     return self._eval_tasks
 
   @property
-  def cached_datasets(self) -> Mapping[str, tf.data.Dataset]:
-    return self._cached_datasets
+  def cached_model_datasets(self) -> Mapping[str, tf.data.Dataset]:
+    return self._cached_model_datasets
+
+  @property
+  def cached_task_datasets(self) -> Mapping[str, tf.data.Dataset]:
+    return self._cached_task_datasets
 
   @property
   def cached_targets(self) -> Mapping[str, Sequence[str]]:

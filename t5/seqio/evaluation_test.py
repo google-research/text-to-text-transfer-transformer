@@ -145,7 +145,7 @@ class EvaluationTest(tf.test.TestCase):
             "targets_pretokenized": ["e4"],
         },
         ("e2", "e3", "e4"))
-    cached_targets, cached_datasets, max_sequence_length = (
+    cached_targets, cached_task_datasets, max_sequence_length = (
         evaluation.get_targets_and_examples(
             [task1, task2],
             lambda t: t.get_dataset(
@@ -154,9 +154,9 @@ class EvaluationTest(tf.test.TestCase):
 
     self.assertDictEqual(cached_targets, {"task1": [2, 1], "task2": [2]})
     self.assertDictEqual(max_sequence_length, {"inputs": 3, "targets": 4})
-    self.assertCountEqual(cached_datasets.keys(), ["task1", "task2"])
-    self.assertLen(cached_datasets["task1"], 2)
-    self.assertLen(cached_datasets["task2"], 1)
+    self.assertCountEqual(cached_task_datasets.keys(), ["task1", "task2"])
+    self.assertLen(cached_task_datasets["task1"], 2)
+    self.assertLen(cached_task_datasets["task2"], 1)
     expected_task1_examples = [
         {"inputs": [0, 1, 2], "targets": [0, 1], "targets_pretokenized": "e6"},
         {"inputs": [0, 1], "targets": [0, 1, 2], "targets_pretokenized": "e5"}
@@ -164,8 +164,10 @@ class EvaluationTest(tf.test.TestCase):
     expected_task2_examples = [
         {"inputs": [0], "targets": [0, 1, 2, 3], "targets_pretokenized": "e4"},
     ]
-    test_utils.assert_dataset(cached_datasets["task1"], expected_task1_examples)
-    test_utils.assert_dataset(cached_datasets["task2"], expected_task2_examples)
+    test_utils.assert_dataset(cached_task_datasets["task1"],
+                              expected_task1_examples)
+    test_utils.assert_dataset(cached_task_datasets["task2"],
+                              expected_task2_examples)
     # pylint:enable=g-long-lambda
 
   def test_evaluate_single_task(self):
@@ -176,7 +178,8 @@ class EvaluationTest(tf.test.TestCase):
     mock_vocab.decode = lambda ids: " ".join([id_to_vocab[i] for i in ids])
 
     def mock_init(self):
-      self._cached_datasets = {task.name: tf.data.Dataset.range(3)}
+      self._cached_model_datasets = {task.name: tf.data.Dataset.range(3)}
+      self._cached_task_datasets = {task.name: tf.data.Dataset.range(3)}
       self._cached_targets = {task.name: ["e5 e6", "e6", "e7"]}
       self._eval_tasks = [task]
       self._summary_writer = None
@@ -198,7 +201,10 @@ class EvaluationTest(tf.test.TestCase):
     mock_vocab.decode = lambda ids: ids
 
     def mock_init(self):
-      self._cached_datasets = {task.name: tf.data.Dataset.range(2)}
+      # Dummy datasets
+      self._cached_model_datasets = {task.name: tf.data.Dataset.range(2)}
+      # Dummy task datasets.
+      self._cached_task_datasets = {task.name: tf.data.Dataset.range(2)}
       self._cached_targets = {task.name: [[5, 6], [6, 7]]}
       self._eval_tasks = [task]
       self._summary_writer = None
@@ -225,7 +231,8 @@ class EvaluationTest(tf.test.TestCase):
     mock_vocab.decode = lambda ids: id_to_vocab[ids[0]]
 
     def mock_init(self):
-      self._cached_datasets = {task.name: tf.data.Dataset.range(3)}
+      self._cached_model_datasets = {task.name: tf.data.Dataset.range(3)}
+      self._cached_task_datasets = {task.name: tf.data.Dataset.range(3)}
       self._cached_targets = {task.name: [0, 1, 2]}
       self._eval_tasks = [task]
       self._summary_writer = None
@@ -258,9 +265,13 @@ class EvaluationTest(tf.test.TestCase):
     mock_ds2 = tf.data.Dataset.range(3)
 
     def mock_init(self):
-      self._cached_datasets = {
+      self._cached_model_datasets = {
           task1.name: mock_ds1,
           task2.name: mock_ds2,
+      }
+      self._cached_task_datasets = {
+          task1.name: tf.data.Dataset.range(2),
+          task2.name: tf.data.Dataset.range(3),
       }
       self._cached_targets = {
           task1.name: ["e5 e6", "e6", "e7"],
@@ -370,12 +381,16 @@ class EvaluationTest(tf.test.TestCase):
         dataset_fn=dataset_fn,
         metrics_fn=[_sequence_accuracy_metric])
 
-    feature_converter = mock.Mock()
+    # Feature converter that just pads "inputs" and "targets".
+    feature_converter = lambda ds, length: utils.trim_and_pad_dataset(ds, {
+        "inputs": 4,
+        "targets": 4
+    })
     evaluator = Evaluator(
         mixture_or_task_name=task_name,
         feature_converter=feature_converter,
         eval_split="validation")
-    expected_examples = [{
+    expected_task_examples = [{
         "inputs": [7, 8, 1],
         "targets": [3, 9, 1],
         "targets_pretokenized": b"ex 1"
@@ -384,9 +399,39 @@ class EvaluationTest(tf.test.TestCase):
         "targets": [4, 1],
         "targets_pretokenized": b"ex 2"
     }]
+    expected_examples = [{
+        "inputs": [7, 8, 1, 0],
+        "targets": [3, 9, 1, 0],
+        "targets_pretokenized": b"ex 1"
+    }, {
+        "inputs": [8, 4, 1, 0],
+        "targets": [4, 1, 0, 0],
+        "targets_pretokenized": b"ex 2"
+    }]
+
     test_utils.assert_dataset(
-        evaluator._cached_datasets[task_name], expected_examples)
+        evaluator._cached_task_datasets[task_name], expected_task_examples)
+
+    # _cached_model_datasets are enumerated. Remove the index for assertion.
+    eval_ds = evaluator._cached_model_datasets[task_name].map(lambda i, ds: ds)
+    test_utils.assert_dataset(eval_ds, expected_examples)
     self.assertEqual(evaluator._cached_targets[task_name], ["ex 1", "ex 2"])
+
+  def test_predict_fn_called_with_cached_model_datasets(self):
+    eval_ds = tf.data.Dataset.range(10)
+    task = get_mocked_task()
+
+    def mock_init(self):
+      self._cached_model_datasets = {task.name: eval_ds}
+      self._cached_task_datasets = {task.name: tf.data.Dataset.range(3)}
+      self._eval_tasks = [task]
+      self._summary_writer = None
+
+    with mock.patch.object(Evaluator, "__init__", new=mock_init):
+      evaluator = Evaluator()
+      predict_fn = mock.Mock(return_value=[(0, 1)])
+      evaluator.evaluate(compute_metrics=False, predict_fn=predict_fn)
+      predict_fn.assert_called_with(eval_ds)
 
   def test_order_preservation(self):
     task = get_mocked_task()
@@ -397,7 +442,9 @@ class EvaluationTest(tf.test.TestCase):
     ds = tf.data.Dataset.from_tensor_slices([[5], [6], [7]])
 
     def mock_init(self):
-      self._cached_datasets = {task.name: ds.enumerate()}
+      self._cached_model_datasets = {task.name: ds.enumerate()}
+      # Dummy task datasets
+      self._cached_task_datasets = {task.name: tf.data.Dataset.range(3)}
       self._cached_targets = {task.name: ["e5", "e6", "e7"]}
       self._eval_tasks = [task]
       self._summary_writer = None
