@@ -24,7 +24,6 @@ from t5.data.utils import *
 # For backward compatibility
 # TODO(adarob): Remove need for these imports.
 from t5.seqio.dataset_providers import *
-from t5.seqio.dataset_providers import Task as TaskV3
 from t5.data.dataset_providers import TaskRegistry  # pylint:disable=g-bad-import-order
 from t5.data.dataset_providers import FunctionTask as Task  # pylint:disable=g-bad-import-order
 from t5.seqio.test_utils import assert_dataset
