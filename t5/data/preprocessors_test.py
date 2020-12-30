@@ -667,6 +667,36 @@ class PreprocessorsTest(tf.test.TestCase):
     _verify_split(100, 1)
     _verify_split(1000, 1)
 
+  def test_split_tokens_to_targets_length(self):
+    original = list(range(2, 102))
+    og_dataset = tf.data.Dataset.from_tensors({'targets': original})
+    sequence_length = {'targets': 4}
+    eos_features = {
+        'targets': seqio.Feature(
+            vocabulary=test_utils.PassThroughVocab(use_eos=True),
+            add_eos=True)
+    }
+    no_eos_features = {
+        'targets': seqio.Feature(
+            vocabulary=test_utils.PassThroughVocab(use_eos=False),
+            add_eos=False)
+    }
+
+    ds = prep.split_tokens_to_targets_length(
+        og_dataset,
+        sequence_length=sequence_length,
+        output_features=eos_features)
+    eos_outputs = list(ds.as_numpy_iterator())
+    # Outputs should be length 3 to leave room for adding EOS.
+    self.assertLen(eos_outputs[0]['targets'], 3)
+
+    ds = prep.split_tokens_to_targets_length(
+        og_dataset,
+        sequence_length=sequence_length,
+        output_features=no_eos_features)
+    no_eos_outputs = list(ds.as_numpy_iterator())
+    self.assertLen(no_eos_outputs[0]['targets'], 4)
+
   def test_trim_tokens_at_front(self):
     sequence_length = {'inputs': 4}
     inputs = tf.data.Dataset.from_tensors(
@@ -1180,10 +1210,15 @@ class PreprocessorsTest(tf.test.TestCase):
 
   def test_prefix_lm(self):
     vocab = test_utils.sentencepiece_vocab()
-    inp = list(range(1, 101))
+    # Create list of length 99 because prefix_lm will split to 1 less than the
+    # max length of 100 to leave room for EOS token.
+    inp = list(range(1, 100))
     og_dataset = tf.data.Dataset.from_tensor_slices({'targets': [inp]})
     og_dataset = og_dataset.repeat(100)
-    output_features = {'targets': seqio.Feature(vocab)}
+    output_features = {
+        'targets': seqio.Feature(vocab),
+        'inputs': seqio.Feature(vocab),
+    }
     output_dataset = prep.prefix_lm(
         og_dataset,
         {'inputs': 100, 'targets': 100},
@@ -1781,7 +1816,7 @@ class PreprocessorsTest(tf.test.TestCase):
         'inputs': [4, 5, 6, 7]
     })
     dataset = prep.select_random_chunk(
-        dataset, feature_key='targets', max_length=4)
+        dataset, output_features=None, feature_key='targets', max_length=4)
     output = list(dataset.as_numpy_iterator())
     self.assertEqual(1, len(output))
     output = output[0]
@@ -1795,7 +1830,7 @@ class PreprocessorsTest(tf.test.TestCase):
         'notes': 'hi',
     })
     dataset = prep.select_random_chunk(
-        dataset, feature_key='targets', max_length=4,
+        dataset, output_features=None, feature_key='targets', max_length=4,
         additional_passthrough_keys=['notes'])
     output = list(dataset.as_numpy_iterator())
     output = output[0]
@@ -1808,7 +1843,8 @@ class PreprocessorsTest(tf.test.TestCase):
         'inputs': [4, 5, 6, 7]
     })
     dataset = prep.select_random_chunk(
-        dataset, feature_key='targets', max_length=4, uniform_random_start=True)
+        dataset, output_features=None, feature_key='targets', max_length=4,
+        uniform_random_start=True)
     output = list(dataset.as_numpy_iterator())
     self.assertEqual(1, len(output))
     output = output[0]
@@ -1821,8 +1857,8 @@ class PreprocessorsTest(tf.test.TestCase):
         'inputs': [4, 5, 6, 7]
     })
     dataset = prep.select_random_chunk(
-        dataset, feature_key='targets', additional_feature_keys=['inputs'],
-        max_length=3)
+        dataset, output_features=None, feature_key='targets',
+        additional_feature_keys=['inputs'], max_length=3)
     output = list(dataset.as_numpy_iterator())
     self.assertEqual(1, len(output))
     output = output[0]
@@ -1836,8 +1872,8 @@ class PreprocessorsTest(tf.test.TestCase):
     })
     with self.assertRaises(tf.errors.InvalidArgumentError):
       prep.select_random_chunk(
-          dataset, feature_key='targets', additional_feature_keys=['inputs'],
-          max_length=4)
+          dataset, output_features=None, feature_key='targets',
+          additional_feature_keys=['inputs'], max_length=4)
 
 
 if __name__ == '__main__':

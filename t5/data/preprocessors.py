@@ -1874,7 +1874,8 @@ def preprocess_tsv(line,
 def span_corruption(dataset, sequence_length, output_features):
   """Final pretraining objective used in Raffel et al., 2019."""
   ds = dataset
-  ds = select_random_chunk(ds, feature_key='targets', max_length=65536)
+  ds = select_random_chunk(ds, output_features=output_features,
+                           feature_key='targets', max_length=65536)
   ds = reduce_concat_tokens(ds, feature_key='targets', batch_size=128)
   ds = split_tokens(
       ds,
@@ -1906,9 +1907,11 @@ def span_corruption(dataset, sequence_length, output_features):
 def iid_denoising(dataset, sequence_length, output_features):
   """Baseline pretraining objective used in Raffel et al., 2019."""
   ds = dataset
-  ds = select_random_chunk(ds, feature_key='targets', max_length=65536)
+  ds = select_random_chunk(ds, output_features=output_features,
+                           feature_key='targets', max_length=65536)
   ds = reduce_concat_tokens(ds, feature_key='targets', batch_size=128)
-  ds = split_tokens_to_inputs_length(ds, sequence_length=sequence_length)
+  ds = split_tokens_to_inputs_length(ds, output_features=output_features,
+                                     sequence_length=sequence_length)
   ds = denoise(
       ds,
       output_features,
@@ -1923,8 +1926,10 @@ def iid_denoising(dataset, sequence_length, output_features):
 def prefix_lm(dataset, sequence_length, output_features):
   """Prefix language modeling objective used in Raffel et al. 2019."""
   ds = dataset
-  ds = select_random_chunk(ds, feature_key='targets', max_length=65536)
-  ds = split_tokens_to_inputs_length(ds, sequence_length=sequence_length)
+  ds = select_random_chunk(ds, output_features=output_features,
+                           feature_key='targets', max_length=65536)
+  ds = split_tokens_to_inputs_length(ds, output_features=output_features,
+                                     sequence_length=sequence_length)
   ds = denoise(
       ds,
       output_features,
@@ -1938,6 +1943,7 @@ def prefix_lm(dataset, sequence_length, output_features):
 
 @gin.configurable
 def select_random_chunk(dataset: tf.data.Dataset,
+                        output_features: Mapping[str, seqio.Feature],
                         max_length: Optional[int] = None,
                         feature_key: str = 'targets',
                         additional_feature_keys: Optional[Sequence[str]] = None,
@@ -1955,6 +1961,7 @@ def select_random_chunk(dataset: tf.data.Dataset,
 
   Args:
     dataset: A tf.data.Dataset with dictionaries containing the key feature_key.
+    output_features: Mapping of keys to features.
     max_length: Typically specified in gin configs, takes priority over
       sequence_length.
     feature_key: Which feature to use from the dataset.
@@ -1974,6 +1981,9 @@ def select_random_chunk(dataset: tf.data.Dataset,
   """
   if max_length is None and sequence_length is not None:
     max_length = sequence_length[feature_key]
+    if output_features[feature_key].add_eos:
+      # Leave room to insert an EOS token.
+      max_length -= 1
   if max_length is None:
     raise ValueError('Must specify max_length or sequence_length.')
 
@@ -2378,24 +2388,38 @@ def split_tokens(dataset: tf.data.Dataset,
 
 
 @gin.configurable
-def split_tokens_to_inputs_length(dataset, sequence_length, **kwargs):
-  return split_tokens(dataset,
-                      max_tokens_per_segment=sequence_length['inputs'],
-                      **kwargs)
+def split_tokens_to_inputs_length(dataset, sequence_length,
+                                  output_features, **kwargs):
+  max_tokens = sequence_length['inputs']
+  if output_features['inputs'].add_eos:
+    # Leave room to insert an EOS token.
+    max_tokens -= 1
+
+  return split_tokens(dataset, max_tokens_per_segment=max_tokens, **kwargs)
 
 
 @gin.configurable
-def split_tokens_to_targets_length(dataset, sequence_length, **kwargs):
-  return split_tokens(dataset,
-                      max_tokens_per_segment=sequence_length['targets'],
-                      **kwargs)
+def split_tokens_to_targets_length(dataset, sequence_length,
+                                   output_features, **kwargs):
+  max_tokens = sequence_length['targets']
+  if output_features['targets'].add_eos:
+    # Leave room to insert an EOS token.
+    max_tokens -= 1
+
+  return split_tokens(dataset, max_tokens_per_segment=max_tokens, **kwargs)
 
 
 @gin.configurable
-def split_tokens_to_random_length(dataset, sequence_length, **kwargs):
+def split_tokens_to_random_length(dataset, sequence_length,
+                                  output_features, **kwargs):
+  max_tokens = sequence_length['inputs']
+  if output_features['inputs'].add_eos:
+    # Leave room to insert an EOS token.
+    max_tokens -= 1
+
   return split_tokens(dataset,
                       min_tokens_per_segment=8,
-                      max_tokens_per_segment=sequence_length['inputs'],
+                      max_tokens_per_segment=max_tokens,
                       **kwargs)
 
 
