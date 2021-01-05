@@ -1,4 +1,4 @@
-# Copyright 2020 The T5 Authors.
+# Copyright 2021 The T5 Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -170,6 +170,7 @@ def main(_):
   gin.bind_parameter("run.vocabulary", mesh_transformer.get_vocabulary())
   gin.finalize()
 
+  # Set cache dir after loading gin to avoid unintentionally overriding it.
   t5.data.add_global_cache_dirs(FLAGS.additional_task_cache_dirs)
 
   if FLAGS.use_model_api:
