@@ -511,6 +511,9 @@ class CacheDatasetPlaceholder(object):
     raise RuntimeError("`CacheDatasetPlaceholder` should never be called.")
 
 
+MetricFnCallable = Callable[..., Mapping[str, float]]
+
+
 class Task(DatasetProviderBase):
   """A class to manage a dataset and its related metrics."""
 
@@ -521,7 +524,7 @@ class Task(DatasetProviderBase):
       output_features: Mapping[str, Feature],
       preprocessors: Optional[Sequence[Callable[..., tf.data.Dataset]]] = None,
       postprocess_fn: Optional[Callable[..., Any]] = None,
-      metric_fns: Optional[Sequence[Callable[..., Mapping[str, float]]]] = None,
+      metric_fns: Optional[Sequence[MetricFnCallable]] = None,
       shuffle_buffer_size: Optional[int] = SHUFFLE_BUFFER_SIZE):
     """Task constructor.
 
@@ -549,9 +552,24 @@ class Task(DatasetProviderBase):
       raise ValueError(
           "Task name '%s' contains invalid characters. Must match regex: %s" % (
               name, _VALID_TASK_NAME_REGEX.pattern))
+
     metric_fns = metric_fns or []
+    self._predict_metric_fns = []
+    self._score_metric_fns = []
     for metric_fn in metric_fns:
-      _validate_args(metric_fn, ["targets", "predictions"])
+      pos_args = tuple(
+          key for key, param in inspect.signature(metric_fn).parameters.items()
+          if param.default == inspect.Parameter.empty
+      )
+      if pos_args == ("targets", "scores"):
+        self._score_metric_fns.append(metric_fn)
+      elif pos_args == ("targets", "predictions"):
+        self._predict_metric_fns.append(metric_fn)
+      else:
+        raise ValueError(
+            "Metric functions must have positional arguments matching either "
+            "('targets', 'predictions') or ('targets', 'scores'). "
+            f"Got: {pos_args}")
 
     self._name = name
     self._source = source
@@ -593,9 +611,19 @@ class Task(DatasetProviderBase):
     return self._name
 
   @property
-  def metric_fns(
-      self) -> Optional[Iterable[Callable[..., Mapping[str, float]]]]:
-    return self._metric_fns
+  def metric_fns(self) -> Sequence[MetricFnCallable]:
+    """List of all metric functions."""
+    return self._predict_metric_fns + self._score_metric_fns
+
+  @property
+  def score_metric_fns(self) -> Sequence[MetricFnCallable]:
+    """List of metric functions that use log likelihood scores."""
+    return self._score_metric_fns
+
+  @property
+  def predict_metric_fns(self) -> Sequence[MetricFnCallable]:
+    """List of metric functions that use model predictions."""
+    return self._predict_metric_fns
 
   @property
   def output_features(self) -> Mapping[str, Feature]:

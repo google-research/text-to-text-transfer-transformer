@@ -14,6 +14,7 @@
 
 """Utilities for the class-based evaluation."""
 
+import itertools
 from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 
 from absl import logging
@@ -21,15 +22,21 @@ from t5.seqio import dataset_providers
 from t5.seqio import feature_converters
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
-import typing_extensions
 
 Task = dataset_providers.Task
 EncDecFeatureConverter = feature_converters.EncDecFeatureConverter
 FeatureConverter = feature_converters.FeatureConverter
 
-AllOutputsType = Mapping[str, Sequence[Any]]
+AllOutputTokensType = Mapping[str, Sequence[Sequence[int]]]
+AllOutputScoresType = Mapping[str, Sequence[float]]
 AllMetricsType = Mapping[str, Sequence[Mapping[str, Any]]]
-OutputsAndMetricsType = Tuple[AllOutputsType, Optional[AllMetricsType]]
+MetricsAndOutputsType = Tuple[
+    Optional[AllMetricsType],  # metrics
+    AllOutputTokensType,  # output_tokens
+    AllOutputScoresType]  # output_scores
+PredictFnCallable = Callable[
+    [tf.data.Dataset], Sequence[Tuple[int, Sequence[int]]]]
+ScoreFnCallable = Callable[[tf.data.Dataset], Sequence[Tuple[int, float]]]
 
 
 def get_valid_eval_tasks(tasks: Sequence[Task], split: str) -> Sequence[Task]:
@@ -106,13 +113,6 @@ def get_targets_and_examples(
         tf.data.experimental.assert_cardinality(len(targets)))
 
   return cached_targets, cached_task_datasets, max_sequence_length
-
-
-class PredictFnCallable(typing_extensions.Protocol):
-  """Signature for `predict_fn` passed to `Evaluator.evaluate`."""
-
-  def __call__(self,
-               ds: tf.data.Dataset) -> Sequence[Tuple[int, Sequence[int]]]: ...
 
 
 class Evaluator:
@@ -234,8 +234,9 @@ class Evaluator:
                *,
                compute_metrics: bool,
                step: Optional[int] = None,
-               predict_fn: PredictFnCallable) -> OutputsAndMetricsType:
-    """Predict and optionally compute metrics of self.eval.tasks.
+               predict_fn: PredictFnCallable,
+               score_fn: ScoreFnCallable) -> MetricsAndOutputsType:
+    """Predict and score self.eval_tasks.
 
     Evaluation must preserve the example ordering. This requirement is satisfied
     by using enumerated dataset. Each of the cached eval task datasets is an
@@ -249,12 +250,15 @@ class Evaluator:
     during prediction, the order can be corrected as long as the correct index
     for each example is maintained.
 
+    Similarly, `score_fn` takes the cached eval dataset as input and returns
+    Sequence[(index, score)] where `score` is the sequence of log likelihood
+    scores for the targets in the eval dataset.
+
     A common example is the multi-host setup where the evaluation dataset is
     split into multiple hosts that independently make predictions and combine
     the results during which the ordering can be mixed.
 
-
-    Overall, there are 4 steps involved in the evaluation.
+    There are 4 steps involved in the evaluation using predicted tokens:
 
     1. Model returns indices and output_tokens: Sequence[Tuple[int,
        Sequence[int]]]
@@ -264,69 +268,133 @@ class Evaluator:
     4. Each metric function is applied to the predictions and the cached
        targets.
 
-    Note that non-string features are supported. For such use cases, users need
-    to ensure the type consistency across the 4 steps. In other words, the
-    return format of `vocab.decode` (which is not string in this case) is
-    consistent with the input format of the registered postprocessor whose
-    output format matches that of the input of the metric function.
+    There are 2 steps involved in the evaluation using scores:
+
+    1. Model returns indices and scores: Sequence[Tuple[int, float]]
+    2. Each metric function is applied to the scores and the cached targets.
 
     Args:
       compute_metrics: whether to compute metrics.
       step: an optional step number of the current evaluation. If unspecified, a
         dummy value of -1 will be used.
       predict_fn: a user-defined function, which takes in a tf.data.Dataset and
-        outputs decoded predictions.
+        outputs the sequence of predicted tokens. Only called if predict metrics
+        exist for the tasks.
+      score_fn: a user-defined function, which takes in a tf.data.Dataset and
+        outputs the log likelihood score of the targets. Only called if score
+        metrics exist for the task.
 
     Returns:
-      A tuple of output_tokens and metrics where the former corresponds to the
-      output tokens from `predict_fn` and the latter the computed metrics.
+      metrics: a mapping from task name to computed metrics, or None if
+        `compute_metrics` is False.
+      predicted_tokens: a mapping from task name to the output tokens
+        from `predict_fn`, for tasks that have `predict_metric_fns`.
+      scores: a mapping from task name to the output scores from
+        `score_fn` for tasks that have `score_predict_fns`.
     """
 
     all_output_tokens = {}
-    all_metrics = None
+    all_output_scores = {}
 
     for task in self.eval_tasks:
-      indices_and_output_tokens = predict_fn(
-          self.cached_model_datasets[task.name])
 
-      if len(indices_and_output_tokens[0]) != 2:
-        raise ValueError("Output from the predict_fn should be a sequence of "
-                         "length-2 tuple with (index, decoding) format")
+      if task.predict_metric_fns:
+        indices_and_output_tokens = predict_fn(
+            self.cached_model_datasets[task.name])
 
-      all_output_tokens[task.name]: Sequence[Sequence[int]] = [
-          x[1] for x in sorted(indices_and_output_tokens, key=lambda x: x[0])
-      ]
+        if len(indices_and_output_tokens[0]) != 2:
+          raise ValueError(
+              "Output from the predict_fn should be a sequence of "
+              "length-2 tuples with (index, [tokens]) format")
+
+        # output_tokens is a list of token_ids where each token_ids
+        # corresponds to the model output of the input example.
+        all_output_tokens[task.name] = [
+            x[1] for x in sorted(
+                indices_and_output_tokens, key=lambda x: x[0])
+        ]
+
+      if task.score_metric_fns:
+        indices_and_output_scores = score_fn(
+            self.cached_model_datasets[task.name])
+
+        if len(indices_and_output_scores[0]) != 2:
+          raise ValueError(
+              "Output from the score_fn should be a sequence of length-2 "
+              "tuples with (index, score) format")
+
+        all_output_scores[task.name] = [
+            x[1] for x in sorted(indices_and_output_scores, key=lambda x: x[0])
+        ]
 
     if compute_metrics:
-      all_metrics = {}
-      for task in self.eval_tasks:
-        task_dataset = self.cached_task_datasets[task.name]
-        targets = self.cached_targets[task.name]
+      all_metrics = self._compute_metrics(
+          all_output_tokens, all_output_scores, step)
+    else:
+      all_metrics = None
 
-        # output_tokens is a list of token_ids where each token_ids corresponds
-        # to the model output of the input example.
-        output_tokens = all_output_tokens[task.name]
+    return all_metrics, all_output_tokens, all_output_scores
+
+  def _compute_metrics(
+      self,
+      predicted_tokens: AllOutputTokensType,
+      scores: AllOutputScoresType,
+      step: Optional[int] = None) -> AllMetricsType:
+    """Computes and logs metrics given the predicted tokens and scores.
+
+    Args:
+      predicted_tokens: a mapping from task name to the output tokens from
+        `predict_fn`, for tasks that have `predict_metric_fns`.
+      scores: a mapping from task name to the output scores from
+        `score_fn` for tasks that have `score_predict_fns`.
+      step: an optional step number of the current evaluation. If unspecified, a
+        dummy value of -1 will be used.
+    Returns:
+      A mapping from task name to computed metrics.
+    """
+    all_metrics = {}
+
+    for task in self.eval_tasks:
+      task_dataset = self.cached_task_datasets[task.name]
+      targets = self.cached_targets[task.name]
+
+      task_metrics = []
+
+      if task.predict_metric_fns:
         task_vocab = task.output_features["targets"].vocabulary
         outputs = [
             task_vocab.decode([int(token) for token in tokens])
-            for tokens in output_tokens
+            for tokens in predicted_tokens[task.name]
         ]
         predictions = [
             task.postprocess_fn(d, example=ex, is_target=False)
             for d, ex in zip(outputs, tfds.as_numpy(task_dataset))
         ]
 
-        metrics = [
-            metric_fn(targets, predictions) for metric_fn in task.metric_fns
-        ]
-        all_metrics[task.name] = metrics
+        task_metrics.extend([
+            metric_fn(targets, predictions) for metric_fn in
+            task.predict_metric_fns
+        ])
 
-        self._log_eval_results(metrics, step, task_name=task.name)
+      if task.score_metric_fns:
+        task_metrics.extend([
+            metric_fn(targets, scores[task.name])
+            for metric_fn in task.score_metric_fns
+        ])
 
-    return all_output_tokens, all_metrics
+      all_metrics[task.name] = {}
+      for k, v in itertools.chain(*[m.items() for m in task_metrics]):
+        if k in all_metrics[task.name]:
+          raise ValueError(
+              f"Duplicate metric key '{k}' in Task '{task.name}'.")
+        all_metrics[task.name][k] = v
+
+      self._log_eval_results(
+          all_metrics[task.name], step, task_name=task.name)
+    return all_metrics
 
   # TODO(hwchung): Support custom logging function metrics.
-  def _log_eval_results(self, task_metrics: Sequence[Mapping[str, float]],
+  def _log_eval_results(self, task_metrics: Mapping[str, float],
                         step: int, task_name: Optional[str] = None) -> None:
     """Log the eval results and optionally write summaries for TensorBoard."""
     if step is None:
@@ -334,17 +402,16 @@ class Evaluator:
                       "A dummy value of -1 will be used.")
       step = -1
 
-    for task_metric in task_metrics:
-      for metric_name, metric_value in task_metric.items():
-        if self.summary_writer:
-          summary = tf.compat.v1.Summary()
+    for metric_name, metric_value in task_metrics.items():
+      if self.summary_writer:
+        summary = tf.compat.v1.Summary()
 
-        tag = f"eval/{task_name}/{metric_name}"
-        logging.info("%s at step %d: %.3f", tag, step, metric_value)
+      tag = f"eval/{task_name}/{metric_name}"
+      logging.info("%s at step %d: %.3f", tag, step, metric_value)
 
-        if self.summary_writer:
-          summary.value.add(tag=tag, simple_value=metric_value)
-          self.summary_writer.add_summary(summary, step)
+      if self.summary_writer:
+        summary.value.add(tag=tag, simple_value=metric_value)
+        self.summary_writer.add_summary(summary, step)
 
     if self.summary_writer:
       self.summary_writer.flush()

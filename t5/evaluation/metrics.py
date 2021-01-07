@@ -353,7 +353,7 @@ def sklearn_metrics_wrapper(metric_str,
 
 def rank_classification(
     targets: Sequence[Tuple[int, bool, float]],
-    predictions: Sequence[float],
+    scores: Sequence[float],
     num_classes: Optional[int] = None) -> Dict[str, Union[float, int]]:
   """Computes standard metrics classification based on log likelihood ranking.
 
@@ -368,7 +368,7 @@ def rank_classification(
   Args:
     targets: list of tuples, the 'idx', 'is_correct' and 'weight' fields from
       ground truth examples.
-    predictions: list of float, a flat list of log likelihood scores for each
+    scores: list of float, a flat list of log likelihood scores for each
       possible label for each example.
     num_classes: int or None, the number of possible classes for the label or
       None if the number of classes vary.
@@ -379,7 +379,7 @@ def rank_classification(
   Raises:
     ValueError: if `targets` is not a sequence of 3-tuples.
   """
-  assert len(targets) == len(predictions)
+  assert len(targets) == len(scores)
   if len(targets[0]) != 3:
     raise ValueError(
         "`targets` should contain three elements. Only %d are provided." %
@@ -390,7 +390,7 @@ def rank_classification(
     num_correct = 0
     total = 0
     for _, grp in itertools.groupby(
-        zip(targets, predictions), lambda x: x[0][0]):
+        zip(targets, scores), lambda x: x[0][0]):
       exs, log_likelihoods = zip(*grp)
       prediction = np.argmax(log_likelihoods)
       weights = exs[prediction][2]
@@ -405,7 +405,7 @@ def rank_classification(
                               ]).reshape((-1, num_classes))
   weights = np.array([weight for _, _, weight in targets]).reshape(
       (-1, num_classes))[:, 0]
-  log_likelihoods = np.array(predictions, np.float32).reshape((-1, num_classes))
+  log_likelihoods = np.array(scores, np.float32).reshape((-1, num_classes))
   predictions = log_likelihoods.argmax(-1)
 
   if np.any(labels_indicator.sum(axis=-1) > 1):

@@ -46,7 +46,7 @@ class TasksTest(test_utils.FakeTaskTest):
       self.add_task("invalid/name", self.function_source)
 
   def test_repeat_name(self):
-    with self.assertRaisesRegex(
+    with self.assertRaisesWithLiteralMatch(
         ValueError,
         "Attempting to register duplicate provider: text_line_task"):
       self.add_task("text_line_task", self.text_line_source)
@@ -75,33 +75,98 @@ class TasksTest(test_utils.FakeTaskTest):
     dataset_providers.FunctionDataSource(extra_kwarg_good_fn, splits=("train",))
 
     # Bad signatures.
-    with self.assertRaisesRegex(
+    with self.assertRaisesWithLiteralMatch(
         ValueError,
-        r"'missing_shuff' must have positional args \('split', "
-        r"'shuffle_files'\), got: \('split',\)"):
+        "'missing_shuff' must have positional args ('split', 'shuffle_files'), "
+        "got: ('split',)"):
       def missing_shuff(split):
         del split
       dataset_providers.FunctionDataSource(missing_shuff, splits=("train",))
 
-    with self.assertRaisesRegex(
+    with self.assertRaisesWithLiteralMatch(
         ValueError,
-        r"'missing_split' must have positional args \('split', "
-        r"'shuffle_files'\), got: \('shuffle_files',\)"):
+        "'missing_split' must have positional args ('split', 'shuffle_files'), "
+        "got: ('shuffle_files',)"):
       def missing_split(shuffle_files):
         del shuffle_files
       dataset_providers.FunctionDataSource(missing_split, splits=("train",))
 
-    with self.assertRaisesRegex(
+    with self.assertRaisesWithLiteralMatch(
         ValueError,
-        r"'extra_pos_arg' may only have positional args \('split', "
-        r"'shuffle_files'\), got: \('split', 'shuffle_files', 'unused_arg'\)"):
+        "'extra_pos_arg' may only have positional args ('split', "
+        "'shuffle_files'), got: ('split', 'shuffle_files', 'unused_arg')"):
       def extra_pos_arg(split, shuffle_files, unused_arg):
         del split
         del shuffle_files
       dataset_providers.FunctionDataSource(extra_pos_arg, splits=("train",))
 
+  def test_metric_fn_signature(self):
+    # pylint:disable=unused-argument
+
+    add_task = functools.partial(self.add_task, source=self.function_source)
+
+    def score_metric_fn(targets, scores):
+      return {}
+
+    def predict_metric_fn(targets, predictions):
+      return {}
+
+    valid_task = add_task(
+        "valid_metrics", metric_fns=[score_metric_fn, predict_metric_fn])
+
+    self.assertSameElements(
+        [score_metric_fn, predict_metric_fn], valid_task.metric_fns)
+    self.assertSameElements(
+        [score_metric_fn], valid_task.score_metric_fns)
+    self.assertSameElements(
+        [predict_metric_fn], valid_task.predict_metric_fns)
+
+    def extra_arg_metric_fn(targets, predictions, extra_param):
+      return {}
+
+    expected_error_message_prefix = (
+        "Metric functions must have positional arguments matching either "
+        "('targets', 'predictions') or ('targets', 'scores'). Got: ")
+
+    with self.assertRaisesWithLiteralMatch(
+        ValueError,
+        expected_error_message_prefix +
+        "('targets', 'predictions', 'extra_param')"):
+      valid_task = add_task(
+          "extra_arg_metric", metric_fns=[extra_arg_metric_fn])
+
+    def bad_order_metric_fn(predictions, targets):
+      return {}
+
+    with self.assertRaisesWithLiteralMatch(
+        ValueError,
+        expected_error_message_prefix + "('predictions', 'targets')"):
+      valid_task = add_task(
+          "bad_order_metric", metric_fns=[bad_order_metric_fn])
+
+    def bad_default_metric_fn(targets, predictions=(0)):
+      return {}
+
+    with self.assertRaisesWithLiteralMatch(
+        ValueError,
+        expected_error_message_prefix + "('targets',)"):
+      valid_task = add_task(
+          "bad_default_metric", metric_fns=[bad_default_metric_fn])
+
+    def ok_default_metric_fn(targets, predictions, extra_param=3):
+      return {}
+
+    valid_task_2 = add_task(
+        "valid_metrics_2", metric_fns=[ok_default_metric_fn])
+    self.assertSameElements([ok_default_metric_fn], valid_task_2.metric_fns)
+    self.assertEmpty(valid_task_2.score_metric_fns)
+    self.assertSameElements(
+        [ok_default_metric_fn], valid_task_2.predict_metric_fns)
+
+    # pylint:enable=unused-argument
+
   def test_no_tfds_version(self):
-    with self.assertRaisesRegex(
+    with self.assertRaisesWithLiteralMatch(
         ValueError, "TFDS name must contain a version number, got: fake"):
       dataset_providers.TfdsDataSource(tfds_name="fake")
 
@@ -133,7 +198,7 @@ class TasksTest(test_utils.FakeTaskTest):
         self.cached_task.cache_dir)
 
     self.assertFalse(self.uncached_task.cache_dir)
-    with self.assertRaisesRegex(  # pylint:disable=g-error-prone-assert-raises
+    with self.assertRaisesWithLiteralMatch(
         AssertionError,
         "'tfds_task' does not exist in any of the task cache directories"):
       TaskRegistry.get("tfds_task").assert_cached()
@@ -157,10 +222,10 @@ class TasksTest(test_utils.FakeTaskTest):
     self.assertEqual(
         expected_validation_stats,
         self.cached_task.get_cached_stats("validation"))
-    with self.assertRaisesRegex(
+    with self.assertRaisesWithLiteralMatch(
         ValueError, "Stats do not exist for 'cached_task' split: fake"):
       self.cached_task.get_cached_stats("fake")
-    with self.assertRaisesRegex(
+    with self.assertRaisesWithLiteralMatch(
         AssertionError,
         "'uncached_task' does not exist in any of the task cache directories"):
       self.uncached_task.get_cached_stats("train")
@@ -232,21 +297,21 @@ class TasksTest(test_utils.FakeTaskTest):
     _materialize({"targets": [0]})
 
     # Missing required feature.
-    with self.assertRaisesRegex(
+    with self.assertRaisesWithLiteralMatch(
         ValueError,
         "Task dataset is missing expected output feature after preprocessing: "
         "targets"):
       _materialize({"inputs": [0]})
 
     # Wrong type.
-    with self.assertRaisesRegex(
+    with self.assertRaisesWithLiteralMatch(
         ValueError,
         "Task dataset has incorrect type for feature 'targets' after "
         "preprocessing: Got string, expected int32"):
       _materialize({"targets": ["wrong type"]})
 
     # Wrong rank.
-    with self.assertRaisesRegex(
+    with self.assertRaisesWithLiteralMatch(
         ValueError,
         "Task dataset has incorrect rank for feature 'targets' after "
         "preprocessing: Got 0, expected 1"):
@@ -259,7 +324,7 @@ class TasksTest(test_utils.FakeTaskTest):
         "inputs": dataset_providers.Feature(test_utils.sentencepiece_vocab())
     }
 
-    with self.assertRaisesRegex(
+    with self.assertRaisesWithLiteralMatch(
         ValueError, "`CacheDatasetPlaceholder` can appear at most once in the "
         "preprocessing pipeline. Found 2 in 'multiple_cache_placeholders'."):
       dataset_providers.Task(
@@ -278,7 +343,7 @@ class TasksTest(test_utils.FakeTaskTest):
           output_features=output_features,
           metric_fns=[])
 
-    with self.assertRaisesRegex(
+    with self.assertRaisesWithLiteralMatch(
         ValueError,
         "'test_token_preprocessor' has a `sequence_length` argument but occurs "
         "before `CacheDatasetPlaceholder` in 'sequence_length_pre_cache'. This "
