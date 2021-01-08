@@ -118,9 +118,8 @@ def main(_):
     print(_example_to_string(ex))
     total_examples += 1
     if total_examples == FLAGS.max_examples:
-      return
-
-
+      break
+  return
 
 if __name__ == "__main__":
   app.run(main)
