@@ -78,6 +78,17 @@ def mesh_train_dataset_fn(
   # Select just the output features which are present in the dataset.
   feature_keys = tuple(k for k in mixture_or_task.output_features
                        if k in tf.data.get_output_shapes(ds))
+
+  # Filtering feature keys is done in pack_or_pad function. However, when
+  # packing is turned off, input_features aren't filtered leading to training
+  # problems due to strings showing up in the input example. Filtering features
+  # ensures that we don't rely on pack_or_pad to filter features for training.
+  def _filter_features(ex):
+    return {k: ex[k] for k in feature_keys}
+
+  ds = ds.map(
+      _filter_features, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
   eos_keys = set(
       k for k, f in mixture_or_task.output_features.items() if f.add_eos)
   ds = transformer_dataset.pack_or_pad(
