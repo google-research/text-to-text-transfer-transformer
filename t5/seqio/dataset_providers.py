@@ -637,6 +637,10 @@ class Task(DatasetProviderBase):
   def source(self) -> DataSource:
     return self._source
 
+  @property
+  def preprocessors(self) -> Sequence[Callable[..., tf.data.Dataset]]:
+    return self._preprocessors
+
   def num_input_examples(self, split: str) -> Optional[int]:
     return self.source.num_input_examples(split)
 
