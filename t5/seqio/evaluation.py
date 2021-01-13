@@ -14,6 +14,7 @@
 
 """Utilities for the class-based evaluation."""
 
+import inspect
 import itertools
 from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 
@@ -22,6 +23,7 @@ from t5.seqio import dataset_providers
 from t5.seqio import feature_converters
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
+import typing_extensions
 
 Task = dataset_providers.Task
 EncDecFeatureConverter = feature_converters.EncDecFeatureConverter
@@ -34,9 +36,6 @@ MetricsAndOutputsType = Tuple[
     Optional[AllMetricsType],  # metrics
     AllOutputTokensType,  # output_tokens
     AllOutputScoresType]  # output_scores
-PredictFnCallable = Callable[
-    [tf.data.Dataset], Sequence[Tuple[int, Sequence[int]]]]
-ScoreFnCallable = Callable[[tf.data.Dataset], Sequence[Tuple[int, float]]]
 
 
 def get_valid_eval_tasks(tasks: Sequence[Task], split: str) -> Sequence[Task]:
@@ -115,6 +114,24 @@ def get_targets_and_examples(
   return cached_targets, cached_task_datasets, max_sequence_length
 
 
+class PredictFnCallable(typing_extensions.Protocol):
+
+  def __call__(
+      self,
+      dataset: tf.data.Dataset,
+      model_feature_lengths: Mapping[str, int]
+  ) -> Sequence[Tuple[int, Sequence[int]]]: ...
+
+
+class ScoreFnCallable(typing_extensions.Protocol):
+
+  def __call__(
+      self,
+      dataset: tf.data.Dataset,
+      model_feature_lengths: Mapping[str, int]
+  ) -> Sequence[Tuple[int, float]]: ...
+
+
 class Evaluator:
   """A class to encapsulate all eval-related information.
 
@@ -143,6 +160,8 @@ class Evaluator:
     cached_model_datasets: cached evaluation datasets with model features.
     cached_task_datasets: cached evaluation datasets with task features.
     cached_targets: cached evaluation targets.
+    model_feature_lengths: mapping from model feature to its length in the
+      `cached_model_datasets`.
     summary_writer: a tf summary writer for writing the evaluation results.
   """
 
@@ -151,7 +170,7 @@ class Evaluator:
                feature_converter: FeatureConverter = EncDecFeatureConverter,
                eval_split: str = "validation",
                use_cached: bool = False,
-               sequence_lengths: Mapping[str, int] = None,
+               sequence_length: Mapping[str, int] = None,
                summary_dir: Optional[str] = None):
     """Evaluator constructor.
 
@@ -163,13 +182,18 @@ class Evaluator:
       eval_split: evaluation split. Typically "validation" or "test".
       use_cached: whether to use the cached dataset instead of processing it on
         the fly.
-      sequence_lengths: an optional length specification. If specified, these
+      sequence_length: an optional length specification. If specified, these
         will be the hard-limit on the evaluation data used for prediction. If
-        unspecified, the maximum length for each feature will be used. These
+        none of the preprocessors depend on the sequence length, it can be left
+        unspecified and the maximum length for each feature will be used. These
         lengths are computed while caching the datasets.
       summary_dir: an optional directory to save the evaluation results in Event
         protocol buffer format.
+    Raises:
+      ValueError if `sequence_length` is None but a preprocessor depends on its
+      value.
     """
+    logging.info("Initializing Evaluator for '%s'", mixture_or_task_name)
     eval_tasks = dataset_providers.get_subtasks(
         dataset_providers.get_mixture_or_task(mixture_or_task_name))
     self._eval_tasks = get_valid_eval_tasks(eval_tasks, eval_split)
@@ -179,9 +203,26 @@ class Evaluator:
           "No eval task with valid split and metric fn found. Skipping eval.")
       return
 
+    # Determine if sequence_length arg is required. This occurs when any of the
+    # task preprocessors have a `sequence_length` arg with no default value.
+    sequence_length_required = False
+    for task in eval_tasks:
+      for prep in task.preprocessors:
+        prep_params = inspect.signature(prep).parameters
+        if ("sequence_length" in prep_params and
+            prep_params["sequence_length"].default == inspect.Parameter.empty):
+          if sequence_length is None:
+            raise ValueError(
+                f"Preprocessor '{prep.__name__}' in task '{task.name}' has a "
+                "`sequence_length` argument, making it incompatible with "
+                "automatic sequence length detection. Pass a valid "
+                "`sequence_length` to `Evaluator` and try again.")
+          sequence_length_required = True
+          break
+
     def dataset_fn(task: Task) -> tf.data.Dataset:
       return task.get_dataset(
-          sequence_length=None,
+          sequence_length=sequence_length,
           split=eval_split,
           shuffle=False,
           use_cached=use_cached)
@@ -192,32 +233,31 @@ class Evaluator:
     cached_targets, cached_task_datasets, max_lengths = (
         get_targets_and_examples(tasks=self._eval_tasks, dataset_fn=dataset_fn))
 
-    if sequence_lengths is None:
+    if sequence_length is None:
       logging.info("Setting sequence lengths to %s", max_lengths)
-      lengths = max_lengths
-    elif (sequence_lengths["inputs"] < max_lengths["inputs"] or
-          sequence_lengths["targets"] < max_lengths["targets"]):
-      logging.warning(
-          "Given sequence lengths are insufficient for some evaluation inputs "
-          "or targets. These sequences will be truncated to fit, likely "
-          "leading to sub-optimal results. Consider passing `None` for "
-          "sequence_lengths to have them be automatically computed.\n Got: %s, "
-          "\n Max Lengths:%s", sequence_lengths, max_lengths)
-      lengths = sequence_lengths
-    elif (sequence_lengths["inputs"] > max_lengths["inputs"] or
-          sequence_lengths["targets"] > max_lengths["targets"]):
+      sequence_length = max_lengths
+    elif (sequence_length["inputs"] > max_lengths["inputs"] or
+          sequence_length["targets"] > max_lengths["targets"]):
       logging.warning(
           "Given sequence lengths are longer than necessary for some "
           "evaluation inputs or targets, resulting in wasted computation. "
-          "Consider passing `None` for sequence_lengths to have them be "
+          "Consider passing `None` for `sequence_length` to have them be "
           "automatically computed.\n Got: %s,\n Max Lengths: %s",
-          sequence_lengths, max_lengths)
-      lengths = sequence_lengths
+          sequence_length, max_lengths)
+    elif not sequence_length_required and (
+        sequence_length["inputs"] == max_lengths["inputs"] or
+        sequence_length["targets"] == max_lengths["targets"]):
+      logging.warning(
+          "Given sequence lengths *may be* insufficient for some evaluation "
+          "inputs or targets. Such sequences will be truncated to fit, "
+          "likely leading to sub-optimal results. Consider passing `None` "
+          "for `sequence_length` to have them be automatically computed.\n")
 
     self._cached_model_datasets = {}
     # Convert the task features to model features
     for task in self._eval_tasks:
-      eval_ds = feature_converter(cached_task_datasets[task.name], lengths)
+      eval_ds = feature_converter(
+          cached_task_datasets[task.name], sequence_length)
 
       # The eval dataset is enumerated to ensure that the order is preserved
       # throughout the entire evaluation process.
@@ -225,6 +265,8 @@ class Evaluator:
 
     self._cached_targets = cached_targets
     self._cached_task_datasets = cached_task_datasets
+    self._model_feature_lengths = feature_converter.get_model_feature_lengths(
+        sequence_length)
 
     if summary_dir:
       with tf.compat.v1.Graph().as_default():
@@ -296,36 +338,22 @@ class Evaluator:
     all_output_tokens = {}
     all_output_scores = {}
 
+    def _infer_and_sort_outputs(infer_fn, task_name):
+      indices_and_outputs = infer_fn(self.cached_model_datasets[task_name])
+      if len(indices_and_outputs[0]) != 2:
+        raise ValueError(
+            "Expected a sequence of length-2 tuples with (index, *) format.")
+      return [x[1] for x in sorted(indices_and_outputs, key=lambda x: x[0])]
+
     for task in self.eval_tasks:
-
       if task.predict_metric_fns:
-        indices_and_output_tokens = predict_fn(
-            self.cached_model_datasets[task.name])
-
-        if len(indices_and_output_tokens[0]) != 2:
-          raise ValueError(
-              "Output from the predict_fn should be a sequence of "
-              "length-2 tuples with (index, [tokens]) format")
-
         # output_tokens is a list of token_ids where each token_ids
         # corresponds to the model output of the input example.
-        all_output_tokens[task.name] = [
-            x[1] for x in sorted(
-                indices_and_output_tokens, key=lambda x: x[0])
-        ]
-
+        all_output_tokens[task.name] = _infer_and_sort_outputs(
+            predict_fn, task.name)
       if task.score_metric_fns:
-        indices_and_output_scores = score_fn(
-            self.cached_model_datasets[task.name])
-
-        if len(indices_and_output_scores[0]) != 2:
-          raise ValueError(
-              "Output from the score_fn should be a sequence of length-2 "
-              "tuples with (index, score) format")
-
-        all_output_scores[task.name] = [
-            x[1] for x in sorted(indices_and_output_scores, key=lambda x: x[0])
-        ]
+        all_output_scores[task.name] = _infer_and_sort_outputs(
+            score_fn, task.name)
 
     if compute_metrics:
       all_metrics = self._compute_metrics(
@@ -431,6 +459,10 @@ class Evaluator:
   @property
   def cached_targets(self) -> Mapping[str, Sequence[str]]:
     return self._cached_targets
+
+  @property
+  def model_feature_lengths(self) -> Mapping[str, int]:
+    return self._model_feature_lengths
 
   @property
   def summary_writer(self) -> tf.summary.SummaryWriter:

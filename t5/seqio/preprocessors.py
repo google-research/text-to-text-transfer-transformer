@@ -124,8 +124,8 @@ def append_eos(
 
 def append_eos_after_trim(
     dataset: tf.data.Dataset,
-    sequence_length: Optional[SequenceLengthType],
     output_features: OutputFeaturesType,
+    sequence_length: Optional[SequenceLengthType] = None,
 ) -> tf.data.Dataset:
   """Trims output feature token sequences and then appends EOS.
 
@@ -140,10 +140,10 @@ def append_eos_after_trim(
 
   Args:
     dataset: a tf.data.Dataset of tokenized examples to preprocess.
+    output_features: a mapping of output feature names to Feature objects.
     sequence_length: a mapping from output feature names to max lengths.
       If provided, output feature sequences will be trimmed to ensure they are
       not longer than this length once EOS is added.
-    output_features: a mapping of output feature names to Feature objects.
 
   Returns:
     a tf.data.Dataset of tokenized examples with EOS added to specified output

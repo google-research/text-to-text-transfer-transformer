@@ -96,7 +96,9 @@ class PreprocessorsTest(absltest.TestCase):
     # Trim to sequence lengths.
     assert_dataset(
         preprocessors.append_eos_after_trim(
-            og_dataset, sequence_length, output_features),
+            og_dataset,
+            output_features=output_features,
+            sequence_length=sequence_length),
         {
             'inputs': [1, 2, 3],
             'targets': [4, 5, 1],
@@ -107,7 +109,8 @@ class PreprocessorsTest(absltest.TestCase):
     # Don't trim to sequence lengths.
     assert_dataset(
         preprocessors.append_eos_after_trim(
-            og_dataset, None, output_features),
+            og_dataset,
+            output_features=output_features),
         {
             'inputs': [1, 2, 3],
             'targets': [4, 5, 6, 7, 1],
