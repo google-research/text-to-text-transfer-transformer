@@ -882,8 +882,6 @@ class Task(DatasetProviderBase):
         self.num_input_examples(split) < _MAX_EXAMPLES_TO_MEM_CACHE):
       ds = ds.cache()
 
-    # Post cache processing.
-    ds = self.preprocess_postcache(ds, sequence_length=sequence_length)
     if use_cached:
       # Cached datasets were previously tokenized as int64, so we may need to
       # cast here (e.g., to int32).
@@ -891,6 +889,10 @@ class Task(DatasetProviderBase):
       # Legacy cached datasets may use old "_plaintext" suffix. Rename to
       # "_pretokenized".
       ds = _rename_plaintext_to_pretokenized(ds)
+
+    # Post cache processing.
+    ds = self.preprocess_postcache(ds, sequence_length=sequence_length)
+
     ds = self._validate_preprocessing(ds)
     ds = self._trim_output_features(ds, sequence_length=sequence_length)
 
