@@ -9,5 +9,6 @@
       "shape": []
     }
   },
-  "num_shards": 1
+  "num_shards": 1,
+  "seqio_version": "0.0.0"
 }

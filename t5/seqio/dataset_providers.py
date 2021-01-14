@@ -28,6 +28,7 @@ from typing import Any, Callable, Iterable, Mapping, MutableMapping, Optional, S
 
 from absl import logging
 import dataclasses
+from packaging import version
 from t5.seqio import utils
 from t5.seqio.feature_converters import FeatureConverter
 from t5.seqio.vocabularies import Vocabulary
@@ -465,29 +466,18 @@ class TFExampleDataSource(FileDataSource):
         `num_input_examples` method will return None if not provided.
     """
 
-    self._feature_description = feature_description
+    def read_file_fn(filepattern):
+      return reader_cls(filepattern).map(
+          lambda pb: tf.io.parse_single_example(pb, feature_description),
+          num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
     super().__init__(
-        read_file_fn=reader_cls,
+        read_file_fn=read_file_fn,
         split_to_filepattern=split_to_filepattern,
         num_input_examples=num_input_examples)
 
-  def get_dataset(
-      self,
-      split: str,
-      shuffle: bool = True,
-      seed: Optional[int] = None,
-      shard_info: Optional[ShardInfo] = None
-    ) -> tf.data.Dataset:
-    """Overrides to parse tf.train.Example proto after reading file."""
-    ds = super().get_dataset(
-        split=split, shuffle=shuffle, seed=seed, shard_info=shard_info)
-    return ds.map(
-        lambda pb: tf.io.parse_single_example(pb, self._feature_description),
-        num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-
-# ================================ Tasks =======================================
+# ========================== Offline Caching Helpers ===========================
 
 
 def _rename_plaintext_to_pretokenized(
@@ -504,11 +494,79 @@ def _rename_plaintext_to_pretokenized(
       _rename, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
 
+class _CachedDataSource(FileDataSource):
+  """A `FileDataSource` for reading datasets cached offline."""
+
+  def __init__(self, cache_dir: str, split: str):
+
+    with tf.io.gfile.GFile(utils.get_cached_info_path(cache_dir, split)) as f:
+      split_info = json.load(f)
+      features = split_info["features"]
+
+    with tf.io.gfile.GFile(utils.get_cached_stats_path(cache_dir, split)) as f:
+      stats = json.load(f)
+
+    version_when_cached = version.Version(
+        split_info.get("seqio_version", "0.pre"))
+    version_with_true_dtypes = version.Version("0.0.0")
+    if version_when_cached < version_with_true_dtypes:
+      # Assume that all int64 features are really int32.
+      for name, feat in features.items():
+        if feat["dtype"] == "int64":
+          logging.info("Casting cached '%s' to int32.", name)
+          feat["dtype"] = "int32"
+
+    # Use `FixedLenSequenceFeature` for sequences with variable length.
+    def _feature_config(shape, dtype):
+      if dtype in ("int32", "bool"):
+        # int32 and bool are stored as int64 in the tf.train.Example protobuf.
+        # TODO(adarob): Support other conversions.
+        dtype = "int64"
+      if shape and shape[0] is None:
+        return tf.io.FixedLenSequenceFeature(
+            shape[1:], dtype, allow_missing=True)
+      return tf.io.FixedLenFeature(shape, dtype)
+
+    feature_description = {
+        feat: _feature_config(**desc) for feat, desc in features.items()
+    }
+
+    def read_file_fn(filepattern):
+      ds = tf.data.TFRecordDataset(filepattern)
+      ds = ds.map(
+          lambda pb: tf.io.parse_single_example(pb, feature_description),
+          num_parallel_calls=tf.data.experimental.AUTOTUNE)
+      # Cast features back to the types from the info JSON since some features
+      # must be cast for storage (e.g., in32 is stored as int64).
+      ds = ds.map(
+          lambda x: {k: tf.cast(v, features[k]["dtype"]) for k, v in x.items()},
+          num_parallel_calls=tf.data.experimental.AUTOTUNE)
+      # Legacy cached datasets may use old "_plaintext" suffix. Rename to
+      # "_pretokenized".
+      ds = _rename_plaintext_to_pretokenized(ds)
+      return ds
+
+    split_to_filepattern = {
+        split: "%s-*-of-*%d" % (
+            utils.get_cached_tfrecord_prefix(cache_dir, split),
+            split_info["num_shards"])
+    }
+
+    super().__init__(
+        read_file_fn=read_file_fn,
+        split_to_filepattern=split_to_filepattern,
+        num_input_examples={split: stats["examples"]}
+    )
+
+
 class CacheDatasetPlaceholder(object):
   """A placeholder to signal when in the pipeline offline caching will occur."""
 
   def __call__(self, dataset):
     raise RuntimeError("`CacheDatasetPlaceholder` should never be called.")
+
+
+# ================================ Tasks =======================================
 
 
 MetricFnCallable = Callable[..., Mapping[str, float]]
@@ -695,13 +753,6 @@ class Task(DatasetProviderBase):
 
     return dataset
 
-  def _cast_output_features(self, dataset: tf.data.Dataset) -> tf.data.Dataset:
-    """Cast output features to the specified dtypes, leaving others as-is."""
-    dtypes = {k: f.dtype for k, f in self.output_features.items()}
-    return dataset.map(
-        lambda x: {k: tf.cast(v, dtypes.get(k, v.dtype)) for k, v in x.items()},
-        num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
   def _trim_output_features(
       self,
       dataset: tf.data.Dataset,
@@ -884,13 +935,6 @@ class Task(DatasetProviderBase):
 
     # Post cache processing.
     ds = self.preprocess_postcache(ds, sequence_length=sequence_length)
-    if use_cached:
-      # Cached datasets were previously tokenized as int64, so we may need to
-      # cast here (e.g., to int32).
-      ds = self._cast_output_features(ds)
-      # Legacy cached datasets may use old "_plaintext" suffix. Rename to
-      # "_pretokenized".
-      ds = _rename_plaintext_to_pretokenized(ds)
     ds = self._validate_preprocessing(ds)
     ds = self._trim_output_features(ds, sequence_length=sequence_length)
 
@@ -902,43 +946,10 @@ class Task(DatasetProviderBase):
 
     return ds.prefetch(tf.data.experimental.AUTOTUNE)
 
-  def _get_cached_source(self, split) -> TFExampleDataSource:
+  def _get_cached_source(self, split) -> _CachedDataSource:
     """Returns a DataSource to read cached files for split."""
     self.assert_cached()
-    with tf.io.gfile.GFile(
-        utils.get_cached_info_path(self.cache_dir, split)) as f:
-      split_info = json.load(f)
-
-    # Use `FixedLenSequenceFeature` for sequences with variable length.
-    def _feature_config(shape, dtype):
-      if shape and shape[0] is None:
-        return tf.io.FixedLenSequenceFeature(
-            shape[1:], dtype, allow_missing=True)
-      return tf.io.FixedLenFeature(shape, dtype)
-
-    # int32 and bool are stored as int64 in the tf.train.Example protobuf.
-    # TODO(adarob): Support other conversions.
-    for feat in split_info["features"].values():
-      if feat["dtype"] in ("int32", "bool"):
-        feat["dtype"] = "int64"
-
-    feature_desc = {
-        feat: _feature_config(**desc)
-        for feat, desc in split_info["features"].items()
-    }
-
-    return TFExampleDataSource(
-        split_to_filepattern={
-            split: "%s-*-of-*%d" % (
-                utils.get_cached_tfrecord_prefix(self.cache_dir, split),
-                split_info["num_shards"]
-            )
-        },
-        feature_description=feature_desc,
-        num_input_examples={
-            split: self.get_cached_stats(split)["examples"]
-        }
-    )
+    return _CachedDataSource(self.cache_dir, split)
 
   def postprocess_fn(self, decoded_model_output: Any,
                      **postprocess_kwargs) -> Any:

@@ -21,5 +21,6 @@
       "shape": []
     }
   },
-  "num_shards": 2
+  "num_shards": 2,
+  "seqio_version": "0.0.0"
 }

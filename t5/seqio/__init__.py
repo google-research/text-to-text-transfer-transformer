@@ -15,6 +15,8 @@
 """Import data modules."""
 # pylint:disable=wildcard-import
 
+__version__ = "0.0.0"
+
 from t5.seqio.dataset_providers import *
 import t5.seqio.evaluation
 from t5.seqio.evaluation import Evaluator

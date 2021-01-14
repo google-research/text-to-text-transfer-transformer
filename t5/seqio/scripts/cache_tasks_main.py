@@ -220,7 +220,11 @@ class GetInfo(beam.PTransform):
       return {}
     assert len(ex) == 1
     ex = ex[0]
-    info = {"num_shards": self._num_shards, "features": {}}
+    info = {
+        "num_shards": self._num_shards,
+        "features": {},
+        "seqio_version": seqio.__version__,
+    }
     feature_dict = info["features"]
     for k, v in ex.items():
       t = tf.constant(v)

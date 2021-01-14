@@ -189,7 +189,7 @@ def get_fake_dataset(split, shuffle_files=False, seed=None, shard_info=None):
   output_types = {"prefix": tf.string, "suffix": tf.string}
   if split == "validation":
     output_types.update(
-        {"idx": tf.int32, "idxs": tf.int32,
+        {"idx": tf.int64, "idxs": tf.int32,
          "id": tf.string, "ids": tf.string})
   output_shapes = {k: [] for k in output_types}
   if split == "validation":
@@ -351,15 +351,21 @@ def _assert_compare_to_fake_dataset(
   expected_output_shapes = {
       "inputs": [None], "targets": [None],
       "inputs_pretokenized": [], "targets_pretokenized": []}
+  expected_output_dtypes = {
+      "inputs": tf.int32, "targets": tf.int32,
+      "inputs_pretokenized": tf.string, "targets_pretokenized": tf.string}
   if split == "validation":
     expected_output_shapes.update(
         {"id": [], "ids": [None], "idx": [], "idxs": [None]})
+    expected_output_dtypes.update(
+        {"id": tf.string, "ids": tf.string, "idx": tf.int64, "idxs": tf.int32})
+  # Override with Feature dtypes.
+  for k, f in features.items():
+    expected_output_dtypes[k] = f.dtype
   _pyunit_proxy.assertDictEqual(
       expected_output_shapes,
       {k: v.shape.as_list() for k, v in ds.element_spec.items()})
-
-  expected_output_dtypes = {k: f.dtype for k, f in features.items()}
-  _pyunit_proxy.assertDictContainsSubset(
+  _pyunit_proxy.assertDictEqual(
       expected_output_dtypes,
       {k: v.dtype for k, v in ds.element_spec.items()})
 

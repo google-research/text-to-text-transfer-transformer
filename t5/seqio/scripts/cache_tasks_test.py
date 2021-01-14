@@ -92,13 +92,21 @@ class ProcessTaskBeamTest(test_utils.FakeTaskTest):
         tf.io.gfile.listdir(actual_task_dir))
 
     for fname in expected_auxiliary_files:
-      self.assertEqual(
-          tf.io.gfile.GFile(os.path.join(expected_task_dir,
-                                         fname)).read().replace(
-                                             '"num_shards": 2',
-                                             f'"num_shards": {num_shards}'),
-          tf.io.gfile.GFile(os.path.join(actual_task_dir,
-                                         fname)).read().replace(", ", ","))
+      actual_content = tf.io.gfile.GFile(
+          os.path.join(actual_task_dir, fname)).read()
+      expected_content = tf.io.gfile.GFile(
+          os.path.join(expected_task_dir, fname)).read()
+
+      # Accept minor formatting difference.
+      actual_content = actual_content.replace(", ", ",")
+      # Replace with actual number of shards.
+      expected_content = expected_content.replace(
+          '"num_shards": 2', f'"num_shards": {num_shards}')
+      # Replace with actual version.
+      version = seqio.__version__
+      expected_content = expected_content.replace(
+          '"seqio_version": "0.0.0"', f'"seqio_version": "{version}"')
+      self.assertEqual(expected_content, actual_content)
 
     # Add COMPLETED file so that we can load `uncached_task`.
     mark_completed(self.test_data_dir, task_name)
