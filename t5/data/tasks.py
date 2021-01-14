@@ -41,6 +41,11 @@ DEFAULT_OUTPUT_FEATURES = {
         vocabulary=t5.data.get_default_vocabulary(), add_eos=True)
 }
 
+DEFAULT_OUTPUT_FEATURES_LM = {
+    "targets": seqio.Feature(
+        vocabulary=t5.data.get_default_vocabulary(), add_eos=True)
+}
+
 # ==================================== C4 ======================================
 # Final pretraining task used in Raffel et al., 2019.
 TaskRegistry.add(
@@ -91,6 +96,24 @@ for config_suffix in _c4_config_suffixes:
       token_preprocessor=preprocessors.unsupervised,
       output_features=DEFAULT_OUTPUT_FEATURES,
       metric_fns=[])
+
+
+TaskRegistry.add(
+    "c4_v220_lm",
+    TfdsTask,
+    tfds_name="c4/en:2.2.0",
+    text_preprocessor=functools.partial(
+        preprocessors.rekey, key_map={
+            "inputs": None,
+            "targets": "text"
+        }),
+    token_preprocessor=[
+        preprocessors.reduce_concat_tokens,
+        preprocessors.split_tokens_to_targets_length,
+    ],
+    output_features=DEFAULT_OUTPUT_FEATURES_LM,
+    metric_fns=[],
+    supports_caching=False)
 
 
 # ================================ Wikipedia ===================================
