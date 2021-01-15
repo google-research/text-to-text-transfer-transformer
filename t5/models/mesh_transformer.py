@@ -33,6 +33,7 @@ DEPRECATED_GIN_REFERENCES = (
     "SentencePieceVocabulary",
     "t5.data.sentencepiece_vocabulary.SentencePieceVocabulary",
     "t5.models.mesh_transformer.get_sentencepiece_model_path",
+    "train_model",
     "vocabularies.Vocabulary",
     "Vocabulary",
 )
