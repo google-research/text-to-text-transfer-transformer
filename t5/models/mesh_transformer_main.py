@@ -158,7 +158,7 @@ def main(_):
       command_filename = os.path.join(command_dir, "command.{}".format(suffix))
     with tf.io.gfile.GFile(command_filename, "w") as f:
       f.write(" ".join(sys.argv))
-  except tf.errors.PermissionDeniedError:
+  except (tf.errors.PermissionDeniedError, tf.errors.InvalidArgumentError):
     logging.info(
         "No write access to model directory. Skipping command logging.")
 
