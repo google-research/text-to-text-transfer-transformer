@@ -271,6 +271,8 @@ class Evaluator:
     if summary_dir:
       with tf.compat.v1.Graph().as_default():
         self._summary_writer = tf.compat.v1.summary.FileWriter(summary_dir)
+    else:
+      self._summary_writer = None
 
   def evaluate(self,
                *,
@@ -346,6 +348,7 @@ class Evaluator:
       return [x[1] for x in sorted(indices_and_outputs, key=lambda x: x[0])]
 
     for task in self.eval_tasks:
+      logging.info("Evaluating %s", task.name)
       if task.predict_metric_fns:
         # output_tokens is a list of token_ids where each token_ids
         # corresponds to the model output of the input example.
@@ -383,6 +386,7 @@ class Evaluator:
     all_metrics = {}
 
     for task in self.eval_tasks:
+      logging.info("Computing metrics for %s", task.name)
       task_dataset = self.cached_task_datasets[task.name]
       targets = self.cached_targets[task.name]
 
