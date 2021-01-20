@@ -16,6 +16,7 @@
 
 import inspect
 import itertools
+import os
 from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 
 from absl import logging
@@ -162,7 +163,6 @@ class Evaluator:
     cached_targets: cached evaluation targets.
     model_feature_lengths: mapping from model feature to its length in the
       `cached_model_datasets`.
-    summary_writer: a tf summary writer for writing the evaluation results.
   """
 
   def __init__(self,
@@ -268,11 +268,8 @@ class Evaluator:
     self._model_feature_lengths = feature_converter.get_model_feature_lengths(
         sequence_length)
 
-    if summary_dir:
-      with tf.compat.v1.Graph().as_default():
-        self._summary_writer = tf.compat.v1.summary.FileWriter(summary_dir)
-    else:
-      self._summary_writer = None
+    self._summary_dir = summary_dir
+    self._summary_writers = {}
 
   def evaluate(self,
                *,
@@ -427,26 +424,28 @@ class Evaluator:
 
   # TODO(hwchung): Support custom logging function metrics.
   def _log_eval_results(self, task_metrics: Mapping[str, float],
-                        step: int, task_name: Optional[str] = None) -> None:
+                        step: int, task_name: str) -> None:
     """Log the eval results and optionally write summaries for TensorBoard."""
     if step is None:
       logging.warning("Step number for the logging session is not provided. "
                       "A dummy value of -1 will be used.")
       step = -1
 
+    summary_writer = self.summary_writer(task_name)
+
     for metric_name, metric_value in task_metrics.items():
-      if self.summary_writer:
+      if summary_writer:
         summary = tf.compat.v1.Summary()
 
-      tag = f"eval/{task_name}/{metric_name}"
+      tag = f"eval/{metric_name}"
       logging.info("%s at step %d: %.3f", tag, step, metric_value)
 
-      if self.summary_writer:
+      if summary_writer:
         summary.value.add(tag=tag, simple_value=metric_value)
-        self.summary_writer.add_summary(summary, step)
+        summary_writer.add_summary(summary, step)
 
-    if self.summary_writer:
-      self.summary_writer.flush()
+    if summary_writer:
+      summary_writer.flush()
 
   @property
   def eval_tasks(self) -> Sequence[Task]:
@@ -468,6 +467,12 @@ class Evaluator:
   def model_feature_lengths(self) -> Mapping[str, int]:
     return self._model_feature_lengths
 
-  @property
-  def summary_writer(self) -> tf.summary.SummaryWriter:
-    return self._summary_writer
+  def summary_writer(self, task_name) -> Optional[tf.summary.SummaryWriter]:
+    """Create (if needed) and return a SummaryWriter for a given task."""
+    if not self._summary_dir:
+      return None
+    if task_name not in self._summary_writers:
+      with tf.compat.v1.Graph().as_default():
+        self._summary_writers[task_name] = tf.compat.v1.summary.FileWriter(
+            os.path.join(self._summary_dir, task_name))
+    return self._summary_writers[task_name]

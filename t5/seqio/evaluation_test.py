@@ -197,7 +197,8 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_task_datasets = {task.name: tf.data.Dataset.range(3)}
       self._cached_targets = {task.name: ["e5 e6", "e6", "e7"]}
       self._eval_tasks = [task]
-      self._summary_writer = None
+      self._summary_dir = None
+      self._summary_writers = {}
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -246,7 +247,8 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_task_datasets = {task.name: tf.data.Dataset.range(2)}
       self._cached_targets = {task.name: [[5, 6], [6, 7]]}
       self._eval_tasks = [task]
-      self._summary_writer = None
+      self._summary_dir = None
+      self._summary_writers = {}
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -275,7 +277,8 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_task_datasets = {task.name: tf.data.Dataset.range(3)}
       self._cached_targets = {task.name: [0, 1, 2]}
       self._eval_tasks = [task]
-      self._summary_writer = None
+      self._summary_dir = None
+      self._summary_writers = {}
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -324,7 +327,8 @@ class EvaluationTest(tf.test.TestCase):
           task2.name: [0, 1, 2]
       }
       self._eval_tasks = [task1, task2]
-      self._summary_writer = None
+      self._summary_dir = None
+      self._summary_writers = {}
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       def predict_fn(ds):
@@ -535,7 +539,8 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_model_datasets = {task.name: eval_ds}
       self._cached_task_datasets = {task.name: tf.data.Dataset.range(3)}
       self._eval_tasks = [task]
-      self._summary_writer = None
+      self._summary_dir = None
+      self._summary_writers = {}
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -559,7 +564,8 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_task_datasets = {task.name: tf.data.Dataset.range(3)}
       self._cached_targets = {task.name: ["e5", "e6", "e7"]}
       self._eval_tasks = [task]
-      self._summary_writer = None
+      self._summary_dir = None
+      self._summary_writers = {}
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -618,8 +624,8 @@ class EvaluationTest(tf.test.TestCase):
     summary_dir = self.create_tempdir().full_path
 
     def mock_init(self):
-      with tf.compat.v1.Graph().as_default():
-        self._summary_writer = tf.compat.v1.summary.FileWriter(summary_dir)
+      self._summary_dir = summary_dir
+      self._summary_writers = {}
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -627,7 +633,9 @@ class EvaluationTest(tf.test.TestCase):
     task_metrics = {"rouge1": 50, "rouge2": 100}
     evaluator._log_eval_results(
         task_metrics=task_metrics, step=1, task_name="log_eval_task")
-    event_file = os.path.join(summary_dir, tf.io.gfile.listdir(summary_dir)[0])
+    task_summary_dir = os.path.join(summary_dir, "log_eval_task")
+    event_file = os.path.join(
+        task_summary_dir, tf.io.gfile.listdir(task_summary_dir)[0])
     # First event is boilerplate
     serialized_events = list(tfds.as_numpy(
         tf.data.TFRecordDataset(event_file)))[1:]
@@ -640,8 +648,8 @@ class EvaluationTest(tf.test.TestCase):
     rouge2 = event2.simple_value
     tag_rouge2 = event2.tag
 
-    self.assertEqual(tag_rouge1, "eval/log_eval_task/rouge1")
-    self.assertEqual(tag_rouge2, "eval/log_eval_task/rouge2")
+    self.assertEqual(tag_rouge1, "eval/rouge1")
+    self.assertEqual(tag_rouge2, "eval/rouge2")
     self.assertAlmostEqual(rouge1, 50, places=4)
     self.assertAlmostEqual(rouge2, 100, places=4)
 
