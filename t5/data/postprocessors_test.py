@@ -15,7 +15,7 @@
 """Tests for t5.data.postprocessors."""
 
 from absl.testing import absltest
-
+import numpy as np
 from t5.data import postprocessors
 
 
@@ -129,19 +129,17 @@ class PostprocessorsTest(absltest.TestCase):
         postprocessors.rank_classification(
             "blah", example={
                 "is_correct": False,
-                "idx": 10,
-            }, is_target=True), (10, False, 1))
+                "idx": np.array([10, 1]),
+            }, is_target=True), ((10, 1), False, 1))
 
     # The example has weight feature.
     self.assertEqual(
         postprocessors.rank_classification(
             "blah", example={
                 "is_correct": False,
-                "idx": 10,
+                "idx": np.array([10, 1]),
                 "weight": 0
-            }, is_target=True), (10, False, 0))
-
-
+            }, is_target=True), ((10, 1), False, 0))
 
 
 if __name__ == "__main__":

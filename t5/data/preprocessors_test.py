@@ -1249,7 +1249,7 @@ class PreprocessorsTest(tf.test.TestCase):
         preprocessor(mode='train'),
         [
             {
-                'idx': 0,
+                'idx': [0, 1],
                 'inputs': 'the sky is blue',
                 'targets': 'class 1',
                 'is_correct': True,
@@ -1260,13 +1260,13 @@ class PreprocessorsTest(tf.test.TestCase):
         preprocessor(mode='eval'),
         [
             {
-                'idx': 0,
+                'idx': [0, 0],
                 'inputs': 'cats are so cute',
                 'targets': 'class 0',
                 'is_correct': False,
             },
             {
-                'idx': 0,
+                'idx': [0, 1],
                 'inputs': 'the sky is blue',
                 'targets': 'class 1',
                 'is_correct': True,
@@ -1277,7 +1277,7 @@ class PreprocessorsTest(tf.test.TestCase):
         preprocessor(mode='fewshot_eval'),
         [
             {
-                'idx': [0, 0],
+                'idx': [[0, 0], [0, 1]],
                 'inputs': ['cats are so cute', 'the sky is blue'],
                 'targets': ['class 0', 'class 1'],
                 'is_correct': [False, True]
@@ -1301,13 +1301,13 @@ class PreprocessorsTest(tf.test.TestCase):
         preprocessor(mode='train'),
         [
             {
-                'idx': 0,
+                'idx': [0, 1],
                 'inputs': 'the sky is blue',
                 'targets': 'class 1',
                 'is_correct': True,
             },
             {
-                'idx': 0,
+                'idx': [0, 2],
                 'inputs': 'X',
                 'targets': 'class 2',
                 'is_correct': True,
@@ -1318,19 +1318,19 @@ class PreprocessorsTest(tf.test.TestCase):
         preprocessor(mode='eval'),
         [
             {
-                'idx': 0,
+                'idx': [0, 0],
                 'inputs': 'cats are so cute',
                 'targets': 'class 0',
                 'is_correct': False,
             },
             {
-                'idx': 0,
+                'idx': [0, 1],
                 'inputs': 'the sky is blue',
                 'targets': 'class 1',
                 'is_correct': True,
             },
             {
-                'idx': 0,
+                'idx': [0, 2],
                 'inputs': 'X',
                 'targets': 'class 2',
                 'is_correct': True,
@@ -1341,7 +1341,7 @@ class PreprocessorsTest(tf.test.TestCase):
         preprocessor(mode='fewshot_eval'),
         [
             {
-                'idx': [0, 0, 0],
+                'idx': [[0, 0], [0, 1], [0, 2]],
                 'inputs': ['cats are so cute', 'the sky is blue', 'X'],
                 'targets': ['class 0', 'class 1', 'class 2'],
                 'is_correct': [False, True, True]
@@ -1365,7 +1365,7 @@ class PreprocessorsTest(tf.test.TestCase):
 
     test_utils.assert_dataset(
         preprocessor(mode='train'), [{
-            'idx': 0,
+            'idx': [0, 1],
             'inputs': 'the sky is blue',
             'targets': 'class 1',
             'is_correct': True,
@@ -1374,13 +1374,13 @@ class PreprocessorsTest(tf.test.TestCase):
 
     test_utils.assert_dataset(
         preprocessor(mode='eval'), [{
-            'idx': 0,
+            'idx': [0, 0],
             'inputs': 'cats are so cute',
             'targets': 'class 0',
             'is_correct': False,
             'weight': 1.0,
         }, {
-            'idx': 0,
+            'idx': [0, 1],
             'inputs': 'the sky is blue',
             'targets': 'class 1',
             'is_correct': True,
@@ -1390,7 +1390,7 @@ class PreprocessorsTest(tf.test.TestCase):
     test_utils.assert_dataset(
         preprocessor(mode='fewshot_eval'), [
             {
-                'idx': [0, 0],
+                'idx': [[0, 0], [0, 1]],
                 'inputs': ['cats are so cute', 'the sky is blue'],
                 'targets': ['class 0', 'class 1'],
                 'is_correct': [False, True],
@@ -1471,28 +1471,28 @@ class PreprocessorsTest(tf.test.TestCase):
         dataset,
         [
             {
-                'idx': 0,
+                'idx': [0, 0],
                 'inputs':
                     'The farmland needed irrigation. What is the effect? X',
                 'targets': 'I think a canal was constructed.',
                 'is_correct': True
             },
             {
-                'idx': 0,
+                'idx': [0, 1],
                 'inputs':
                     'The farmland needed irrigation. What is the effect? X',
                 'targets': 'I think the crops grew tall.',
                 'is_correct': False
             },
             {
-                'idx': 1,
+                'idx': [1, 0],
                 'inputs':
                     'I decided to stay home last night. What is the cause? X',
                 'targets': 'I think I wanted to see people.',
                 'is_correct': False
             },
             {
-                'idx': 1,
+                'idx': [1, 1],
                 'inputs':
                     'I decided to stay home last night. What is the cause? X',
                 'targets': 'I think I was too tired.',
@@ -1512,28 +1512,28 @@ class PreprocessorsTest(tf.test.TestCase):
         dataset,
         [
             {
-                'idx': 0,
+                'idx': [0, 0],
                 'targets':
                     'The farmland needed irrigation. What is the effect? X',
                 'inputs': 'I think a canal was constructed.',
                 'is_correct': True
             },
             {
-                'idx': 0,
+                'idx': [0, 1],
                 'targets':
                     'The farmland needed irrigation. What is the effect? X',
                 'inputs': 'I think the crops grew tall.',
                 'is_correct': False
             },
             {
-                'idx': 1,
+                'idx': [1, 0],
                 'targets':
                     'I decided to stay home last night. What is the cause? X',
                 'inputs': 'I think I wanted to see people.',
                 'is_correct': False
             },
             {
-                'idx': 1,
+                'idx': [1, 1],
                 'targets':
                     'I decided to stay home last night. What is the cause? X',
                 'inputs': 'I think I was too tired.',
@@ -1552,14 +1552,14 @@ class PreprocessorsTest(tf.test.TestCase):
         dataset,
         [
             {
-                'idx': 0,
+                'idx': [0, 0],
                 'inputs':
                     'The farmland needed irrigation. What is the effect? X',
                 'targets': 'I think a canal was constructed.',
                 'is_correct': True
             },
             {
-                'idx': 1,
+                'idx': [1, 1],
                 'inputs':
                     'I decided to stay home last night. What is the cause? X',
                 'targets': 'I think I was too tired.',
@@ -1578,7 +1578,7 @@ class PreprocessorsTest(tf.test.TestCase):
         dataset,
         [
             {
-                'idx': [0, 0],
+                'idx': [[0, 0], [0, 1]],
                 'inputs': [
                     'The farmland needed irrigation. What is the effect? X',
                     'The farmland needed irrigation. What is the effect? X',
@@ -1590,7 +1590,7 @@ class PreprocessorsTest(tf.test.TestCase):
                 'is_correct': [True, False]
             },
             {
-                'idx': [1, 1],
+                'idx': [[1, 0], [1, 1]],
                 'inputs': [
                     'I decided to stay home last night. What is the cause? X',
                     'I decided to stay home last night. What is the cause? X',
@@ -1632,7 +1632,7 @@ class PreprocessorsTest(tf.test.TestCase):
         dataset,
         [
             {
-                'idx': 0,
+                'idx': [0, 0],
                 'inputs':
                     'creating paper requires cutting down trees. What is the '
                     'ultimate source of greeting cards? X 0',
@@ -1641,7 +1641,7 @@ class PreprocessorsTest(tf.test.TestCase):
                 'is_correct': True,
             },
             {
-                'idx': 0,
+                'idx': [0, 1],
                 'inputs':
                     'creating paper requires cutting down trees. What is the '
                     'ultimate source of greeting cards? X 0',
@@ -1719,28 +1719,28 @@ class PreprocessorsTest(tf.test.TestCase):
 
     test_utils.assert_dataset(dataset, [
         {
-            'idx': 0,
+            'idx': [0, 0],
             'inputs': 'The farmland needed irrigation. What is the effect? X',
             'targets': 'I think a canal was constructed.',
             'is_correct': True,
             'weight': 1.0,
         },
         {
-            'idx': 0,
+            'idx': [0, 1],
             'inputs': 'The farmland needed irrigation. What is the effect? X',
             'targets': 'I think the crops grew tall.',
             'is_correct': False,
             'weight': 1.0,
         },
         {
-            'idx': 1,
+            'idx': [1, 0],
             'inputs': 'I decided to stay home last night. What is the cause? X',
             'targets': 'I think I wanted to see people.',
             'is_correct': False,
             'weight': 0.5,
         },
         {
-            'idx': 1,
+            'idx': [1, 1],
             'inputs': 'I decided to stay home last night. What is the cause? X',
             'targets': 'I think I was too tired.',
             'is_correct': True,
@@ -1758,14 +1758,14 @@ class PreprocessorsTest(tf.test.TestCase):
 
     test_utils.assert_dataset(dataset, [
         {
-            'idx': 0,
+            'idx': [0, 0],
             'inputs': 'The farmland needed irrigation. What is the effect? X',
             'targets': 'I think a canal was constructed.',
             'is_correct': True,
             'weight': 1.0,
         },
         {
-            'idx': 1,
+            'idx': [1, 1],
             'inputs': 'I decided to stay home last night. What is the cause? X',
             'targets': 'I think I was too tired.',
             'is_correct': True,
@@ -1783,7 +1783,7 @@ class PreprocessorsTest(tf.test.TestCase):
 
     test_utils.assert_dataset(dataset, [
         {
-            'idx': [0, 0],
+            'idx': [[0, 0], [0, 1]],
             'inputs': [
                 'The farmland needed irrigation. What is the effect? X',
                 'The farmland needed irrigation. What is the effect? X',
@@ -1796,7 +1796,7 @@ class PreprocessorsTest(tf.test.TestCase):
             'weight': 1.0,
         },
         {
-            'idx': [1, 1],
+            'idx': [[1, 0], [1, 1]],
             'inputs': [
                 'I decided to stay home last night. What is the cause? X',
                 'I decided to stay home last night. What is the cause? X',

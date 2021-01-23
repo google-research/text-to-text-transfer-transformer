@@ -352,7 +352,7 @@ def sklearn_metrics_wrapper(metric_str,
 
 
 def rank_classification(
-    targets: Sequence[Tuple[int, bool, float]],
+    targets: Sequence[Tuple[Sequence[int], bool, float]],
     scores: Sequence[float],
     num_classes: Optional[int] = None) -> Dict[str, Union[float, int]]:
   """Computes standard metrics classification based on log likelihood ranking.
@@ -382,15 +382,28 @@ def rank_classification(
   assert len(targets) == len(scores)
   if len(targets[0]) != 3:
     raise ValueError(
-        "`targets` should contain three elements. Only %d are provided." %
-        len(targets[0]))
+        f"`targets` should contain 3 elements but has {len(targets[0])}.")
+
+  idx_0 = targets[0][0]
+  if not hasattr(idx_0, "__len__") or len(idx_0) != 2:
+    raise ValueError(
+        "The first element of `targets` ('idx') should be 2-dimensional. "
+        f"Got {idx_0}.")
+
+  # Sort by 'idx' since the function relies on this assumption.
+  # ((idx, is_correct, weight), score)
+  get_idx = lambda x: x[0][0]
+  targets, scores = zip(*sorted(zip(targets, scores), key=get_idx))
 
   if not num_classes:
     # Assuming variable classes. Can only compute accuracy.
     num_correct = 0
     total = 0
-    for _, grp in itertools.groupby(
-        zip(targets, scores), lambda x: x[0][0]):
+
+    # (((input idx, output idx), is_correct, weight), score)
+    get_grp = lambda x: x[0][0][0]
+
+    for _, grp in itertools.groupby(zip(targets, scores), get_grp):
       exs, log_likelihoods = zip(*grp)
       prediction = np.argmax(log_likelihoods)
       weights = exs[prediction][2]
@@ -401,6 +414,7 @@ def rank_classification(
     }
 
   assert len(targets) % num_classes == 0
+
   labels_indicator = np.array([is_correct for _, is_correct, _ in targets
                               ]).reshape((-1, num_classes))
   weights = np.array([weight for _, _, weight in targets]).reshape(

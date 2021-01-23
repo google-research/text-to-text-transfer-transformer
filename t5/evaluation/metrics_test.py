@@ -260,14 +260,26 @@ class MetricsTest(test_utils.BaseMetricsTest):
     # num_classes = 2
     self.assertDictClose(
         metrics.rank_classification(
-            [(0, True, 1.0), (0, False, 1.0),
-             (1, False, 1.0), (1, True, 1.0),
-             (0, True, 1.0), (0, False, 1.0),
-             (0, True, 1.0), (0, False, 1.0),],
-            [0.1, 0.5,
-             1.0, 1.1,
-             0.3, 0.1,
-             0.6, 0.5],
+            [
+                # 0
+                ((0, 0), True, 1.0),
+                ((0, 1), False, 1.0),
+                # 1
+                ((1, 0), False, 1.0),
+                ((1, 1), True, 1.0),
+                # 0
+                ((2, 0), True, 1.0),
+                ((2, 1), False, 1.0),
+                # 0
+                ((3, 0), True, 1.0),
+                ((3, 1), False, 1.0),
+            ],
+            [
+                0.1, 0.5,
+                1.0, 1.1,
+                0.3, 0.1,
+                0.6, 0.5
+            ],
             num_classes=2),
         {
             "accuracy": 75.,
@@ -281,19 +293,23 @@ class MetricsTest(test_utils.BaseMetricsTest):
         metrics.rank_classification(
             [
                 # 1
-                (0, False, 1.0),
-                (0, True, 1.0),
-                (0, False, 1.0),
+                ((0, 0), False, 1.0),
+                ((0, 1), True, 1.0),
+                ((0, 2), False, 1.0),
                 # 0
-                (1, True, 1.0),
-                (1, False, 1.0),
-                (1, False, 1.0),
+                ((1, 0), True, 1.0),
+                ((1, 1), False, 1.0),
+                ((1, 2), False, 1.0),
                 # 2
-                (2, False, 1.0),
-                (2, False, 1.0),
-                (2, True, 1.0)
+                ((2, 0), False, 1.0),
+                ((2, 1), False, 1.0),
+                ((2, 2), True, 1.0)
             ],
-            [0.1, 0.5, 0.0, -2, -1, -3, 3.0, 3.1, 3.2],
+            [
+                0.1, 0.5, 0.0,
+                -2, -1, -3,
+                3.0, 3.1, 3.2
+            ],
             num_classes=3),
         {
             "accuracy": 66.6666667,
@@ -305,12 +321,25 @@ class MetricsTest(test_utils.BaseMetricsTest):
     # num_classes = 3, multi-label
     self.assertDictClose(
         metrics.rank_classification(
-            [(0, False, 1.0), (0, True, 1.0), (0, False, 1.0),  # 1
-             (1, True, 1.0), (1, False, 1.0), (1, True, 1.0),  # 0, 2
-             (2, False, 1.0), (2, True, 1.0), (2, True, 1.0)],  # 1, 2
-            [0.1, 0.5, 0.0,
-             -2, -1, -3,
-             3.0, 3.1, 3.2],
+            [
+                # 1
+                ((0, 0), False, 1.0),
+                ((0, 1), True, 1.0),
+                ((0, 2), False, 1.0),
+                # 0, 2
+                ((1, 0), True, 1.0),
+                ((1, 1), False, 1.0),
+                ((1, 2), True, 1.0),
+                # 1, 2
+                ((2, 0), False, 1.0),
+                ((2, 1), True, 1.0),
+                ((2, 2), True, 1.0)
+            ],
+            [
+                0.1, 0.5, 0.0,
+                -2, -1, -3,
+                3.0, 3.1, 3.2
+            ],
             num_classes=3),
         {
             "accuracy": 66.6666667,
@@ -319,12 +348,22 @@ class MetricsTest(test_utils.BaseMetricsTest):
     # num_classes = None, multi-answer
     self.assertDictClose(
         metrics.rank_classification(
-            [(0, False, 1.0), (0, True, 1.0),  # 1
-             (1, True, 1.0), (1, False, 1.0), (1, True, 1.0),  # 0, 3
-             (2, True, 1.0)],  # 1
-            [0.1, 0.5,
-             -2, -1, -3,
-             3.0],
+            [
+                # 1
+                ((0, 0), False, 1.0),
+                ((0, 1), True, 1.0),
+                # 0, 3
+                ((1, 0), True, 1.0),
+                ((1, 1), False, 1.0),
+                ((1, 2), True, 1.0),
+                # 0
+                ((2, 0), True, 1.0)
+            ],
+            [
+                0.1, 0.5,
+                -2, -1, -3,
+                3.0
+            ],
             num_classes=None),
         {
             "accuracy": 66.6666667,
@@ -334,14 +373,26 @@ class MetricsTest(test_utils.BaseMetricsTest):
     # num_classes = 2
     self.assertDictClose(
         metrics.rank_classification(
-            [(0, True, 0.2), (0, False, 0.2),
-             (1, False, 1.0), (1, True, 1.0),
-             (0, True, 0.8), (0, False, 0.8),
-             (0, True, 0.5), (0, False, 0.5),],
-            [0.1, 0.5,
-             1.0, 1.1,
-             0.3, 0.1,
-             0.6, 0.5],
+            [
+                # 0
+                ((0, 0), True, 0.2),
+                ((0, 1), False, 0.2),
+                # 1
+                ((1, 0), False, 1.0),
+                ((1, 1), True, 1.0),
+                # 0
+                ((2, 0), True, 0.8),
+                ((2, 1), False, 0.8),
+                # 0
+                ((3, 0), True, 0.5),
+                ((3, 1), False, 0.5),
+            ],
+            [
+                0.1, 0.5,
+                1.0, 1.1,
+                0.3, 0.1,
+                0.6, 0.5
+            ],
             num_classes=2),
         {
             "accuracy": 92.0,
@@ -355,19 +406,23 @@ class MetricsTest(test_utils.BaseMetricsTest):
         metrics.rank_classification(
             [
                 # 1
-                (0, False, 0.2),
-                (0, True, 0.2),
-                (0, False, 0.2),
+                ((0, 0), False, 0.2),
+                ((0, 1), True, 0.2),
+                ((0, 2), False, 0.2),
                 # 0
-                (1, True, 0.5),
-                (1, False, 0.5),
-                (1, False, 0.5),
+                ((1, 0), True, 0.5),
+                ((1, 1), False, 0.5),
+                ((1, 2), False, 0.5),
                 # 2
-                (2, False, 1.0),
-                (2, False, 1.0),
-                (2, True, 1.0)
+                ((2, 0), False, 1.0),
+                ((2, 1), False, 1.0),
+                ((2, 2), True, 1.0)
             ],
-            [0.1, 0.5, 0.0, -2, -1, -3, 3.0, 3.1, 3.2],
+            [
+                0.1, 0.5, 0.0,
+                -2, -1, -3,
+                3.0, 3.1, 3.2
+            ],
             num_classes=3),
         {
             "accuracy": 70.5882353,
@@ -379,27 +434,143 @@ class MetricsTest(test_utils.BaseMetricsTest):
     # num_classes = None, multi-answer
     self.assertDictClose(
         metrics.rank_classification(
-            [(0, False, 0.2), (0, True, 0.2),  # 1
-             (1, True, 0.5), (1, False, 0.5), (1, True, 0.5),  # 0, 3
-             (2, True, 1.0)],  # 1
-            [0.1, 0.5,
-             -2, -1, -3,
-             3.0],
+            [
+                # 1
+                ((0, 0), False, 0.2),
+                ((0, 1), True, 0.2),
+                # 0, 3
+                ((1, 0), True, 0.5),
+                ((1, 1), False, 0.5),
+                ((1, 2), True, 0.5),
+                # 1
+                ((2, 0), True, 1.0)
+            ],
+            [
+                0.1, 0.5,
+                -2, -1, -3,
+                3.0
+            ],
+            num_classes=None),
+        {
+            "accuracy": 70.5882353,
+        })
+
+  def test_rank_classification_shuffled(self):
+    # num_classes = 2
+    self.assertDictClose(
+        metrics.rank_classification(
+            [
+                ((3, 0), True, 0.5),
+                ((0, 0), True, 0.2),
+                ((1, 0), False, 1.0),
+                ((1, 1), True, 1.0),
+                ((2, 0), True, 0.8),
+                ((2, 1), False, 0.8),
+                ((3, 1), False, 0.5),
+                ((0, 1), False, 0.2),
+            ],
+            [
+                0.6,
+                0.1,
+                1.0,
+                1.1,
+                0.3,
+                0.1,
+                0.5,
+                0.5,
+            ],
+            num_classes=2),
+        {
+            "accuracy": 92.0,
+            "auc-pr": 89.0,
+            "auc-roc": 86.6666667,
+            "f1": 90.9090909,
+        })
+
+    # num_classes = 3
+    self.assertDictClose(
+        metrics.rank_classification(
+            [
+                ((0, 0), False, 0.2),
+                ((2, 1), False, 1.0),
+                ((0, 1), True, 0.2),
+                ((1, 0), True, 0.5),
+                ((1, 1), False, 0.5),
+                ((1, 2), False, 0.5),
+                ((0, 2), False, 0.2),
+                ((2, 0), False, 1.0),
+                ((2, 2), True, 1.0)
+            ],
+            [
+                0.1,
+                3.1,
+                0.5,
+                -2,
+                -1,
+                -3,
+                0.0,
+                3.0,
+                3.2
+            ],
+            num_classes=3),
+        {
+            "accuracy": 70.5882353,
+            "auc-pr": 52.6610644,
+            "auc-roc": 55.5555556,
+            "mean_3class_f1": 48.1481481,
+        })
+
+    # num_classes = None, multi-answer
+    self.assertDictClose(
+        metrics.rank_classification(
+            [
+                ((0, 0), False, 0.2),
+                ((2, 0), True, 1.0),
+                ((0, 1), True, 0.2),
+                ((1, 2), True, 0.5),
+                ((1, 0), True, 0.5),
+                ((1, 1), False, 0.5),
+            ],
+            [
+                0.1,
+                3.0,
+                0.5,
+                -3,
+                -2,
+                -1,
+            ],
             num_classes=None),
         {
             "accuracy": 70.5882353,
         })
 
   def test_rank_classification_raise(self):
-    with self.assertRaisesRegex(
+    with self.assertRaisesWithLiteralMatch(
         ValueError,
-        "`targets` should contain three elements. Only 2 are provided."):
-      metrics.rank_classification([
-          (0, True),
-          (0, True),
-          (0, False),
-      ], [0.1, 0.5, 1.0],
-                                  num_classes=2)
+        "`targets` should contain 3 elements but has 2."):
+      metrics.rank_classification(
+          [
+              ((0, 0), True),
+              ((0, 1), True),
+          ],
+          [
+              0.1, 0.5
+          ],
+          num_classes=2)
+
+    with self.assertRaisesWithLiteralMatch(
+        ValueError,
+        "The first element of `targets` ('idx') should be 2-dimensional. Got "
+        "0."):
+      metrics.rank_classification(
+          [
+              (0, True, 1.0),
+              (0, True, 1.0),
+          ],
+          [
+              0.1, 0.5
+          ],
+          num_classes=2)
 
   def test_coqa_tokenize(self):
     self.assertEqual(metrics._coqa_tokenize("Maru the cat"), ["maru", "cat"])

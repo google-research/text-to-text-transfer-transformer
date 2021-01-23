@@ -1541,9 +1541,12 @@ def rank_classification(ds: tf.data.Dataset,
   In 'eval' mode, all inputs / targets will be produced.
   In 'fewshot_eval', all inputs / targets will be produced as a single batch.
 
-  Each input example will also be given a unique, sequential index called 'idx'.
+  Each output example will also be given a unique 'idx' feature. The first dim
+  is a sequential index for the input example and the second is the index of the
+  generated output for it. E.g., the second output example from the fourth input
+  example would be `[3, 1]`.
 
-  For example, consider the following arguments:
+  To be clear, consider the following arguments:
 
   inputs_fn=lambda ex: ex['prefix'],
   targets_fn=lambda ex: ex['suffix'],
@@ -1561,14 +1564,14 @@ def rank_classification(ds: tf.data.Dataset,
   the preprocessor would return:
 
   [{
-      'idx': 0,
+      'idx': [0, 0],
       'inputs': 'The farmland needed ',
       'targets': 'water',
       'is_correct': True,
       'weight': 1.0
    },
    {
-     'idx': 0,
+     'idx': [0, 1],
      'inputs': 'The farmland wanted ',
      'targets': 'cows',
      'is_correct': False,
@@ -1612,8 +1615,12 @@ def rank_classification(ds: tf.data.Dataset,
         '`inputs_fn`, `targets_fn`, and `is_correct_fn` must return the same '
         'size tensors.')
 
+    num_out = tf.size(is_correct)
+    in_idx = tf.fill([num_out], tf.cast(idx, tf.int32))
+    out_idx = tf.range(num_out)
+
     output = {
-        'idx': tf.fill(tf.shape(is_correct), idx),
+        'idx': tf.stack([in_idx, out_idx], 1),
         'inputs': inputs,
         'targets': targets,
         'is_correct': is_correct,

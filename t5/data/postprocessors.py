@@ -121,6 +121,8 @@ def wsc_simple(prediction, example=None, is_target=False):
 def rank_classification(score, example=None, is_target=False):
   """A postprocessor for the `rank_classification` preprocessor and metric."""
   if is_target:
-    return (example["idx"], example["is_correct"], example.get("weight", 1.0))
+    return (
+        tuple(example["idx"]), example["is_correct"], example.get("weight", 1.0)
+    )
   else:
     return score
