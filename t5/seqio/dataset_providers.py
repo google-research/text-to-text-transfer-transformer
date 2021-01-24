@@ -986,11 +986,13 @@ class TaskRegistry(DatasetProviderRegistry):
 class Mixture(DatasetProviderBase):
   """Class for mixing multiple tasks."""
 
-  def __init__(
-      self,
-      name: str,
-      tasks: Union[Sequence[str], Sequence[Tuple[str, int]]],
-      default_rate: Union[float, Callable[[Task], float]] = None):
+  def __init__(self,
+               name: str,
+               tasks: Union[Sequence[str],
+                            Sequence[Tuple[str, Union[int, float,
+                                                      Callable[[Task],
+                                                               float]]]]],
+               default_rate: Union[float, Callable[[Task], float]] = None):
     """Mixture constructor.
 
     A mixture specifies a set of tasks with associated mixing rates.
