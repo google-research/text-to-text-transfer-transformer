@@ -197,8 +197,7 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_task_datasets = {task.name: tf.data.Dataset.range(3)}
       self._cached_targets = {task.name: ["e5 e6", "e6", "e7"]}
       self._eval_tasks = [task]
-      self._summary_dir = None
-      self._summary_writers = {}
+      self._log_fn = None
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -247,8 +246,7 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_task_datasets = {task.name: tf.data.Dataset.range(2)}
       self._cached_targets = {task.name: [[5, 6], [6, 7]]}
       self._eval_tasks = [task]
-      self._summary_dir = None
-      self._summary_writers = {}
+      self._log_fn = None
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -277,8 +275,7 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_task_datasets = {task.name: tf.data.Dataset.range(3)}
       self._cached_targets = {task.name: [0, 1, 2]}
       self._eval_tasks = [task]
-      self._summary_dir = None
-      self._summary_writers = {}
+      self._log_fn = None
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -327,8 +324,7 @@ class EvaluationTest(tf.test.TestCase):
           task2.name: [0, 1, 2]
       }
       self._eval_tasks = [task1, task2]
-      self._summary_dir = None
-      self._summary_writers = {}
+      self._log_fn = None
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       def predict_fn(ds):
@@ -539,8 +535,7 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_model_datasets = {task.name: eval_ds}
       self._cached_task_datasets = {task.name: tf.data.Dataset.range(3)}
       self._eval_tasks = [task]
-      self._summary_dir = None
-      self._summary_writers = {}
+      self._log_fn = None
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -564,8 +559,7 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_task_datasets = {task.name: tf.data.Dataset.range(3)}
       self._cached_targets = {task.name: ["e5", "e6", "e7"]}
       self._eval_tasks = [task]
-      self._summary_dir = None
-      self._summary_writers = {}
+      self._log_fn = None
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -624,14 +618,13 @@ class EvaluationTest(tf.test.TestCase):
     summary_dir = self.create_tempdir().full_path
 
     def mock_init(self):
-      self._summary_dir = summary_dir
-      self._summary_writers = {}
+      self._log_fn = evaluation.TensorboardLogging(summary_dir)
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
 
     task_metrics = {"rouge1": 50, "rouge2": 100}
-    evaluator._log_eval_results(
+    evaluator._log_fn(
         task_metrics=task_metrics, step=1, task_name="log_eval_task")
     task_summary_dir = os.path.join(summary_dir, "log_eval_task")
     event_file = os.path.join(
@@ -652,6 +645,35 @@ class EvaluationTest(tf.test.TestCase):
     self.assertEqual(tag_rouge2, "eval/rouge2")
     self.assertAlmostEqual(rouge1, 50, places=4)
     self.assertAlmostEqual(rouge2, 100, places=4)
+
+  def test_summary_dir_and_log_fn_provided(self):
+    task_name = "summary_dir_and_log_fn_provided"
+    ds = tf.data.Dataset.from_tensors({
+        "inputs": [7, 8],
+        "targets": [3, 9],
+        "targets_pretokenized": "ex 1"
+    })
+    dataset_fn = lambda split, shuffle_files: ds
+    register_dummy_task(
+        task_name,
+        dataset_fn=dataset_fn,
+        # `append_eos_after_trim` has an optional sequence_length arg
+        preprocessor=preprocessors.append_eos_after_trim,
+        metrics_fn=[_sequence_accuracy_metric])
+
+    feature_converter = mock.Mock()
+    summary_dir = "example_summary_dir"
+    log_fn = mock.Mock()
+    with self.assertRaisesWithLiteralMatch(
+        ValueError,
+        "If using a custom logging function a summary dir should not be "
+        f"provided. Got: `log_fn`={log_fn} `summary_dir`={summary_dir}"):
+      _ = Evaluator(
+          mixture_or_task_name=task_name,
+          feature_converter=feature_converter,
+          eval_split="validation",
+          summary_dir=summary_dir,
+          log_fn=log_fn)
 
 
 if __name__ == "__main__":
