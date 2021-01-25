@@ -1304,7 +1304,8 @@ def get_dataset(
     use_cached: bool = False,
     shuffle: bool = True,
     shard_info: ShardInfo = None,
-    verbose: bool = True
+    verbose: bool = True,
+    seed: Optional[int] = None
 ) -> tf.data.Dataset:
   """Get processed dataset with the model features.
 
@@ -1330,6 +1331,7 @@ def get_dataset(
     shuffle: whether to shuffle the dataset.
     shard_info: number of shards and shard index information.
     verbose: if true, log the feature shapes.
+    seed: a random seed to for shuffling tf.data.
 
   Returns:
     ds: the processed dataset.
@@ -1345,7 +1347,8 @@ def get_dataset(
       split=dataset_split,
       use_cached=use_cached,
       shuffle=shuffle,
-      shard_info=shard_info)
+      shard_info=shard_info,
+      seed=seed)
 
   ds = feature_converter(ds, task_feature_lengths=task_feature_lengths)
 
