@@ -132,6 +132,8 @@ class PreprocessTask(beam.PTransform):
       num_shard_examples = int(self._max_input_examples / len(self.shards))
       ds = ds.repeat().take(num_shard_examples)
 
+    ds = ds.prefetch(tf.data.AUTOTUNE)
+
     ds = self._task.preprocess_precache(ds)
 
     for i, ex in enumerate(ds.as_numpy_iterator()):
@@ -142,10 +144,12 @@ class PreprocessTask(beam.PTransform):
       yield ex
 
   def expand(self, pipeline):
+    # The Reshuffles allow for better parallelism.
     return (pipeline
-            | beam.Create(self.shards)
-            | beam.FlatMap(self._emit_examples)
-            | beam.Reshuffle())  # Allows for additional parallelization.
+            | "create_shards" >> beam.Create(self.shards)
+            | "shard_reshuffle" >> beam.Reshuffle()
+            | "emit_examples" >> beam.FlatMap(self._emit_examples)
+            | "example_reshuffle" >> beam.Reshuffle())
 
 
 class WriteExampleTfRecord(beam.PTransform):
