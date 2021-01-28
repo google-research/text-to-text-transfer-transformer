@@ -29,11 +29,16 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_string("summary_dir", None, "Where to search for .events files.")
 flags.DEFINE_string("out_file", None, "Output file to write TSV.")
+flags.DEFINE_bool("perplexity_eval", False,
+                  "Indicates if perplexity_eval mode was used for evaluation.")
 
 
 def main(_):
   events = eval_utils.parse_events_files(FLAGS.summary_dir)
-  scores = eval_utils.get_eval_metric_values(events)
+  if FLAGS.perplexity_eval:
+    scores = events
+  else:
+    scores = eval_utils.get_eval_metric_values(events)
   if not scores:
     logging.info("No evaluation events found in %s", FLAGS.summary_dir)
     return
