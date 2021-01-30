@@ -6,5 +6,8 @@ output_filename = "/path/to/inputs"
 
 utils.run.mode = "infer"
 utils.run.eval_checkpoint_step = %infer_checkpoint_step
-infer_model.input_filename = %input_filename
-infer_model.output_filename = %output_filename
+
+infer_model.decode_fn = @decode_from_file
+
+decode_from_file.input_filename = %input_filename
+decode_from_file.output_filename = %output_filename

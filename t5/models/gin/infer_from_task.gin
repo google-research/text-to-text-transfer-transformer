@@ -1,0 +1,17 @@
+# -*-Python-*-
+
+infer_checkpoint_step = "all"
+input_filename = None  # Unused but needed for launch script re-usability.
+output_filename = "/path/to/outputs"
+num_priming_tokens = 32
+
+utils.run.mode = "infer"
+utils.run.eval_checkpoint_step = %infer_checkpoint_step
+infer_model.decode_fn = @decode_from_dataset
+
+decode_from_dataset.decode_output_dir = %output_filename
+decode_from_dataset.dataset_split = "train"
+decode_from_dataset.infer_dataset_fn = @t5.models.mesh_transformer.mesh_inference_dataset_fn
+
+mesh_inference_dataset_fn.mixture_or_task_name = %MIXTURE_NAME
+mesh_inference_dataset_fn.priming_sequence_length=%num_priming_tokens
