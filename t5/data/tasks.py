@@ -122,7 +122,7 @@ for b in tfds.text.glue.Glue.builder_configs.values():
 TaskRegistry.add(
     "cnn_dailymail_v002",
     TfdsTask,
-    tfds_name="cnn_dailymail:1.0.0",
+    tfds_name="cnn_dailymail:3.1.0",
     text_preprocessor=functools.partial(preprocessors.summarize,
                                         article_key="article",
                                         summary_key="highlights"),
