@@ -1880,6 +1880,18 @@ def preprocess_tsv(line,
 # TODO(adarob): Add a test.
 def span_corruption(dataset, sequence_length, output_features):
   """Final pretraining objective used in Raffel et al., 2019."""
+  input_length, targets_length = random_spans_helper(
+      extra_tokens_per_span_inputs=1,
+      extra_tokens_per_span_targets=1,
+      inputs_length=sequence_length['inputs'],
+      mean_noise_span_length=3.0,
+      noise_density=0.15)
+
+  if sequence_length['targets'] < targets_length:
+    raise ValueError(
+        f'Expected targets length for span corruption ({targets_length}) is '
+        f"less than configured targets length ({sequence_length['targets']})")
+
   ds = dataset
   ds = select_random_chunk(ds, output_features=output_features,
                            feature_key='targets', max_length=65536)
@@ -1888,14 +1900,7 @@ def span_corruption(dataset, sequence_length, output_features):
       ds,
       feature_key='targets',
       min_tokens_per_segment=None,
-      max_tokens_per_segment=random_spans_helper(
-          extra_tokens_per_span_inputs=1,
-          extra_tokens_per_span_targets=1,
-          inputs_length=sequence_length['inputs'],
-          mean_noise_span_length=3.0,
-          noise_density=0.15
-      )[0]
-  )
+      max_tokens_per_segment=input_length)
   ds = denoise(
       ds,
       output_features,
@@ -2449,6 +2454,9 @@ def random_spans_helper(inputs_length=gin.REQUIRED,
 
   This function tells us the required number of tokens in the raw example (for
   split_tokens()) as well as the length of the encoded targets.
+
+  Note that this function assumes the inputs and targets will have EOS appended
+  and includes that in the reported length.
 
   Args:
     inputs_length: an integer - desired length of the tokenized inputs sequence
