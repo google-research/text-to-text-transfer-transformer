@@ -818,10 +818,14 @@ class Task(DatasetProviderBase):
       potential_cache_dirs = [
           os.path.join(d, self.name) for d in utils.get_global_cache_dirs()]
       for cache_dir in potential_cache_dirs:
-        if tf.io.gfile.exists(os.path.join(cache_dir, "COMPLETED")):
-          self._cache_dir = cache_dir
-          logging.info("'%s' is cached at %s.", self.name, self.cache_dir)
-          break
+        try:
+          if tf.io.gfile.exists(os.path.join(cache_dir, "COMPLETED")):
+            self._cache_dir = cache_dir
+            logging.info("'%s' is cached at %s.", self.name, self.cache_dir)
+            break
+        except tf.errors.PermissionDeniedError:
+          logging.warning(
+              "Permission denied for global cache folder: %s", cache_dir)
 
       if not self._cache_dir:
         logging.info(
