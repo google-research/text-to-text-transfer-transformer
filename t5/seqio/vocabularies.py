@@ -159,7 +159,7 @@ class SentencePieceVocabulary(Vocabulary):
   "I like peanut butter and jel<extra_id_0> sandwiches is not.").
   """
 
-  def __init__(self, sentencepiece_model_file, extra_ids=None):
+  def __init__(self, sentencepiece_model_file, extra_ids=None, use_unk=True):
     """Create a SentencePieceVocabulary.
 
     Optionally, specify a number of extra ids to add to the end of the
@@ -168,11 +168,12 @@ class SentencePieceVocabulary(Vocabulary):
     Args:
       sentencepiece_model_file: a string
       extra_ids: an optional integer
+      use_unk: a boolean
     """
     self._sentencepiece_model_file = sentencepiece_model_file
     self._tokenizer = None
     self._sp_model = None
-    super().__init__(use_eos=True, use_unk=True, extra_ids=extra_ids)
+    super().__init__(use_eos=True, use_unk=use_unk, extra_ids=extra_ids)
 
   def _load_model(self):
     """Load SPM and Python tokenizer."""
@@ -192,15 +193,15 @@ class SentencePieceVocabulary(Vocabulary):
     # Load Python tokenizer and ensure the EOS and PAD IDs are correct.
     self._tokenizer = sentencepiece_processor.SentencePieceProcessor()
     self._tokenizer.LoadFromSerializedProto(self._sp_model)
-    if self._tokenizer.pad_id() != 0:
+    if self._tokenizer.pad_id() != PAD_ID:
       raise ValueError(
-          f"Vocabulary PAD ID must be 0, got {self._tokenizer.pad_id()}")
-    if self._tokenizer.eos_id() != 1:
+          f"Vocabulary PAD ID must be {PAD_ID}, got {self._tokenizer.pad_id()}")
+    if self._tokenizer.eos_id() != EOS_ID:
       raise ValueError(
-          f"Vocabulary EOS ID must be 1, got {self._tokenizer.eos_id()}")
-    if self._tokenizer.unk_id() != 2:
+          f"Vocabulary EOS ID must be {EOS_ID}, got {self._tokenizer.eos_id()}")
+    if self.unk_id is not None and self._tokenizer.unk_id() != UNK_ID:
       raise ValueError(
-          f"Vocabulary UNK ID must be 2, got {self._tokenizer.unk_id()}")
+          f"Vocabulary UNK ID must be {UNK_ID}, got {self._tokenizer.unk_id()}")
 
   @property
   def sp_model(self):
