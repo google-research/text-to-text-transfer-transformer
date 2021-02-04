@@ -976,7 +976,7 @@ class TaskRegistry(DatasetProviderRegistry):
       output_features: Mapping[str, Feature],
       preprocessors: Optional[Sequence[Callable[..., tf.data.Dataset]]] = None,
       postprocess_fn: Optional[Callable[..., Any]] = None,
-      metric_fns: Optional[Callable[..., Mapping[str, float]]] = None,
+      metric_fns: Optional[Sequence[Callable[..., Mapping[str, float]]]] = None,
       **kwargs) -> Task:
     return super().add(name, Task, name, source, output_features, preprocessors,
                        postprocess_fn, metric_fns, **kwargs)
