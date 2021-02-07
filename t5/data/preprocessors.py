@@ -1288,14 +1288,21 @@ def _wsc_inputs(x):
       x['text'],
       'The boy continued to whip the pony , and eventually the pony threw him over. John laughed out quite loud. \"Good for him,\" he said. '
       ):
-    return 'The boy continued to whip the pony , and eventually the pony threw him over. John laughed out quite loud. "Good for X ," he said.'
+    return (
+        'The boy continued to whip the pony , and eventually the pony threw '
+        'him over. John laughed out quite loud. "Good for X ," he said.'
+    )
 
   # Using the span2_index, we get 'use' instead of 'it'.
   if tf.equal(
       x['text'],
       'When they had eventually calmed down a bit , and had gotten home, Mr. Farley put the magic pebble in an iron safe . Some day they might want to use it , but really for now, what more could they wish for?'
       ):
-      return 'When they had eventually calmed down a bit , and had gotten home, Mr. Farley put the magic pebble in an iron safe . Some day they might want to use X , but really for now, what more could they wish for?'
+    return (
+        'When they had eventually calmed down a bit , and had gotten home, '
+        'Mr. Farley put the magic pebble in an iron safe . Some day they might '
+        'want to use X , but really for now, what more could they wish for?'
+    )
 
   return create_input()
 
@@ -2433,6 +2440,55 @@ def split_tokens_to_random_length(dataset, sequence_length,
                       min_tokens_per_segment=8,
                       max_tokens_per_segment=max_tokens,
                       **kwargs)
+
+
+@gin.configurable
+def concatenate_and_split_to_fixed_length(dataset,
+                                          sequence_length,
+                                          output_features,
+                                          feature_key='targets',
+                                          **unused_kwargs):
+  """Concatenate tokens across examples, then split to fixed-size chunks.
+
+  Chunk length is determined by sequence_length[feature_key].
+
+  Args:
+    dataset: a tf.data.Dataset
+    sequence_length: a dict of ints.
+    output_features: a dict mapping feature name to t5.data.Feature.
+    feature_key: a string
+  Returns:
+    a tf.data.Dataset
+  """
+  dataset = dataset.map(lambda x: {feature_key: x[feature_key]})
+  max_tokens = sequence_length[feature_key]
+  if output_features[feature_key].add_eos:
+    # Leave room to insert an EOS token.
+    max_tokens -= 1
+  return dataset.unbatch().batch(max_tokens)
+
+
+@gin.configurable
+def filter_by_string_length(dataset,
+                            feature_key='targets',
+                            min_length=1,
+                            max_length=1000000,
+                            **unused_kwargs):
+  """Filter examples by string length.
+
+  Args:
+    dataset: a tf.data.Dataset (not tokenized)
+    feature_key: a string
+    min_length: an integer
+    max_length: an integer
+  Returns:
+    a tf.data.Dataset
+  """
+  def my_fn(x):
+    l = tf.strings.length(x[feature_key])
+    return tf.logical_and(tf.greater_equal(l, min_length),
+                          tf.less_equal(l, max_length))
+  return dataset.filter(my_fn)
 
 
 @gin.configurable
