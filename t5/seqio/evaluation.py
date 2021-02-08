@@ -20,6 +20,8 @@ import os
 from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 
 from absl import logging
+import dataclasses
+import numpy as np
 from t5.seqio import dataset_providers
 from t5.seqio import feature_converters
 import tensorflow.compat.v2 as tf
@@ -37,6 +39,59 @@ MetricsAndOutputsType = Tuple[
     Optional[AllMetricsType],  # metrics
     AllOutputTokensType,  # output_tokens
     AllOutputScoresType]  # output_scores
+
+
+@dataclasses.dataclass
+class Metric:
+  """A base method for the dataclasses that represent tensorboard values.
+
+  Task `metric_fn`s should output `Mapping[str, Metric]` which will be written
+  to tensorboard. `Metric` subclasses are used to dispatch to the correct
+  tensorboard writing function.
+  """
+
+
+@dataclasses.dataclass
+class Scalar(Metric):
+  """The default tensorflow value, used for creating time series graphs."""
+  value: float
+
+
+@dataclasses.dataclass
+class Text(Metric):
+  """Text to output to tensorboard, markdown is rendered by tensorboard."""
+  textdata: str
+
+
+@dataclasses.dataclass
+class Image(Metric):
+  """An image to output to tensorboard.
+
+  The format for the image array should match the format expected for the data
+  parameter described
+  [here](https://www.tensorflow.org/api_docs/python/tf/summary/image).
+  """
+  image: np.ndarray
+
+
+@dataclasses.dataclass
+class Audio(Metric):
+  """An audio example to output to tensorboard.
+
+  The format for the audio array should match the format expected for the data
+  parameter described
+  [here](https://www.tensorflow.org/api_docs/python/tf/summary/audio).
+  """
+  audiodata: np.ndarray
+  sample_rate: int = 44100
+  max_outputs: int = 3
+
+
+@dataclasses.dataclass
+class Histogram(Metric):
+  """A historgram to output to tensorboard."""
+  values: np.ndarray
+  bins: Optional[int] = None
 
 
 def get_valid_eval_tasks(tasks: Sequence[Task], split: str) -> Sequence[Task]:
@@ -137,7 +192,7 @@ class LogFnCallable(typing_extensions.Protocol):
 
   def __call__(
       self,
-      task_metrics: Mapping[str, float],
+      task_metrics: Mapping[str, Metric],
       step: int,
       task_name: str
   ) -> None: ...
@@ -441,8 +496,12 @@ class Evaluator:
               f"Duplicate metric key '{k}' in Task '{task.name}'.")
         all_metrics[task.name][k] = v
 
+      metrics = {
+          k: Scalar(v) if not isinstance(v, Metric) else v
+          for k, v in all_metrics[task.name].items()
+      }
       if self._log_fn is not None:
-        self._log_fn(all_metrics[task.name], step, task_name=task.name)
+        self._log_fn(metrics, step, task_name=task.name)
     return all_metrics
 
   @property
@@ -486,12 +545,13 @@ class TensorboardLogging:
             os.path.join(self._summary_dir, task_name))
     return self._summary_writers[task_name]
 
-  def __call__(self, task_metrics: Mapping[str, float], step: int,
+  def __call__(self, task_metrics: Mapping[str, Scalar], step: int,
                task_name: str) -> None:
     """Log the eval results and optionally write summaries for TensorBoard.
 
     Note:
-      This is the default implementation using tensorflow v1 operations.
+      This is the default implementation using tensorflow v1 operations. This
+      only supports logging metrics of the Scalar type.
 
     Args:
       task_metrics: A mapping from series names to numeric datapoints to be
@@ -507,12 +567,19 @@ class TensorboardLogging:
     summary_writer = self._get_summary_writer(task_name)
 
     for metric_name, metric_value in task_metrics.items():
+      if not isinstance(metric_value, Scalar):
+        if not isinstance(metric_value, (int, float)):
+          raise ValueError(f"Value for metric '{metric_name}' should be of "
+                           "type 'Scalar', 'int', or 'float', got "
+                           f"'{type(metric_value).__name__}'.")
+        # If we passed the check above we are safe to wrap in a Scalar.
+        metric_value = Scalar(metric_value)
       summary = tf.compat.v1.Summary()
 
       tag = f"eval/{metric_name}"
-      logging.info("%s at step %d: %.3f", tag, step, metric_value)
+      logging.info("%s at step %d: %.3f", tag, step, metric_value.value)
 
-      summary.value.add(tag=tag, simple_value=metric_value)
+      summary.value.add(tag=tag, simple_value=metric_value.value)
       summary_writer.add_summary(summary, step)
 
     summary_writer.flush()

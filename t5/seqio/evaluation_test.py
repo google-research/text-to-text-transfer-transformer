@@ -623,7 +623,10 @@ class EvaluationTest(tf.test.TestCase):
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
 
-    task_metrics = {"rouge1": 50, "rouge2": 100}
+    task_metrics = {
+        "rouge1": evaluation.Scalar(50),
+        "rouge2": evaluation.Scalar(100)
+    }
     evaluator._log_fn(
         task_metrics=task_metrics, step=1, task_name="log_eval_task")
     task_summary_dir = os.path.join(summary_dir, "log_eval_task")
@@ -645,6 +648,58 @@ class EvaluationTest(tf.test.TestCase):
     self.assertEqual(tag_rouge2, "eval/rouge2")
     self.assertAlmostEqual(rouge1, 50, places=4)
     self.assertAlmostEqual(rouge2, 100, places=4)
+
+  def test_log_eval_results_non_scalar_but_numeric(self):
+    summary_dir = self.create_tempdir().full_path
+
+    def mock_init(self):
+      self._log_fn = evaluation.TensorboardLogging(summary_dir)
+
+    with mock.patch.object(Evaluator, "__init__", new=mock_init):
+      evaluator = Evaluator()
+
+    task_metrics = {
+        "rouge1": 50.0,  # Test with float
+        "rouge2": 100  # Test with int
+    }
+    evaluator._log_fn(
+        task_metrics=task_metrics, step=1, task_name="log_eval_task")
+    task_summary_dir = os.path.join(summary_dir, "log_eval_task")
+    event_file = os.path.join(
+        task_summary_dir, tf.io.gfile.listdir(task_summary_dir)[0])
+    # First event is boilerplate
+    serialized_events = list(tfds.as_numpy(
+        tf.data.TFRecordDataset(event_file)))[1:]
+    event1 = tf.compat.v1.Event.FromString(
+        serialized_events[0]).summary.value[0]
+    rouge1 = event1.simple_value
+    tag_rouge1 = event1.tag
+    event2 = tf.compat.v1.Event.FromString(
+        serialized_events[1]).summary.value[0]
+    rouge2 = event2.simple_value
+    tag_rouge2 = event2.tag
+
+    self.assertEqual(tag_rouge1, "eval/rouge1")
+    self.assertEqual(tag_rouge2, "eval/rouge2")
+    self.assertAlmostEqual(rouge1, 50, places=4)
+    self.assertAlmostEqual(rouge2, 100, places=4)
+
+  def test_log_eval_results_non_scalar_non_numeric(self):
+    summary_dir = self.create_tempdir().full_path
+
+    def mock_init(self):
+      self._log_fn = evaluation.TensorboardLogging(summary_dir)
+
+    with mock.patch.object(Evaluator, "__init__", new=mock_init):
+      evaluator = Evaluator()
+
+    task_metrics = {"wrong_type": "string_value"}
+    with self.assertRaisesWithLiteralMatch(
+        ValueError,
+        "Value for metric 'wrong_type' should be of type 'Scalar', 'int', or "
+        "'float', got 'str'."):
+      evaluator._log_fn(
+          task_metrics=task_metrics, step=1, task_name="wrong_value_type")
 
   def test_summary_dir_and_log_fn_provided(self):
     task_name = "summary_dir_and_log_fn_provided"
