@@ -1897,7 +1897,8 @@ def span_corruption(dataset, sequence_length, output_features):
   if sequence_length['targets'] < targets_length:
     raise ValueError(
         f'Expected targets length for span corruption ({targets_length}) is '
-        f"less than configured targets length ({sequence_length['targets']})")
+        f'greater than configured targets length '
+        f"({sequence_length['targets']})")
 
   ds = dataset
   ds = select_random_chunk(ds, output_features=output_features,
