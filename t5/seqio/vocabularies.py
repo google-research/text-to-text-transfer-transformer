@@ -56,7 +56,7 @@ class Vocabulary(metaclass=abc.ABCMeta):
       use_eos: Whether to stop decoding at EOS_ID=1.
       use_unk: Whether to replace tokens out of range with UNK_ID=2.
     """
-    self._extra_ids = extra_ids
+    self._extra_ids = extra_ids or 0
     self._use_eos = use_eos
     self._use_unk = use_unk
 
