@@ -414,13 +414,14 @@ class MtfModel(T5Model):
       gin.bind_parameter("Bitransformer.decode.beam_size", beam_size)
       gin.bind_parameter("Bitransformer.decode.temperature", temperature)
       gin.bind_parameter("Bitransformer.decode.sampling_keep_top_k", keep_top_k)
+      gin.bind_parameter("utils.decode_from_file.input_filename", input_file)
+      gin.bind_parameter("utils.decode_from_file.output_filename", output_file)
 
     if vocabulary is None:
       vocabulary = utils.get_vocabulary()
     mtf_utils.infer_model(
         self.estimator(vocabulary), vocabulary, self._sequence_length,
-        self.batch_size, self._model_type, self._model_dir, checkpoint_steps,
-        input_file, output_file)
+        self.batch_size, self._model_type, self._model_dir, checkpoint_steps)
 
   def score(self,
             inputs=None,

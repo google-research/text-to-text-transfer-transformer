@@ -1,0 +1,86 @@
+Variable decoder/block_000/layer_000/SelfAttention/k                  size 4096         slice_size 4096         Shape[d_model=32, heads=128]                                
+Variable decoder/block_000/layer_000/SelfAttention/o                  size 4096         slice_size 4096         Shape[heads=128, d_model=32]                                
+Variable decoder/block_000/layer_000/SelfAttention/q                  size 4096         slice_size 4096         Shape[d_model=32, heads=128]                                
+Variable decoder/block_000/layer_000/SelfAttention/relative_attention_bias size 64           slice_size 64           Shape[heads=2, buckets=32]                                  
+Variable decoder/block_000/layer_000/SelfAttention/v                  size 4096         slice_size 4096         Shape[d_model=32, heads=128]                                
+Variable decoder/block_000/layer_000/rms_norm/scale                   size 32           slice_size 32           Shape[d_model=32]                                           
+Variable decoder/block_000/layer_001/EncDecAttention/k                size 4096         slice_size 4096         Shape[d_model=32, heads=128]                                
+Variable decoder/block_000/layer_001/EncDecAttention/o                size 4096         slice_size 4096         Shape[heads=128, d_model=32]                                
+Variable decoder/block_000/layer_001/EncDecAttention/q                size 4096         slice_size 4096         Shape[d_model=32, heads=128]                                
+Variable decoder/block_000/layer_001/EncDecAttention/v                size 4096         slice_size 4096         Shape[d_model=32, heads=128]                                
+Variable decoder/block_000/layer_001/rms_norm/scale                   size 32           slice_size 32           Shape[d_model=32]                                           
+Variable decoder/block_000/layer_002/DenseReluDense/wi_0/kernel       size 2048         slice_size 2048         Shape[d_model=32, d_ff=64]                                  
+Variable decoder/block_000/layer_002/DenseReluDense/wi_1/kernel       size 2048         slice_size 2048         Shape[d_model=32, d_ff=64]                                  
+Variable decoder/block_000/layer_002/DenseReluDense/wo/kernel         size 2048         slice_size 2048         Shape[d_ff=64, d_model=32]                                  
+Variable decoder/block_000/layer_002/rms_norm/scale                   size 32           slice_size 32           Shape[d_model=32]                                           
+Variable decoder/block_001/layer_000/SelfAttention/k                  size 4096         slice_size 4096         Shape[d_model=32, heads=128]                                
+Variable decoder/block_001/layer_000/SelfAttention/o                  size 4096         slice_size 4096         Shape[heads=128, d_model=32]                                
+Variable decoder/block_001/layer_000/SelfAttention/q                  size 4096         slice_size 4096         Shape[d_model=32, heads=128]                                
+Variable decoder/block_001/layer_000/SelfAttention/v                  size 4096         slice_size 4096         Shape[d_model=32, heads=128]                                
+Variable decoder/block_001/layer_000/rms_norm/scale                   size 32           slice_size 32           Shape[d_model=32]                                           
+Variable decoder/block_001/layer_001/EncDecAttention/k                size 4096         slice_size 4096         Shape[d_model=32, heads=128]                                
+Variable decoder/block_001/layer_001/EncDecAttention/o                size 4096         slice_size 4096         Shape[heads=128, d_model=32]                                
+Variable decoder/block_001/layer_001/EncDecAttention/q                size 4096         slice_size 4096         Shape[d_model=32, heads=128]                                
+Variable decoder/block_001/layer_001/EncDecAttention/v                size 4096         slice_size 4096         Shape[d_model=32, heads=128]                                
+Variable decoder/block_001/layer_001/rms_norm/scale                   size 32           slice_size 32           Shape[d_model=32]                                           
+Variable decoder/block_001/layer_002/DenseReluDense/wi_0/kernel       size 2048         slice_size 2048         Shape[d_model=32, d_ff=64]                                  
+Variable decoder/block_001/layer_002/DenseReluDense/wi_1/kernel       size 2048         slice_size 2048         Shape[d_model=32, d_ff=64]                                  
+Variable decoder/block_001/layer_002/DenseReluDense/wo/kernel         size 2048         slice_size 2048         Shape[d_ff=64, d_model=32]                                  
+Variable decoder/block_001/layer_002/rms_norm/scale                   size 32           slice_size 32           Shape[d_model=32]                                           
+Variable decoder/logits/kernel                                        size 1028096      slice_size 1028096      Shape[d_model=32, vocab=32128]                              
+Variable decoder/rms_norm/scale                                       size 32           slice_size 32           Shape[d_model=32]                                           
+Variable encoder/block_000/layer_000/SelfAttention/k                  size 4096         slice_size 4096         Shape[d_model=32, heads=128]                                
+Variable encoder/block_000/layer_000/SelfAttention/o                  size 4096         slice_size 4096         Shape[heads=128, d_model=32]                                
+Variable encoder/block_000/layer_000/SelfAttention/q                  size 4096         slice_size 4096         Shape[d_model=32, heads=128]                                
+Variable encoder/block_000/layer_000/SelfAttention/relative_attention_bias size 64           slice_size 64           Shape[heads=2, buckets=32]                                  
+Variable encoder/block_000/layer_000/SelfAttention/v                  size 4096         slice_size 4096         Shape[d_model=32, heads=128]                                
+Variable encoder/block_000/layer_000/rms_norm/scale                   size 32           slice_size 32           Shape[d_model=32]                                           
+Variable encoder/block_000/layer_001/DenseReluDense/wi_0/kernel       size 2048         slice_size 2048         Shape[d_model=32, d_ff=64]                                  
+Variable encoder/block_000/layer_001/DenseReluDense/wi_1/kernel       size 2048         slice_size 2048         Shape[d_model=32, d_ff=64]                                  
+Variable encoder/block_000/layer_001/DenseReluDense/wo/kernel         size 2048         slice_size 2048         Shape[d_ff=64, d_model=32]                                  
+Variable encoder/block_000/layer_001/rms_norm/scale                   size 32           slice_size 32           Shape[d_model=32]                                           
+Variable encoder/block_001/layer_000/SelfAttention/k                  size 4096         slice_size 4096         Shape[d_model=32, heads=128]                                
+Variable encoder/block_001/layer_000/SelfAttention/o                  size 4096         slice_size 4096         Shape[heads=128, d_model=32]                                
+Variable encoder/block_001/layer_000/SelfAttention/q                  size 4096         slice_size 4096         Shape[d_model=32, heads=128]                                
+Variable encoder/block_001/layer_000/SelfAttention/v                  size 4096         slice_size 4096         Shape[d_model=32, heads=128]                                
+Variable encoder/block_001/layer_000/rms_norm/scale                   size 32           slice_size 32           Shape[d_model=32]                                           
+Variable encoder/block_001/layer_001/DenseReluDense/wi_0/kernel       size 2048         slice_size 2048         Shape[d_model=32, d_ff=64]                                  
+Variable encoder/block_001/layer_001/DenseReluDense/wi_1/kernel       size 2048         slice_size 2048         Shape[d_model=32, d_ff=64]                                  
+Variable encoder/block_001/layer_001/DenseReluDense/wo/kernel         size 2048         slice_size 2048         Shape[d_ff=64, d_model=32]                                  
+Variable encoder/block_001/layer_001/rms_norm/scale                   size 32           slice_size 32           Shape[d_model=32]                                           
+Variable encoder/rms_norm/scale                                       size 32           slice_size 32           Shape[d_model=32]                                           
+Variable shared/embedding                                             size 1028096      slice_size 1028096      Shape[vocab=32128, d_model=32]                              
+Trainable Variables            count: 52      Total size: 2179584          Total slice_size: 2179584        
+All Variables                  count: 104     Total size: 4359168          Total slice_size: 4359168        
+Counters:
+einsum: 4.99e+10
+einsum_unique: 4.99e+10
+output: 3.07e+07
+ output/AddOperation: 2.18e+06
+ output/Constant: 1
+ output/EinsumOperation: 6.54e+06
+ output/ImportOperation: 9.84e+04
+ output/MinMaxOperation: 104
+ output/ReduceOperation: 104
+ output/ReshapeOperation: 9.83e+04
+ output/ScalarAddOperation: 2.18e+06
+ output/ScalarMultiplyOperation: 4.36e+06
+ output/SlicewiseOperation: 8.72e+06
+ output/Variable: 4.36e+06
+ output/WhileLoopOperation: 2.18e+06
+output_unique: 3.07e+07
+ output_unique/AddOperation: 2.18e+06
+ output_unique/Constant: 1
+ output_unique/EinsumOperation: 6.54e+06
+ output_unique/ImportOperation: 9.84e+04
+ output_unique/MinMaxOperation: 104
+ output_unique/ReduceOperation: 104
+ output_unique/ReshapeOperation: 9.83e+04
+ output_unique/ScalarAddOperation: 2.18e+06
+ output_unique/ScalarMultiplyOperation: 4.36e+06
+ output_unique/SlicewiseOperation: 8.72e+06
+ output_unique/Variable: 4.36e+06
+ output_unique/WhileLoopOperation: 2.18e+06
+variables: 4.36e+06
+ variables/trainable: 2.18e+06
+ variables/untrainable: 2.18e+06

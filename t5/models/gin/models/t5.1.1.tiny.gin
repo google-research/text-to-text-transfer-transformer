@@ -1,0 +1,10 @@
+# -*-Python-*-
+
+# A tiny model mainly for testing.
+
+include 'models/t5.1.1.base.gin'
+
+d_model = 32
+num_layers = 2
+d_ff = 64
+num_heads = 2
