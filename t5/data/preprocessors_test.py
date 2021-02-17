@@ -673,12 +673,12 @@ class PreprocessorsTest(tf.test.TestCase):
     sequence_length = {'targets': 4}
     eos_features = {
         'targets': seqio.Feature(
-            vocabulary=test_utils.PassThroughVocab(use_eos=True),
+            vocabulary=test_utils.PassThroughVocab(),
             add_eos=True)
     }
     no_eos_features = {
         'targets': seqio.Feature(
-            vocabulary=test_utils.PassThroughVocab(use_eos=False),
+            vocabulary=test_utils.PassThroughVocab(),
             add_eos=False)
     }
 

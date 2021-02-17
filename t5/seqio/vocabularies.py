@@ -18,6 +18,7 @@
 import abc
 import hashlib
 from typing import Iterable, Optional, Sequence
+from absl import logging
 
 import tensorflow.compat.v2 as tf
 import tensorflow_text as tf_text
@@ -25,10 +26,7 @@ import tensorflow_text as tf_text
 from sentencepiece import sentencepiece_model_pb2
 import sentencepiece as sentencepiece_processor
 
-
 PAD_ID = 0
-EOS_ID = 1
-UNK_ID = 2
 
 
 class Vocabulary(metaclass=abc.ABCMeta):
@@ -38,39 +36,31 @@ class Vocabulary(metaclass=abc.ABCMeta):
   both in pure python (`_encode`/`_decode`) and in TensorFlow
   (`_encode_tf`/`_decode_tf`).
 
-  Subclasses are responsible for reserving PAD_ID=0 as well as EOS_ID and UNK_ID
-  if `use_eos` and `use_unk` are True, respectively.
+  Subclasses are responsible for reserving PAD_ID=0 as well as optionally
+  reserving EOS_ID and UNK_ID
 
   `_base_vocab_size` should account for PAD, EOS, and UNK but not `extra_ids`.
   """
 
-  def __init__(
-      self,
-      extra_ids: int = 0,
-      use_eos: bool = True,
-      use_unk: bool = True):
+  def __init__(self, extra_ids: int = 0):
     """Vocabulary constructor.
 
     Args:
       extra_ids: The number of extra IDs to reserve.
-      use_eos: Whether to stop decoding at EOS_ID=1.
-      use_unk: Whether to replace tokens out of range with UNK_ID=2.
     """
     self._extra_ids = extra_ids or 0
-    self._use_eos = use_eos
-    self._use_unk = use_unk
 
-  @property
+  @abc.abstractproperty
   def eos_id(self) -> Optional[int]:
-    return EOS_ID if self._use_eos else None
+    raise NotImplementedError("need to implement eos_id")
 
   @property
   def pad_id(self) -> int:
     return PAD_ID
 
-  @property
+  @abc.abstractproperty
   def unk_id(self) -> Optional[int]:
-    return UNK_ID if self._use_unk else None
+    raise NotImplementedError("need to implement pad_id")
 
   @property
   def extra_ids(self) -> int:
@@ -84,6 +74,8 @@ class Vocabulary(metaclass=abc.ABCMeta):
   @abc.abstractproperty
   def _base_vocab_size(self) -> int:
     """Vocabulary size, excluding extra ids but including PAD/EOS/UNK."""
+    # TODO(fjord): add a check that pad_id and unk_id (if present)
+    #   are less than _base_vocab_size.
     raise NotImplementedError
 
   @abc.abstractmethod
@@ -102,6 +94,7 @@ class Vocabulary(metaclass=abc.ABCMeta):
     """Detokenizes int32 iterable to a string, up through first EOS."""
     clean_ids = list(ids)
 
+    # replace_with = 0 if self.unk_id is None else self.unk_id
     if self.unk_id is not None:
       clean_ids = [
           self.unk_id if i >= self._base_vocab_size else i
@@ -134,7 +127,7 @@ class Vocabulary(metaclass=abc.ABCMeta):
           tf.less(clean_ids, self._base_vocab_size), clean_ids, self.unk_id)
 
     if self.eos_id is not None:
-      # Replace everything after the first EOS_ID with PAD_ID.
+      # Replace everything after the first eos_id with pad_id.
       after_eos = tf.cumsum(
           tf.cast(tf.equal(clean_ids, self.eos_id), tf.int32),
           exclusive=True, axis=-1)
@@ -159,7 +152,7 @@ class SentencePieceVocabulary(Vocabulary):
   "I like peanut butter and jel<extra_id_0> sandwiches is not.").
   """
 
-  def __init__(self, sentencepiece_model_file, extra_ids=None, use_unk=True):
+  def __init__(self, sentencepiece_model_file, extra_ids=None):
     """Create a SentencePieceVocabulary.
 
     Optionally, specify a number of extra ids to add to the end of the
@@ -168,12 +161,11 @@ class SentencePieceVocabulary(Vocabulary):
     Args:
       sentencepiece_model_file: a string
       extra_ids: an optional integer
-      use_unk: a boolean
     """
     self._sentencepiece_model_file = sentencepiece_model_file
     self._tokenizer = None
     self._sp_model = None
-    super().__init__(use_eos=True, use_unk=use_unk, extra_ids=extra_ids)
+    super().__init__(extra_ids=extra_ids)
 
   def _load_model(self):
     """Load SPM and Python tokenizer."""
@@ -194,14 +186,18 @@ class SentencePieceVocabulary(Vocabulary):
     self._tokenizer = sentencepiece_processor.SentencePieceProcessor()
     self._tokenizer.LoadFromSerializedProto(self._sp_model)
     if self._tokenizer.pad_id() != PAD_ID:
-      raise ValueError(
-          f"Vocabulary PAD ID must be {PAD_ID}, got {self._tokenizer.pad_id()}")
-    if self._tokenizer.eos_id() != EOS_ID:
-      raise ValueError(
-          f"Vocabulary EOS ID must be {EOS_ID}, got {self._tokenizer.eos_id()}")
-    if self.unk_id is not None and self._tokenizer.unk_id() != UNK_ID:
-      raise ValueError(
-          f"Vocabulary UNK ID must be {UNK_ID}, got {self._tokenizer.unk_id()}")
+      logging.warning(
+          "T5 library uses PAD_ID=%s, which is different from the "
+          "sentencepiece vocabulary, which defines pad_id=%s",
+          PAD_ID, self._tokenizer.pad_id())
+
+  @property
+  def eos_id(self) -> Optional[int]:
+    return self.tokenizer.eos_id()
+
+  @property
+  def unk_id(self) -> Optional[int]:
+    return self.tokenizer.unk_id()
 
   @property
   def sp_model(self):
@@ -316,7 +312,15 @@ class ByteVocabulary(Vocabulary):
     self._byte_size = 256
     # The special tokens: 0=PAD, 1=EOS,and 2=UNK
     self._num_special_tokens = 3
-    super().__init__(use_eos=True, use_unk=True, extra_ids=extra_ids)
+    super().__init__(extra_ids=extra_ids)
+
+  @property
+  def eos_id(self) -> Optional[int]:
+    return 1
+
+  @property
+  def unk_id(self) -> Optional[int]:
+    return 2
 
   def _convert_strings_to_ids(self, s):
     """Convert a python string to integers based on UTF-8 encoding.

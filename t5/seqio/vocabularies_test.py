@@ -35,6 +35,20 @@ class VocabularyTest(absltest.TestCase):
 
   class AsciiVocab(vocabularies.Vocabulary):
 
+    def __init__(self, extra_ids=0, use_eos=True, use_unk=True):
+      super().__init__(extra_ids=extra_ids)
+      self._extra_ids = extra_ids
+      self._use_eos = use_eos
+      self._use_unk = use_unk
+
+    @property
+    def eos_id(self):
+      return 1 if self._use_eos else None
+
+    @property
+    def unk_id(self):
+      return 2 if self._use_unk else None
+
     @property
     def _base_vocab_size(self):
       return 128

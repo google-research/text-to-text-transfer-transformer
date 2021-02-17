@@ -500,6 +500,14 @@ class PassThroughVocab(vocabularies.Vocabulary):
   def _decode_tf(self, ids):
     return ids
 
+  @property
+  def eos_id(self) -> Optional[int]:
+    return 1
+
+  @property
+  def unk_id(self) -> Optional[int]:
+    return 2
+
 
 def sentencepiece_vocab(extra_ids=0):
   return vocabularies.SentencePieceVocabulary(
