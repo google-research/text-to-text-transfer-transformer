@@ -409,6 +409,31 @@ class TasksTest(test_utils.FakeTaskTest):
     )
     self.verify_task_matches_fake_datasets("task_dtypes", use_cached=False)
 
+  def test_num_epochs(self):
+    # Try repeating after preprocessing the dataset to verify the outputs are
+    # the same.
+    epoch1_ds = self.random_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=False, shuffle=True, seed=0)
+    # `random_task` has 3 examples per epoch.
+    epoch2_ds = self.random_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=False, shuffle=True, seed=0
+    ).repeat(2).skip(3)
+    test_utils.assert_datasets_eq(epoch1_ds, epoch2_ds)
+
+    # Try repeating before preprocessing the dataset to verify the outputs are
+    # different.
+    epoch1_ds = self.random_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=False, shuffle=True, seed=0)
+    # `random_task` has 3 examples per epoch.
+    epoch2_ds = self.random_task.get_dataset(
+        {"inputs": 13, "targets": 13},
+        split="train", use_cached=False, shuffle=True, seed=0, num_epochs=2
+    ).skip(3)
+    test_utils.assert_datasets_neq(epoch1_ds, epoch2_ds)
+
   def test_same_seeds_cached_match(self):
     dataset1 = self.cached_task.get_dataset(
         {"inputs": 13, "targets": 13},
@@ -552,11 +577,12 @@ class MixturesTest(test_utils.FakeTaskTest):
     test_utils.assert_datasets_eq(task_ds.repeat(2), mix_ds.take(4))
 
   def test_get_dataset_mix(self):
-    def _constant_preprocessor(_, val):
-      return tf.data.Dataset.from_tensors({
+    @utils.map_over_dataset
+    def _constant_preprocessor(unused_x, val):
+      return {
           "targets": tf.constant([val], tf.int32),
           "inputs": tf.constant([val], tf.int32),
-      })
+      }
 
     self.add_task(
         "two_task",
@@ -577,16 +603,17 @@ class MixturesTest(test_utils.FakeTaskTest):
         sequence_length, "train", seed=13).take(1000)
 
     res = sum(int(item["inputs"][0]) for item in mix_ds.as_numpy_iterator())
-    self.assertEqual(res, 2500)
+    self.assertEqual(res, 2481)
 
   def test_copy_pretokenized(self):
-    def _constant_preprocessor(_, val):
-      return tf.data.Dataset.from_tensors({
+    @utils.map_over_dataset
+    def _constant_preprocessor(unused_x, val):
+      return {
           "targets": tf.constant([val], tf.int32),
           "targets_pretokenized": tf.constant(f"targets_{val}"),
           "inputs": tf.constant([val], tf.int32),
           "inputs_pretokenized": tf.constant(f"inputs_{val}")
-      })
+      }
 
     self.add_task(
         "two_task",

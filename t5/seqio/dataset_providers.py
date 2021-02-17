@@ -80,6 +80,7 @@ class DatasetProviderBase(metaclass=abc.ABCMeta):
       shuffle: bool = True,
       seed: Optional[int] = None,
       shard_info: Optional[ShardInfo] = None,
+      num_epochs: int = 1
   ) -> tf.data.Dataset:
     """Returns the requested tf.data.Dataset."""
     raise NotImplementedError
@@ -157,11 +158,13 @@ class DatasetProviderRegistry(object):
       use_cached=False,
       shuffle=True,
       seed=None,
-      shard_info=None):
+      shard_info=None,
+      num_epochs=1):
     """Returns the requested tf.data.Dataset."""
     return cls.get(name).get_dataset(
         sequence_length=sequence_length, split=split, use_cached=use_cached,
-        shuffle=shuffle, seed=seed, shard_info=shard_info)
+        shuffle=shuffle, seed=seed, shard_info=shard_info,
+        num_epochs=num_epochs)
 
 
 # =============================== DataSources ==================================
@@ -642,14 +645,21 @@ class Task(DatasetProviderBase):
       raise ValueError(
           "`CacheDatasetPlaceholder` can appear at most once in the "
           f"preprocessing pipeline. Found {len(cache_step_idxs)} in '{name}'.")
-    cache_step_idx = cache_step_idxs[0] if cache_step_idxs else -1
-    if cache_step_idx > -1:
+    cache_step_idx = cache_step_idxs[0] if cache_step_idxs else None
+    if cache_step_idx is not None:
       for prep in preprocessors[:cache_step_idx]:
-        if "sequence_length" in inspect.signature(prep).parameters.keys():
+        prep_args = inspect.signature(prep).parameters.keys()
+        if "sequence_length" in prep_args:
           raise ValueError(
               f"'{prep.__name__}' has a `sequence_length` argument but occurs "
               f"before `CacheDatasetPlaceholder` in '{name}'. This is not "
               "allowed since the sequence length is specified at run time.")
+        if "seed" in prep_args or "seeds" in prep_args:
+          raise logging.warning(  # pylint:disable=logging-format-interpolation
+              f"'{prep.__name__}' has a `seed(s)` argument but occurs before "
+              f"`CacheDatasetPlaceholder` in '{name}'. This is not recommended "
+              "since the same samples will be used each epoch when reading "
+              "from the cache.")
     self._cache_step_idx = cache_step_idx
     self._preprocessors = preprocessors
 
@@ -799,13 +809,16 @@ class Task(DatasetProviderBase):
     Returns:
       a tf.data.Dataset
     """
-    # Skip a sufficient number of seeds to avoid duplicating any from pre-cache
-    # preprocessing.
-    seed = None if seed is None else 42 * self._cache_step_idx
+    start_idx = 0
+    if self.supports_caching:
+      # Skip a sufficient number of seeds to avoid duplicating any from
+      # pre-cache preprocessing.
+      seed = None if seed is None else seed + 42 * self._cache_step_idx
+      start_idx = self._cache_step_idx + 1
     with utils.map_seed_manager(seed):
       dataset = self._preprocess_dataset(
           dataset,
-          self._preprocessors[self._cache_step_idx + 1:],
+          self._preprocessors[start_idx:],
           sequence_length=sequence_length,
       )
     return dataset
@@ -838,7 +851,7 @@ class Task(DatasetProviderBase):
   @property
   def supports_caching(self) -> bool:
     """Wether or not this task supports offline caching."""
-    return self._cache_step_idx > -1
+    return self._cache_step_idx is not None
 
   def assert_cached(self) -> None:
     """Raises an assertion error if cached dataset does not exist."""
@@ -868,6 +881,7 @@ class Task(DatasetProviderBase):
       shuffle_buffer_size: Optional[int] = None,
       seed: Optional[int] = None,
       shard_info: Optional[ShardInfo] = None,
+      num_epochs: Optional[int] = 1
   ) -> tf.data.Dataset:
     """Returns a tf.data.Dataset from cache or generated on the fly.
 
@@ -887,17 +901,14 @@ class Task(DatasetProviderBase):
         specification, it will be passed the shard info to avoid loading the
         full source dataset. Otherwise, the full source dataset will be loaded
         and sharded at the individual examples.
-
+      num_epochs: the number of times to iterate through the dataset, or `None`
+        to repeat indefinitely. Note that the repeat occurs in the pipeline
+        after offline caching, but before applying potentially stochastic
+        post-cache preprocessors and is therefore typically preferred to calling
+        `repeat()` on the returned dataset. Defaults to `1`.
     Returns:
       A tf.data.Dataset.
     """
-    if seed is not None:
-      logging.warning(("Global random seed is now set to %d. All TF operations "
-                       "are now deterministic with respect to that seed."),
-                      seed)
-    # Reset seed to None by default.
-    tf.random.set_seed(seed)
-
     if use_cached and not self.supports_caching:
       logging.warning(
           "Task '%s' does not support caching. Switching to on-the-fly "
@@ -928,17 +939,25 @@ class Task(DatasetProviderBase):
       ds = source.get_dataset(split=split, shuffle=shuffle, seed=seed)
       ds = ds.shard(shard_info.num_shards, shard_info.index)
 
+    if (self.num_input_examples(split) and
+        self.num_input_examples(split) < _MAX_EXAMPLES_TO_MEM_CACHE):
+      logging.info(
+          "Automatically caching small dataset in memory: '%s:%s'",
+          self.name, split)
+      ds = ds.cache()
+
     if not use_cached:
-      ds = self.preprocess_precache(ds, seed)
+      ds = self.preprocess_precache(ds, seed=seed)
 
     ds = ds.prefetch(tf.data.experimental.AUTOTUNE)
 
-    if (self.num_input_examples(split) and
-        self.num_input_examples(split) < _MAX_EXAMPLES_TO_MEM_CACHE):
-      ds = ds.cache()
+    # We repeat before calling any (potentially) stochastic post-cache
+    # preprocessing in order to take new samples each epoch.
+    ds = ds.repeat(num_epochs)
 
     # Post cache processing.
-    ds = self.preprocess_postcache(ds, sequence_length=sequence_length)
+    ds = self.preprocess_postcache(
+        ds, sequence_length=sequence_length, seed=seed)
     ds = self._validate_preprocessing(ds)
     ds = self._trim_output_features(ds, sequence_length=sequence_length)
 
@@ -1112,6 +1131,7 @@ class Mixture(DatasetProviderBase):
       shuffle: bool = True,
       seed: Optional[int] = None,
       shard_info: Optional[ShardInfo] = None,
+      num_epochs: Optional[int] = None,
       copy_pretokenized: bool = False,
       compute_stats_empirically: bool = False,
   ) -> tf.data.Dataset:
@@ -1128,6 +1148,11 @@ class Mixture(DatasetProviderBase):
         on the fly (use_cached=False).
       seed: tf.int64 scalar tf.Tensor (or None) for shuffling tf.data.
       shard_info: optional specification for loading a shard of the split.
+      num_epochs: the number of times to iterate through the dataset, or `None`
+        to repeat indefinitely. Note that the repeat occurs in the pipeline
+        after offline caching, but before applying potentially stochastic
+        post-cache preprocessors and is therefore typically preferred to calling
+        `repeat()` on the returned dataset. Defaults to `None`.
       copy_pretokenized: bool, whether to pass through copies of pretokenized
         features a "_pretokenized" suffix added to the key.
       compute_stats_empirically: a boolean - does not work on TPU
@@ -1158,15 +1183,20 @@ class Mixture(DatasetProviderBase):
             use_cached=use_cached,
             shuffle=shuffle,
             seed=seed,
-            shard_info=shard_info)
-        .repeat()
+            shard_info=shard_info,
+            num_epochs=num_epochs)
         .map(filter_features, num_parallel_calls=tf.data.experimental.AUTOTUNE)
         for task in tasks]
     rates = [self.get_rate(task) for task in tasks]
     # Sample from the dataset with the rates rates
-    seed = None if shuffle else 42
+    if seed is not None:
+      sample_seed = seed
+    elif shuffle:
+      sample_seed = None
+    else:
+      sample_seed = 42
     dataset = tf.data.experimental.sample_from_datasets(
-        datasets, rates, seed)
+        datasets, rates, sample_seed)
     if (split == "train" and use_cached and
         all(t.supports_caching for t in tasks)):
       _log_mixing_proportions(tasks, datasets, rates, dataset, sequence_length,
@@ -1230,7 +1260,8 @@ def _log_mixing_proportions(
       mean_targets_length.append(targets_sum / float(stats_examples))
   else:
     def _estimated_mean_length(task, key):
-      if task._cache_step_idx < len(task._preprocessors) - 1:  # pylint:disable=protected-access
+      if (task.supports_caching and
+          task._cache_step_idx < len(task._preprocessors) - 1):  # pylint:disable=protected-access
         # There is processing after caching, so we can't rely on the stats.
         return sequence_length[key]
       # Some tasks, like LMs, don't have inputs.
@@ -1306,7 +1337,8 @@ def get_dataset(
     feature_converter: FeatureConverter,
     dataset_split: str = "train",
     use_cached: bool = False,
-    shuffle: bool = True,
+    shuffle: bool = False,
+    num_epochs: Optional[int] = 1,
     shard_info: ShardInfo = None,
     verbose: bool = True,
     seed: Optional[int] = None
@@ -1333,6 +1365,11 @@ def get_dataset(
     use_cached: whether to use the cached dataset instead of processing it on
       the fly.
     shuffle: whether to shuffle the dataset.
+    num_epochs: the number of times to iterate through the dataset, or `None` to
+      repeat indefinitely. Note that the repeat occurs in the pipeline after
+      offline caching, but before applying potentially stochastic post-cache
+      preprocessors and is therefore typically preferred to calling `repeat()`
+      on the returned dataset. Defaults to `1`.
     shard_info: number of shards and shard index information.
     verbose: if true, log the feature shapes.
     seed: a random seed to for shuffling tf.data.
@@ -1351,8 +1388,9 @@ def get_dataset(
       split=dataset_split,
       use_cached=use_cached,
       shuffle=shuffle,
+      seed=seed,
       shard_info=shard_info,
-      seed=seed)
+      num_epochs=num_epochs)
 
   ds = feature_converter(ds, task_feature_lengths=task_feature_lengths)
 

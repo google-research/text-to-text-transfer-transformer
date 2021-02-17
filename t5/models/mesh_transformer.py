@@ -74,7 +74,7 @@ def mesh_train_dataset_fn(
 
   ds = mixture_or_task.get_dataset(
       sequence_length, split=dataset_split, use_cached=use_cached,
-      shuffle=True, seed=seed)
+      shuffle=True, num_epochs=None, seed=seed)
 
   # Select just the output features which are present in the dataset.
   feature_keys = tuple(k for k in mixture_or_task.output_features

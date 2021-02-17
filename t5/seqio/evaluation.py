@@ -294,6 +294,7 @@ class Evaluator:
           sequence_length=sequence_length,
           split=eval_split,
           shuffle=False,
+          num_epochs=1,
           use_cached=use_cached)
 
     # `task_datasets` have the output features from seqio.Task.get_dataset.

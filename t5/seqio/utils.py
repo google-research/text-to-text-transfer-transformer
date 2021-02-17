@@ -17,7 +17,6 @@
 
 import contextlib
 import functools
-import inspect
 import os
 from typing import Mapping, Optional
 
@@ -320,7 +319,7 @@ def trim_and_pack_dataset(
   # Warn if there are any additional keys that will be removed.
   additional_keys = set(element_spec) - set(feature_lengths)
   if additional_keys:
-    logging.warn(
+    logging.warning(
         "Features not in `features_length` will be removed during packing: %s",
         additional_keys)
 
@@ -625,13 +624,6 @@ def map_over_dataset(fn=None, *, num_seeds=None):
       return tf.data.Dataset.zip((ds, seed_datasets)).map(
           map_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-    # Remove seeds from function signature.
-    sig = inspect.signature(wrapped_fn)
-    wrapped_fn.__signature__ = sig.replace(
-        parameters=tuple(
-            p for p in sig.parameters.values() if p.name not in("seed", "seeds")
-        )
-    )
     return wrapped_fn
 
   if fn is None:
