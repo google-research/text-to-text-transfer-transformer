@@ -28,6 +28,7 @@ from typing import Any, Callable, Iterable, Mapping, MutableMapping, Optional, S
 
 from absl import logging
 import dataclasses
+import numpy as np
 from packaging import version
 from t5.seqio import utils
 from t5.seqio.feature_converters import FeatureConverter
@@ -243,9 +244,11 @@ def _validate_args(fn, expected_pos_args):
 
 class DatasetFnCallable(typing_extensions.Protocol):
 
-  def __call__(
-      self, split: str, shuffle_files: bool, seed: Optional[int] = None
-  ) -> tf.data.Dataset: ...
+  def __call__(self,
+               split: str,
+               shuffle_files: bool,
+               seed: Optional[int] = None) -> tf.data.Dataset:
+    ...
 
 
 class FunctionDataSource(DataSource):
@@ -390,7 +393,13 @@ class FileDataSource(DataSource):
       shard_info: Optional[ShardInfo] = None
     ) -> tf.data.Dataset:
     files = self.list_shards(split)
-    files_ds = tf.data.Dataset.from_tensor_slices(files)
+
+    if not files:
+      raise ValueError(
+          "No file is found for the file pattern: "
+          f"{self._split_to_filepattern[split]}."
+      )
+    files_ds = tf.data.Dataset.from_tensor_slices(np.array(files, dtype=np.str))
 
     if shard_info:
       if len(files) < shard_info.num_shards:
