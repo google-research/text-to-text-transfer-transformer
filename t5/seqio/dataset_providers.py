@@ -939,8 +939,10 @@ class Task(DatasetProviderBase):
       ds = source.get_dataset(split=split, shuffle=shuffle, seed=seed)
       ds = ds.shard(shard_info.num_shards, shard_info.index)
 
-    if (self.num_input_examples(split) and
-        self.num_input_examples(split) < _MAX_EXAMPLES_TO_MEM_CACHE):
+    if ((use_cached and
+         self.get_cached_stats(split)["examples"] < _MAX_EXAMPLES_TO_MEM_CACHE)
+        or (self.num_input_examples(split) and
+            self.num_input_examples(split) < _MAX_EXAMPLES_TO_MEM_CACHE)):
       logging.info(
           "Automatically caching small dataset in memory: '%s:%s'",
           self.name, split)
