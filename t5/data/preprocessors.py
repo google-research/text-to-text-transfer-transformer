@@ -2044,7 +2044,13 @@ def select_random_chunk(dataset: tf.data.Dataset,
     if additional_feature_keys is not None:
       for k in additional_feature_keys:
         with tf.control_dependencies([
-            tf.assert_equal(tf.size(tokens), tf.size(x[k]))]):
+            tf.assert_equal(
+                tf.size(tokens),
+                tf.size(x[k]),
+                message=(f'Additional feature {k} is not the same size as '
+                         f'{feature_key} in select_random_chunk().')
+            )
+        ]):
           chunk[k] = x[k][start:end]
     if additional_passthrough_keys is not None:
       for k in additional_passthrough_keys:
@@ -2379,7 +2385,13 @@ def split_tokens(dataset: tf.data.Dataset,
     if additional_feature_keys is not None:
       for k in additional_feature_keys:
         with tf.control_dependencies([
-            tf.assert_equal(tf.size(tokens), tf.size(x[k]))]):
+            tf.assert_equal(
+                tf.size(tokens),
+                tf.size(x[k]),
+                message=(f'Additional feature {k} is not the same size as '
+                         f'{feature_key} in split_tokens().')
+            )
+        ]):
           padded = tf.pad(x[k], [[0, padding]])
           outputs[k] = tf.reshape(padded, [-1, length])
           orig_lengths[k] = tf.concat(
