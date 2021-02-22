@@ -190,6 +190,93 @@ class TasksTest(test_utils.FakeTaskTest):
     self.assertEqual(30, self.cached_task.num_input_examples("train"))
     self.assertEqual(10, self.cached_task.num_input_examples("validation"))
 
+  def test_supports_caching(self):
+    self.assertFalse(
+        dataset_providers.Task(
+            "nosupports_cache",
+            source=self.function_source,
+            output_features=self.DEFAULT_OUTPUT_FEATURES,
+            preprocessors=[]).supports_caching)
+
+    self.assertFalse(
+        dataset_providers.Task(
+            "nosupports_cache",
+            source=self.function_source,
+            output_features=self.DEFAULT_OUTPUT_FEATURES,
+            preprocessors=[preprocessors.tokenize]).supports_caching)
+
+    self.assertTrue(
+        dataset_providers.Task(
+            "supports_cache",
+            source=self.function_source,
+            output_features=self.DEFAULT_OUTPUT_FEATURES,
+            preprocessors=[
+                preprocessors.tokenize,
+                dataset_providers.CacheDatasetPlaceholder()
+            ]).supports_caching)
+
+    self.assertTrue(
+        dataset_providers.Task(
+            "supports_cache",
+            source=self.function_source,
+            output_features=self.DEFAULT_OUTPUT_FEATURES,
+            preprocessors=[
+                dataset_providers.CacheDatasetPlaceholder(required=True),
+                preprocessors.tokenize,
+            ]).supports_caching)
+
+    self.assertTrue(
+        dataset_providers.Task(
+            "supports_cache",
+            source=self.function_source,
+            output_features=self.DEFAULT_OUTPUT_FEATURES,
+            preprocessors=[
+                dataset_providers.CacheDatasetPlaceholder(),
+            ]).supports_caching)
+
+  def test_requires_caching(self):
+    self.assertFalse(
+        dataset_providers.Task(
+            "nosupports_cache",
+            output_features=self.DEFAULT_OUTPUT_FEATURES,
+            source=self.function_source,
+            preprocessors=[preprocessors.tokenize]).requires_caching)
+
+    self.assertFalse(
+        dataset_providers.Task(
+            "supports_cache",
+            output_features=self.DEFAULT_OUTPUT_FEATURES,
+            source=self.function_source,
+            preprocessors=[
+                preprocessors.tokenize,
+                dataset_providers.CacheDatasetPlaceholder()
+            ]).requires_caching)
+
+    task = dataset_providers.Task(
+        "requires_cache",
+        output_features=self.DEFAULT_OUTPUT_FEATURES,
+        source=self.function_source,
+        preprocessors=[
+            dataset_providers.CacheDatasetPlaceholder(required=True),
+            preprocessors.tokenize,
+        ])
+
+    self.assertTrue(task.requires_caching)
+
+    with self.assertRaisesWithLiteralMatch(
+        ValueError,
+        "Task 'requires_cache' requires caching, but was called with "
+        "`use_cached=False`."):
+      task.get_dataset({"inputs": 512, "targets": 512}, use_cached=False)
+
+    # We haven't actually cached the task, so it still fails but with a
+    # different error.
+    with self.assertRaisesWithLiteralMatch(
+        AssertionError,
+        "'requires_cache' does not exist in any of the task cache "
+        "directories."):
+      task.get_dataset({"inputs": 512, "targets": 512}, use_cached=True)
+
   def test_cache_exists(self):
     self.assertTrue(self.cached_task.cache_dir)
     self.cached_task.assert_cached()
@@ -200,7 +287,7 @@ class TasksTest(test_utils.FakeTaskTest):
     self.assertFalse(self.uncached_task.cache_dir)
     with self.assertRaisesWithLiteralMatch(
         AssertionError,
-        "'tfds_task' does not exist in any of the task cache directories"):
+        "'tfds_task' does not exist in any of the task cache directories."):
       TaskRegistry.get("tfds_task").assert_cached()
 
   def test_get_cached_stats(self):
@@ -227,7 +314,7 @@ class TasksTest(test_utils.FakeTaskTest):
       self.cached_task.get_cached_stats("fake")
     with self.assertRaisesWithLiteralMatch(
         AssertionError,
-        "'uncached_task' does not exist in any of the task cache directories"):
+        "'uncached_task' does not exist in any of the task cache directories."):
       self.uncached_task.get_cached_stats("train")
 
   def test_set_global_cache_dirs(self):

@@ -574,6 +574,19 @@ class _CachedDataSource(FileDataSource):
 class CacheDatasetPlaceholder(object):
   """A placeholder to signal when in the pipeline offline caching will occur."""
 
+  def __init__(self, required=False):
+    """CacheDatasetPlaceholder constructor.
+
+    Args:
+      required: whether the dataset must be accessed in its cached form, and
+        on-the-fly preprocessing is disallowed.
+    """
+    self._required = required
+
+  @property
+  def required(self):
+    return self._required
+
   def __call__(self, dataset):
     raise RuntimeError("`CacheDatasetPlaceholder` should never be called.")
 
@@ -859,13 +872,19 @@ class Task(DatasetProviderBase):
 
   @property
   def supports_caching(self) -> bool:
-    """Wether or not this task supports offline caching."""
+    """Whether or not this task supports offline caching."""
     return self._cache_step_idx is not None
+
+  @property
+  def requires_caching(self) -> bool:
+    """Whether or not this task requires offline caching."""
+    return (self._cache_step_idx is not None and
+            self.preprocessors[self._cache_step_idx].required)
 
   def assert_cached(self) -> None:
     """Raises an assertion error if cached dataset does not exist."""
     assert self.cache_dir, (
-        "'%s' does not exist in any of the task cache directories" % self.name)
+        f"'{self.name}' does not exist in any of the task cache directories.")
 
   def get_cached_stats(self,
                        split: str = tfds.Split.TRAIN
@@ -923,6 +942,10 @@ class Task(DatasetProviderBase):
           "Task '%s' does not support caching. Switching to on-the-fly "
           "preprocessing.", self.name)
       use_cached = False
+    elif self.requires_caching and not use_cached:
+      raise ValueError(
+          f"Task '{self.name}' requires caching, but was called with "
+          "`use_cached=False`.")
 
     if shard_info:
       # Whether we should shard at source or on the examples from the source.

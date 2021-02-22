@@ -541,6 +541,11 @@ class FakeTaskTest(absltest.TestCase):
       preprocessors.append_eos_after_trim
   )
 
+  DEFAULT_OUTPUT_FEATURES = {
+      "inputs": dataset_providers.Feature(sentencepiece_vocab()),
+      "targets": dataset_providers.Feature(sentencepiece_vocab())
+  }
+
   def add_task(
       self,
       name,
