@@ -45,6 +45,7 @@ def mesh_train_dataset_fn(
     sequence_length,
     vocabulary=None,
     dataset_split=tfds.Split.TRAIN,
+    shuffle=True,
     seed=None,
     use_cached=False,
     pack=True):
@@ -61,6 +62,7 @@ def mesh_train_dataset_fn(
     vocabulary: unused argument, maintains compatibility with other dataset_fns.
     dataset_split: string, which split of the dataset to load. In most cases
       this should be "train".
+    shuffle: Whether or not to shuffle dataset.
     seed: tf.int64 scalar tf.Tensor (or None). Used for both the global seed and
       shuffle seed for tf.data
     use_cached: bool, whether to load the cached version of this dataset.
@@ -74,7 +76,7 @@ def mesh_train_dataset_fn(
 
   ds = mixture_or_task.get_dataset(
       sequence_length, split=dataset_split, use_cached=use_cached,
-      shuffle=True, num_epochs=None, seed=seed)
+      shuffle=shuffle, num_epochs=None, seed=seed)
 
   # Select just the output features which are present in the dataset.
   feature_keys = tuple(k for k in mixture_or_task.output_features
