@@ -517,46 +517,6 @@ class PrefixLMFeatureConverter(tf.test.TestCase):
     }
     assert_dataset(converted_ds, expected)
 
-  def test_prefix_lm_unpacked_additional_position_false(self):
-    x = [{"inputs": [9, 4, 6, 1], "targets": [3, 9, 1]}]
-    ds = create_default_dataset(x)
-
-    task_feature_lengths = {"inputs": 5, "targets": 4}
-    converter = feature_converters.PrefixLMFeatureConverter(
-        pack=False, additional_position=False)
-    converted_ds = converter(ds, task_feature_lengths)
-
-    expected = {
-        "decoder_target_tokens": [9, 4, 6, 1, 3, 9, 1, 0, 0],
-        # The last EOS token is kept if unpacked.
-        "decoder_input_tokens": [0, 9, 4, 6, 1, 3, 9, 1, 0],
-        "decoder_loss_weights": [0, 0, 0, 0, 1, 1, 1, 0, 0],
-        "decoder_causal_attention": [1, 1, 1, 1, 0, 0, 0, 0, 0]
-    }
-    assert_dataset(converted_ds, expected)
-
-  def test_prefix_lm_packed_additional_position_false(self):
-    x = [{"inputs": [7, 8, 5, 1], "targets": [3, 9, 1]},
-         {"inputs": [8, 4, 9, 3, 1], "targets": [4, 1]}]
-    ds = create_default_dataset(x)
-
-    task_feature_lengths = {"inputs": 8, "targets": 7}
-    converter = feature_converters.PrefixLMFeatureConverter(
-        pack=True, additional_position=False)
-    converted_ds = converter(ds, task_feature_lengths)
-
-    expected = {
-        "decoder_target_tokens": [7, 8, 5, 1, 3, 9, 1, 8, 4, 9, 3, 1, 4, 1, 0],
-        "decoder_input_tokens": [0, 7, 8, 5, 1, 3, 9, 0, 8, 4, 9, 3, 1, 4, 0],
-        "decoder_loss_weights": [0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0],
-        "decoder_positions": [0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6, 0],
-        "decoder_segment_ids": [1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 0],
-        "decoder_causal_attention": [
-            1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0
-        ]
-    }
-    assert_dataset(converted_ds, expected)
-
   def test_prefix_lm_unpacked_loss_on_inputs_and_targets(self):
     x = [{"inputs": [9, 4, 6, 1], "targets": [3, 9, 1]}]
     ds = create_default_dataset(x)
