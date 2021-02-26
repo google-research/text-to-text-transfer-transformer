@@ -190,6 +190,28 @@ class TasksTest(test_utils.FakeTaskTest):
     self.assertEqual(30, self.cached_task.num_input_examples("train"))
     self.assertEqual(10, self.cached_task.num_input_examples("validation"))
 
+  def test_disallow_shuffle(self):
+    task = dataset_providers.Task(
+        "no_shuffle",
+        source=self.function_source,
+        output_features=self.DEFAULT_OUTPUT_FEATURES,
+        preprocessors=self.DEFAULT_PREPROCESSORS,
+        shuffle_buffer_size=None)
+
+    with self.assertRaisesWithLiteralMatch(
+        ValueError,
+        "Shuffling is disallowed for Task 'no_shuffle' since its "
+        '`shuffle_buffer_size` was set to `None` on construction.'):
+      task.get_dataset(None, shuffle=True)
+
+    with self.assertRaisesWithLiteralMatch(
+        ValueError,
+        "Shuffling is disallowed for Task 'no_shuffle' since its "
+        '`shuffle_buffer_size` was set to `None` on construction.'):
+      task.get_dataset(None, shuffle=True, shuffle_buffer_size=100)
+
+    task.get_dataset(None, shuffle=False)
+
   def test_supports_caching(self):
     self.assertFalse(
         dataset_providers.Task(

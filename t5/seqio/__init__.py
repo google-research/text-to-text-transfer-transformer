@@ -20,6 +20,7 @@ __version__ = "0.0.0"
 from t5.seqio.dataset_providers import *
 import t5.seqio.evaluation
 from t5.seqio.evaluation import Evaluator
+import t5.seqio.experimental
 from t5.seqio.feature_converters import *
 import t5.seqio.test_utils
 from t5.seqio.utils import *

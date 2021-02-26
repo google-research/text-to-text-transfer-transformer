@@ -151,6 +151,11 @@ class DatasetProviderRegistry(object):
     return cls._REGISTRY.keys()
 
   @classmethod
+  def reset(cls):
+    """Removes all of the registered tasks."""
+    cls._REGISTRY = {}
+
+  @classmethod
   def get_dataset(
       cls,
       name,
@@ -629,7 +634,8 @@ class Task(DatasetProviderBase):
       metric_fns: list(callable), an optional list of metric functions with the
         signature `metric_fn(targets, predictions)` to use during evaluation. If
         undefined or empty, no evaluation will occur on the task.
-      shuffle_buffer_size: an optional integer
+      shuffle_buffer_size: an optional integer to set the shuffle buffer size.
+        If None, shuffling will be disallowed.
     """
     if not _VALID_TASK_NAME_REGEX.match(name):
       raise ValueError(
@@ -996,10 +1002,14 @@ class Task(DatasetProviderBase):
     ds = self._trim_output_features(ds, sequence_length=sequence_length)
 
     if shuffle:
+      if self._shuffle_buffer_size is None:
+        raise ValueError(
+            f"Shuffling is disallowed for Task '{self.name}' since its "
+            "`shuffle_buffer_size` was set to `None` on construction.")
+      shuffle_buffer_size = shuffle_buffer_size or self._shuffle_buffer_size
       # Shuffle before mixing since preprocessor can output multiple
       # (correlated) examples per input.
-      ds = ds.shuffle(shuffle_buffer_size or self._shuffle_buffer_size,
-                      seed=seed)
+      ds = ds.shuffle(shuffle_buffer_size, seed=seed)
 
     return ds.prefetch(tf.data.experimental.AUTOTUNE)
 
