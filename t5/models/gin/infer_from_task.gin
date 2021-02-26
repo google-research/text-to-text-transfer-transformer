@@ -15,3 +15,8 @@ decode_from_dataset.infer_dataset_fn = @t5.models.mesh_transformer.mesh_inferenc
 
 mesh_inference_dataset_fn.mixture_or_task_name = %MIXTURE_NAME
 mesh_inference_dataset_fn.priming_sequence_length=%num_priming_tokens
+
+# We sometimes hardcode dropout rate to a non-zero value in operative_config.gin
+# But we should always eval with dropout 0, since the MTF implementation of
+# dropout is agnostic of the scoring mode.
+dropout_rate = 0.0

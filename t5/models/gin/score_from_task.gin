@@ -14,3 +14,8 @@ save_scores.save_example_text = True
 mesh_eval_dataset_fn.mixture_or_task_name = %MIXTURE_NAME
 
 utils.run.dataset_split = 'test'
+
+# We sometimes hardcode dropout rate to a non-zero value in operative_config.gin
+# But we should always eval with dropout 0, since the MTF implementation of
+# dropout is agnostic of the scoring mode.
+dropout_rate = 0.0

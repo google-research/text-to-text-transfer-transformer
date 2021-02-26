@@ -12,3 +12,8 @@ score_from_strings.score_postprocess_fn = @save_scores
 
 save_scores.scores_filename = %scores_filename
 save_scores.save_example_text = True
+
+# We sometimes hardcode dropout rate to a non-zero value in operative_config.gin
+# But we should always eval with dropout 0, since the MTF implementation of
+# dropout is agnostic of the scoring mode.
+dropout_rate = 0.0

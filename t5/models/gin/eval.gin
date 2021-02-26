@@ -3,6 +3,11 @@ import t5.models.mesh_transformer
 
 eval_checkpoint_step = "all"
 
+# We sometimes hardcode dropout rate to a non-zero value in operative_config.gin
+# But we should always eval with dropout 0, since the MTF implementation of
+# dropout is agnostic of the scoring mode.
+dropout_rate = 0.0
+
 # Override these values
 utils.run.batch_size = ("tokens_per_replica", 32768)  # Decrease this if OOM errors are encountered
 

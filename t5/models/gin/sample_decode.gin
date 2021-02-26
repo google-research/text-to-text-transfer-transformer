@@ -4,3 +4,8 @@ Bitransformer.decode.beam_size = 1
 Bitransformer.decode.temperature = 1.0
 utils.get_variable_dtype.slice_dtype = "bfloat16"
 utils.get_variable_dtype.activation_dtype = "bfloat16"
+
+# We sometimes hardcode dropout rate to a non-zero value in operative_config.gin
+# But we should always eval with dropout 0, since the MTF implementation of
+# dropout is agnostic of the scoring mode.
+dropout_rate = 0.0

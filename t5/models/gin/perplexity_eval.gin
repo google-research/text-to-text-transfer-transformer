@@ -9,3 +9,8 @@ utils.run.eval_dataset_fn = @t5.models.mesh_transformer.mesh_eval_dataset_fn
 utils.run.mode = "perplexity_eval"
 
 utils.run.eval_checkpoint_step = %eval_checkpoint_step
+
+# We sometimes hardcode dropout rate to a non-zero value in operative_config.gin
+# But we should always eval with dropout 0, since the MTF implementation of
+# dropout is agnostic of the scoring mode.
+dropout_rate = 0.0

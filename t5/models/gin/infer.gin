@@ -11,3 +11,8 @@ infer_model.decode_fn = @decode_from_file
 
 decode_from_file.input_filename = %input_filename
 decode_from_file.output_filename = %output_filename
+
+# We sometimes hardcode dropout rate to a non-zero value in operative_config.gin
+# But we should always eval with dropout 0, since the MTF implementation of
+# dropout is agnostic of the scoring mode.
+dropout_rate = 0.0
