@@ -81,10 +81,13 @@ def add_fully_cached_task(
 
   # Add post-cache preprocessor to ensure the runtime sequence length is valid.
   def validate_sequence_length(ds, sequence_length):
-    if sequence_length is not None and sequence_length != fixed_sequence_length:
-      raise ValueError(
-          f"Fully-cached task '{new_name}' can only be loaded with "
-          f'`sequence_length={fixed_sequence_length}` or `None`.')
+    if sequence_length is not None:
+      for k, v in fixed_sequence_length.items():
+        if k not in sequence_length or sequence_length[k] != v:
+          raise ValueError(
+              f"Fully-cached task '{new_name}' can only be loaded with "
+              f'`sequence_length={fixed_sequence_length}` or `None` - '
+              f" got '{sequence_length}'")
     return ds
   new_preprocessors.append(validate_sequence_length)
 
@@ -123,4 +126,3 @@ def add_fully_cached_mixture(
       new_name,
       [(new_t.name, mixture._task_to_rate[old_t.name])  # pylint:disable=protected-access
        for old_t, new_t in zip(mixture.tasks, new_tasks)])
-

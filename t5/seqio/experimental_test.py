@@ -241,7 +241,7 @@ class FullyCachedTaskTest(absltest.TestCase):
     with self.assertRaisesWithLiteralMatch(
         ValueError,
         "Fully-cached task 'task1_6' can only be loaded with "
-        "`sequence_length={'targets': 6}` or `None`."):
+        "`sequence_length={'targets': 6}` or `None` - got {'targets': 7'}"):
       new_mix.get_dataset({'targets: 7'}, use_cached=False)
 
     expected_dataset = [
