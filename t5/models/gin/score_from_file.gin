@@ -5,6 +5,8 @@ targets_filename = "/path/to/targets"
 scores_filename = "/path/to/scores"
 
 utils.run.mode = "score_from_strings"
+utils.get_variable_dtype.slice_dtype = "bfloat16"
+utils.get_variable_dtype.activation_dtype = "bfloat16"
 
 score_from_strings.inputs = %inputs_filename
 score_from_strings.targets  = %targets_filename
