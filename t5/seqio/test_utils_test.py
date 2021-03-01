@@ -13,9 +13,12 @@
 # limitations under the License.
 
 """Tests for asserts."""
-
 from absl.testing import absltest
+
+from t5.seqio import dataset_providers
 from t5.seqio.test_utils import assert_dataset
+from t5.seqio.test_utils import DataInjector
+from t5.seqio.test_utils import FakeTaskTest
 import tensorflow.compat.v2 as tf
 
 tf.compat.v1.enable_eager_execution()
@@ -52,6 +55,34 @@ class TestUtilsTest(absltest.TestCase):
     with self.assertRaises(AssertionError):
       assert_dataset(first_dataset,
                      {'key1': [b'val1'], 'key2': [b'val2'], 'key3': [b'val3']})
+
+
+class TasksTest(FakeTaskTest):
+
+  def test_data_injection(self):
+
+    def ds_fn(split, shuffle_files):
+      del shuffle_files
+      data = {'train': {'data': b'not used'}}
+      ds = tf.data.Dataset.from_tensors(data[split])
+      return ds
+
+    source = dataset_providers.FunctionDataSource(
+        dataset_fn=ds_fn, splits=['train'])
+
+    dataset_providers.TaskRegistry.add(
+        'test_data_injection_task',
+        source=source,
+        preprocessors=[],
+        output_features={},
+        metric_fns=[])
+
+    data = {'train': {'data': b'This data is not used.'}}
+    with DataInjector('test_data_injection_task', data):
+      pass
+
+    task = dataset_providers.TaskRegistry.get('test_data_injection_task')
+    self.assertIs(source, task._source)
 
 
 if __name__ == '__main__':

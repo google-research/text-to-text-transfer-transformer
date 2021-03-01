@@ -28,6 +28,8 @@ from absl import logging
 from absl.testing import absltest
 import numpy as np
 from t5.seqio import dataset_providers
+from t5.seqio import evaluation
+from t5.seqio import feature_converters
 from t5.seqio import preprocessors
 from t5.seqio import utils as dataset_utils
 from t5.seqio import vocabularies
@@ -452,6 +454,137 @@ def random_token_preprocessor(ex, seed):
 
 def token_preprocessor_no_sequence_length(dataset, output_features):
   return test_token_preprocessor(dataset, output_features, sequence_length=None)
+
+
+class DataInjector():
+  """Inject `per_split_data` into `task` while within the scope of this object.
+
+  This context takes `per_split_data`, wraps it in a FunctionDataSource,
+  and replaces the data source in `task` with it. After calling this function,
+  `task`'s `get_dataset(split)` function will return `per_split_data[split]`.
+
+  Attributes:
+    task_name: A SeqIO task name.
+    per_split_data: A string-keyed dict of string-keyed dicts. The top-level
+      dict should be keyed by dataset splits, and the second-level dict should
+      hold the dataset data.
+  """
+
+  def __init__(self, task_name, per_split_data):
+    self._task = dataset_providers.get_mixture_or_task(task_name)
+
+    self.per_split_data = per_split_data
+    self._saved_source = self._task._source
+
+  def __enter__(self):
+
+    def ds_fn(split, shuffle_files):
+      del shuffle_files
+      data = self.per_split_data[split]
+      ds = tf.data.Dataset.from_tensors(data)
+      return ds
+
+    mock_source = dataset_providers.FunctionDataSource(
+        ds_fn, splits=self.per_split_data.keys())
+    self._task._source = mock_source
+    self._mock_source = mock_source
+
+  def __exit__(self, exc_type, exc_value, exc_traceback):
+    if self._task._source == self._mock_source:
+      self._task._source = self._saved_source
+    else:
+      raise RuntimeError(
+          "The task source was changed and not restored within the DataInjector scope."
+      )
+
+
+def assert_dict_values_equal(a, b):
+  """Assert that a and b contain equivalent numpy arrays."""
+  tf.nest.map_structure(np.testing.assert_equal, a, b)
+
+
+def test_preprocessing(task_name, raw_data):
+  """Test the preprocessing functionality of a given task.
+
+  This function injects `raw_data` into `task` and runs the preprocessing
+  routines from `task`, returning the output of
+  `next(task.get_dataset().as_numpy_iterator())`.
+
+  Args:
+    task_name: A SeqIO task name.
+    raw_data: A string-keyed dict of string-keyed dicts. The top-level dict
+      should be keyed by dataset splits, and the second-level dict should hold
+      the dataset data.
+
+  Returns:
+    The result of running the tasks' preprocessing code on `raw_data`.
+  """
+  with DataInjector(task_name, raw_data):
+    return next(task_name.get_dataset(sequence_length=None).as_numpy_iterator())
+
+
+def test_postprocessing(
+    task_name,
+    raw_data,
+    predict_output=None,
+    score_output=None,
+    feature_encoder=feature_converters.EncDecFeatureConverter()):
+  """Test the postprocessing and metrics for a given task.
+
+  This function injects `raw_data` into `task`, then creates an Evaluator
+  based on that task. It then calls `Evaluator.evaluate()` using predict_fn and
+  score_fn args that return `predict_output` and `score_output`, returning the
+  output of the `evaluate()` call. (Note that, due to the fact that `evaluate`
+  uses the task data, this test will also actuate the task preprocessing code.)
+
+  Usually, this function will be invoked `metrics, _, _ = test_postprocessing()`
+  since the second and third returned data should be the same as the passed
+  predict_output and score_output.
+
+  Args:
+    task_name: A SeqIO task name.
+    raw_data: A string-keyed dict of string-keyed dicts. The top-level dict
+      should be keyed by dataset splits, and the second-level dict should hold
+      the dataset data.
+    predict_output: A list of (int, [value]) tuples representing the model
+      predictions. Optional.
+    score_output: A list of (int, [value]) tuples representing the output of the
+      model scoring code. Optional.
+    feature_encoder: An optional feature encoder object. Defaults to
+      EncDecFeatureEncoder.
+
+  Returns:
+    metrics: a mapping from task name to computed metrics.
+    predicted_tokens: a mapping from task name to the output tokens
+      from `predict_fn`, for tasks that have `predict_metric_fns`.
+    scores: a mapping from task name to the output scores from
+      `score_fn` for tasks that have `score_predict_fns`.
+  """
+
+  class PredictCallable(evaluation.PredictFnCallable):
+
+    def __call__(self,
+                 dataset: tf.data.Dataset = None,
+                 model_feature_lengths: Mapping[str, int] = None):
+      return predict_output
+
+  class ScoreCallable(evaluation.PredictFnCallable):
+
+    def __call__(
+        self,
+        dataset: tf.data.Dataset = None,
+        model_feature_lengths: Mapping[str, int] = None,
+    ):
+      return score_output
+
+  with DataInjector(task_name, raw_data):
+    evaluator = evaluation.Evaluator(
+        task_name, feature_converter=feature_encoder)
+
+    return evaluator.evaluate(
+        compute_metrics=True,
+        predict_fn=PredictCallable(),
+        score_fn=ScoreCallable())
 
 
 class MockVocabulary(object):
