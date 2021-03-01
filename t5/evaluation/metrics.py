@@ -365,6 +365,10 @@ def rank_classification(
   In the case of multiple labels, a prediction matching any will be considered
   correct.
 
+  For problems with two labels, AUC-pr and AUC-roc retrieval metrics will be
+  reported for the positive class, which is assumed to have an 'idx' of 1. If
+  more labels are present, only accuracy and F-1 will be reported.
+
   Args:
     targets: list of tuples, the 'idx', 'is_correct' and 'weight' fields from
       ground truth examples.
@@ -442,28 +446,38 @@ def rank_classification(
     return y / y.sum(-1)[:, np.newaxis]
   probs = exp_normalize(log_likelihoods)
 
-  if num_classes > 2:
-    metrics = mean_multiclass_f1(
-        num_classes, sample_weight=weights)(labels_indicator,
-                                            predictions_indicator)
-  else:
-    metrics = {
-        "f1":
-            100 * sklearn.metrics.f1_score(
-                labels_indicator.argmax(-1), predictions, sample_weight=weights)
-    }
-  metrics.update({
-      "auc-roc":
-          100 * sklearn.metrics.roc_auc_score(
-              labels_indicator, probs, multi_class="ovr",
-              sample_weight=weights),
-      "auc-pr":
-          100 * sklearn.metrics.average_precision_score(
-              labels_indicator, probs, sample_weight=weights),
+  metrics = {
       "accuracy":
           100 * sklearn.metrics.accuracy_score(
               labels_indicator, predictions_indicator, sample_weight=weights),
-  })
+  }
+
+  if num_classes > 2:
+    metrics.update(
+        mean_multiclass_f1(num_classes,
+                           sample_weight=weights)(labels_indicator,
+                                                  predictions_indicator))
+    logging.warning("AUC-pr and AUC-roc are not supported when num_classes > 2")
+  else:
+    metrics.update({
+        "f1":
+            100 * sklearn.metrics.f1_score(
+                labels_indicator.argmax(-1), predictions, sample_weight=weights)
+    })
+    labels_indicator = labels_indicator[:, 1]
+    probs = probs[:, 1]
+
+    metrics.update({
+        "auc-roc":
+            100 * sklearn.metrics.roc_auc_score(
+                labels_indicator, probs, multi_class="ovr",
+                sample_weight=weights, average="macro"),
+        "auc-pr":
+            100 * sklearn.metrics.average_precision_score(
+                labels_indicator, probs, sample_weight=weights,
+                average="macro"),
+    })
+
   return metrics
 
 

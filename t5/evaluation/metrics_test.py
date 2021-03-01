@@ -283,7 +283,7 @@ class MetricsTest(test_utils.BaseMetricsTest):
             num_classes=2),
         {
             "accuracy": 75.,
-            "auc-pr": 70.8333333,
+            "auc-pr": 50.0,
             "auc-roc": 66.6666667,
             "f1": 66.6666667,
         })
@@ -313,8 +313,6 @@ class MetricsTest(test_utils.BaseMetricsTest):
             num_classes=3),
         {
             "accuracy": 66.6666667,
-            "auc-pr": 61.1111111,
-            "auc-roc": 50.0,
             "mean_3class_f1": 55.5555556,
         })
 
@@ -396,7 +394,7 @@ class MetricsTest(test_utils.BaseMetricsTest):
             num_classes=2),
         {
             "accuracy": 92.0,
-            "auc-pr": 89.0,
+            "auc-pr": 83.3333333,
             "auc-roc": 86.6666667,
             "f1": 90.9090909,
         })
@@ -426,8 +424,6 @@ class MetricsTest(test_utils.BaseMetricsTest):
             num_classes=3),
         {
             "accuracy": 70.5882353,
-            "auc-pr": 52.6610644,
-            "auc-roc": 55.5555556,
             "mean_3class_f1": 48.1481481,
         })
 
@@ -482,7 +478,7 @@ class MetricsTest(test_utils.BaseMetricsTest):
             num_classes=2),
         {
             "accuracy": 92.0,
-            "auc-pr": 89.0,
+            "auc-pr": 83.3333333,
             "auc-roc": 86.6666667,
             "f1": 90.9090909,
         })
@@ -515,8 +511,6 @@ class MetricsTest(test_utils.BaseMetricsTest):
             num_classes=3),
         {
             "accuracy": 70.5882353,
-            "auc-pr": 52.6610644,
-            "auc-roc": 55.5555556,
             "mean_3class_f1": 48.1481481,
         })
 
