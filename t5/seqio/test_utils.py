@@ -503,6 +503,46 @@ def assert_dict_values_equal(a, b):
   tf.nest.map_structure(np.testing.assert_equal, a, b)
 
 
+def test_task(task_name,
+              raw_data,
+              predict_output=None,
+              score_output=None,
+              feature_encoder=feature_converters.EncDecFeatureConverter()):
+  """Test the preprocessing and metrics functionality for a given task.
+
+  This function injects `raw_data` into `task`, then creates an Evaluator
+  based on that task. It then calls `Evaluator.evaluate()` using predict_fn and
+  score_fn args that return `predict_output` and `score_output`, returning the
+  output of `next(task.get_dataset().as_numpy_iterator())` and
+  the `evaluate()` call.
+
+  Args:
+    task_name: A SeqIO task name.
+    raw_data: A string-keyed dict of string-keyed dicts. The top-level dict
+      should be keyed by dataset splits, and the second-level dict should hold
+      the dataset data.
+    predict_output: A list of (int, [value]) tuples representing the model
+      predictions. Optional.
+    score_output: A list of (int, [value]) tuples representing the output of the
+      model scoring code. Optional.
+    feature_encoder: An optional feature encoder object. Defaults to
+      EncDecFeatureEncoder.
+
+  Returns:
+    A tuple (preprocessing_output, metrics), where `preprocessing_output`
+    is the result of running the tasks' preprocessing code on `raw_data` and
+    `metrics` is a mapping from task name to computed metrics.
+  """
+  output = test_preprocessing(task_name, raw_data)
+  eval_output, _, _ = test_postprocessing(
+      task_name,
+      raw_data,
+      predict_output=predict_output,
+      score_output=score_output,
+      feature_encoder=feature_encoder)
+  return output, eval_output
+
+
 def test_preprocessing(task_name, raw_data):
   """Test the preprocessing functionality of a given task.
 
@@ -520,7 +560,8 @@ def test_preprocessing(task_name, raw_data):
     The result of running the tasks' preprocessing code on `raw_data`.
   """
   with DataInjector(task_name, raw_data):
-    return next(task_name.get_dataset(sequence_length=None).as_numpy_iterator())
+    task = dataset_providers.get_mixture_or_task(task_name)
+    return next(task.get_dataset(sequence_length=None).as_numpy_iterator())
 
 
 def test_postprocessing(
