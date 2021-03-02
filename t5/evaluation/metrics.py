@@ -413,11 +413,9 @@ def rank_classification(
       weights = exs[prediction][2]
       num_correct += exs[prediction][1] * weights
       total += weights
-    return {
-        "accuracy": 100 * num_correct / total
-    }
+    return {"accuracy": 100 * num_correct / total}
 
-  assert len(targets) % num_classes == 0
+  assert len(targets) % num_classes == 0, f"{len(targets)} % {num_classes} != 0"
 
   labels_indicator = np.array([is_correct for _, is_correct, _ in targets
                               ]).reshape((-1, num_classes))
