@@ -727,7 +727,10 @@ class Task(DatasetProviderBase):
 
   @property
   def splits(self) -> Sequence[str]:
-    return self.source.splits
+    s = self.source.splits
+    if not s:
+      raise ValueError(f"Task {self.name} has no splits")
+    return s
 
   @property
   def source(self) -> DataSource:
@@ -1205,7 +1208,7 @@ class Mixture(DatasetProviderBase):
     tasks = []
     for task in self.tasks:
       if split not in task.splits:
-        logging.info(
+        logging.warning(
             "Task %s has no '%s' split, skipping.", task.name, split
         )
         continue
@@ -1304,6 +1307,8 @@ def _log_mixing_proportions(
       mean_targets_length.append(targets_sum / float(stats_examples))
   else:
     def _estimated_mean_length(task, key):
+      if key not in sequence_length:
+        return 0
       if (task.supports_caching and
           task._cache_step_idx < len(task._preprocessors) - 1):  # pylint:disable=protected-access
         # There is processing after caching, so we can't rely on the stats.
