@@ -275,7 +275,7 @@ class Evaluator:
     # Determine if sequence_length arg is required. This occurs when any of the
     # task preprocessors have a `sequence_length` arg with no default value.
     sequence_length_required = False
-    for task in eval_tasks:
+    for task in self._eval_tasks:
       for prep in task.preprocessors:
         prep_params = inspect.signature(prep).parameters
         if ("sequence_length" in prep_params and
