@@ -66,6 +66,22 @@ class EvalUtilsTest(absltest.TestCase):
         }
     )
 
+  def test_get_eval_metric_values_seqio(self):
+    events = {
+        "eval/accuracy": [(20, 1.), (30, 2.)],
+        "eval/sequence_accuracy": [(10, 3.)],
+        "loss": [(40, 3.)],
+    }
+    eval_values = eval_utils.get_eval_metric_values(
+        events, task_name="foo_task")
+    self.assertDictEqual(
+        eval_values,
+        {
+            "foo_task/accuracy": [(20, 1.), (30, 2.)],
+            "foo_task/sequence_accuracy": [(10, 3.)],
+        }
+    )
+
   def test_glue_average(self):
     mets = eval_utils.METRIC_NAMES.items()
     glue_metric_names = [
