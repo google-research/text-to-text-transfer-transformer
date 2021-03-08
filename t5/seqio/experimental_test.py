@@ -18,6 +18,7 @@ from absl.testing import absltest
 from t5.seqio import dataset_providers
 from t5.seqio import experimental
 from t5.seqio import test_utils
+from t5.seqio import utils
 import tensorflow.compat.v2 as tf
 
 assert_dataset = test_utils.assert_dataset
@@ -25,6 +26,7 @@ Feature = dataset_providers.Feature
 CacheDatasetPlaceholder = dataset_providers.CacheDatasetPlaceholder
 MixtureRegistry = dataset_providers.MixtureRegistry
 TaskRegistry = dataset_providers.TaskRegistry
+ShardInfo = dataset_providers.ShardInfo
 
 
 class FullyCachedTaskTest(absltest.TestCase):
@@ -97,10 +99,10 @@ class FullyCachedTaskTest(absltest.TestCase):
           {k: v+1 for k, v in sequence_length.items()},
           use_cached=False)
 
-    test_utils.assert_dataset(
+    assert_dataset(
         new_task.get_dataset(None, shuffle=False),
         expected_dataset)
-    test_utils.assert_dataset(
+    assert_dataset(
         new_task.get_dataset(sequence_length, shuffle=False),
         expected_dataset)
 
@@ -253,10 +255,10 @@ class FullyCachedTaskTest(absltest.TestCase):
         {'targets': [2, 6, 6]},
     ]
 
-    test_utils.assert_dataset(
+    assert_dataset(
         new_mix.get_dataset(None, shuffle=False).take(6),
         expected_dataset)
-    test_utils.assert_dataset(
+    assert_dataset(
         new_mix.get_dataset({'targets': 6}, shuffle=False).take(6),
         expected_dataset)
 
@@ -295,6 +297,202 @@ class FullyCachedTaskTest(absltest.TestCase):
       new_mixture.get_dataset(None, shuffle=True, use_cached=False)
 
     new_mixture.get_dataset(None, shuffle=False, use_cached=False)
+
+
+class FewshotTest(absltest.TestCase):
+
+  def test_fewshot_data_source(self):
+
+    def fake_dataset_fn(split, shuffle_files):
+      del shuffle_files
+      return tf.data.Dataset.range(
+          *((0, 2) if split == 'validation' else (3, 5))
+      )
+
+    # 0 shot
+    src = experimental.FewshotDataSource(
+        dataset_providers.FunctionDataSource(
+            dataset_fn=fake_dataset_fn,
+            splits=['train', 'validation']
+        ),
+        num_shots=0
+    )
+    dataset = src.get_dataset('validation')
+    assert_dataset(
+        dataset, [{'eval': 0,}, {'eval': 1}]
+    )
+
+    # 3 shot
+    src = experimental.FewshotDataSource(
+        dataset_providers.FunctionDataSource(
+            dataset_fn=fake_dataset_fn,
+            splits=['train', 'validation']
+        ),
+        train_preprocessors=[
+            utils.map_over_dataset(lambda x: {'inputs': 0, 'targets': x})
+        ],
+        num_shots=3
+    )
+    dataset = src.get_dataset('validation')
+    assert_dataset(
+        dataset, [
+            {
+                'eval': 0,
+                'train': {'inputs': [0, 0, 0], 'targets': [3, 4, 3]}
+            },
+            {
+                'eval': 1,
+                'train': {'inputs': [0, 0, 0], 'targets': [4, 3, 4]}
+            },
+        ]
+    )
+
+    # 3-shot, sharded.
+    assert_dataset(
+        src.get_dataset('validation', shard_info=ShardInfo(0, 2)), [
+            {
+                'eval': 0,
+                'train': {'inputs': [0, 0, 0], 'targets': [3, 3, 3]}
+            },
+        ]
+    )
+    assert_dataset(
+        src.get_dataset('validation', shard_info=ShardInfo(1, 2)), [
+            {
+                'eval': 1,
+                'train': {'inputs': [0, 0, 0], 'targets': [4, 4, 4]}
+            },
+        ]
+    )
+
+    # Missing train
+    src = experimental.FewshotDataSource(
+        dataset_providers.FunctionDataSource(
+            dataset_fn=fake_dataset_fn,
+            splits=['validation']
+        ),
+        num_shots=3
+    )
+    with self.assertRaisesRegex(
+        ValueError,
+        'Train split \'train\' is not one of the original source splits: '
+        r'\(\'validation\',\)'):
+      dataset = src.get_dataset('validation')
+
+  def test_fewshot_preprocessor(self):
+    train_examples = [
+        {
+            'inputs': 'How many states in the US?',
+            'targets': '50',
+        },
+        {
+            'inputs': 'How many cents in a dollar?',
+            'targets': '100',
+        },
+        {
+            'inputs': 'How many cents in a quarter?',
+            'targets': '25',
+        }
+    ]
+
+    eval_examples = [
+        {
+            'inputs': 'Who was in the Beatles?',
+            'targets': 'John',
+            'answers': ['John', 'Paul', 'George', 'Ringo']
+        },
+        {
+            'inputs': 'When did the Beatles break up?',
+            'targets': '1970',
+            'answers': ['1970', 'April 10, 1970', 'April 10', '4/10/1970'],
+        }
+    ]
+
+    def _from_generator(examples):
+      return tf.data.Dataset.from_generator(
+          lambda: (x for x in examples),
+          output_types={k: tf.string for k in examples[0].keys()},
+          output_shapes={
+              k: [None] if isinstance(v, list) else []
+              for k, v in examples[0].items()
+          })
+
+    train_ds = _from_generator(train_examples).repeat()
+    eval_ds = _from_generator(eval_examples)
+
+    # 0-shot
+    dataset = experimental.fewshot_preprocessor(
+        tf.data.Dataset.zip({'eval': eval_ds}),
+        inputs_prefix='0 ',
+        targets_prefix=' X 1 ',
+        example_separator=' X ')
+    assert_dataset(
+        dataset,
+        [
+            {
+                'inputs': '0 Who was in the Beatles? X 1',
+                'targets': 'John',
+                'answers': ['John', 'Paul', 'George', 'Ringo']
+            },
+            {
+                'inputs': '0 When did the Beatles break up? X 1',
+                'targets': '1970',
+                'answers': ['1970', 'April 10, 1970', 'April 10', '4/10/1970'],
+            }
+        ])
+
+    # 2-shot
+    dataset = experimental.fewshot_preprocessor(
+        tf.data.Dataset.zip({'train': train_ds.batch(2), 'eval': eval_ds}),
+        inputs_prefix='0 ',
+        targets_prefix=' X 1 ',
+        example_separator=' X ')
+    assert_dataset(
+        dataset,
+        [
+            {
+                'inputs':
+                    '0 How many states in the US? X 1 50 X 0 How many cents in '
+                    'a dollar? X 1 100 X 0 Who was in the Beatles? X 1',
+                'targets': 'John',
+                'answers': ['John', 'Paul', 'George', 'Ringo']
+            },
+            {
+                'inputs':
+                    '0 How many cents in a quarter? X 1 25 X 0 How many states '
+                    'in the US? X 1 50 X 0 When did the Beatles break up? X 1',
+                'targets': '1970',
+                'answers': ['1970', 'April 10, 1970', 'April 10', '4/10/1970'],
+            }
+        ])
+
+    # 1-shot, batched eval
+    dataset = experimental.fewshot_preprocessor(
+        tf.data.Dataset.zip(
+            {'train': train_ds.batch(1), 'eval': eval_ds.batch(2)}
+        ),
+        inputs_prefix='0 ',
+        targets_prefix=' X 1 ',
+        example_separator=' X ')
+    assert_dataset(
+        dataset,
+        [
+            {
+                'inputs':
+                    '0 How many states in the US? X 1 50 X 0 Who was in the '
+                    'Beatles? X 1',
+                'targets': 'John',
+                'answers': ['John', 'Paul', 'George', 'Ringo']
+            },
+            {
+                'inputs':
+                    '0 How many states in the US? X 1 50 X 0 When did the '
+                    'Beatles break up? X 1',
+                'targets': '1970',
+                'answers': ['1970', 'April 10, 1970', 'April 10', '4/10/1970'],
+            },
+        ])
+
 
 if __name__ == '__main__':
   absltest.main()
