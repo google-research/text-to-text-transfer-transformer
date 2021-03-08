@@ -503,30 +503,51 @@ def assert_dict_values_equal(a, b):
   tf.nest.map_structure(np.testing.assert_equal, a, b)
 
 
+def assert_dict_contains(expected, actual):
+  """Assert that 'expected' is a subset of the data in 'actual'."""
+  for k, v in expected.items():
+    np.testing.assert_equal(actual[k], v)
+
+
+def encode_str(task_name, s, output_feature_name="targets"):
+  task = dataset_providers.get_mixture_or_task(task_name)
+  return task.output_features[output_feature_name].vocabulary.encode(s)
+
+
+def create_prediction(task_name, s, output_feature_name="targets"):
+  task = dataset_providers.get_mixture_or_task(task_name)
+  return [(0, task.output_features[output_feature_name].vocabulary.encode(s))]
+
+
 def test_task(task_name,
               raw_data,
-              predict_output=None,
-              score_output=None,
+              output_feature_name="targets",
               feature_encoder=feature_converters.EncDecFeatureConverter()):
   """Test the preprocessing and metrics functionality for a given task.
 
-  This function injects `raw_data` into `task`, then creates an Evaluator
-  based on that task. It then calls `Evaluator.evaluate()` using predict_fn and
-  score_fn args that return `predict_output` and `score_output`, returning the
-  output of `next(task.get_dataset().as_numpy_iterator())` and
-  the `evaluate()` call.
+  This function injects `raw_data` into the task, then creates an Evaluator
+  based on that task. It runs the task preprocessing on that raw data and
+  extracts the expected value based on `output_feature_name`. Then, it
+  creates an `Evaluator` object based on the `task_name` and runs `evaluate`
+  using the expected value, returning both the result of the preprocessing
+  and the metrics from the `evaluate` call.
+
+  The expected format for `raw_data` is a nested dict of the form
+  {'split_name': {'data_key': data}}.
+
+  Note that testing metrics that use score_outputs from this API is currently
+  unsupported.
 
   Args:
     task_name: A SeqIO task name.
     raw_data: A string-keyed dict of string-keyed dicts. The top-level dict
       should be keyed by dataset splits, and the second-level dict should hold
       the dataset data.
-    predict_output: A list of (int, [value]) tuples representing the model
-      predictions. Optional.
-    score_output: A list of (int, [value]) tuples representing the output of the
-      model scoring code. Optional.
+    output_feature_name: A string key for the output feature. Used to extract
+      the expected target from the preprocessing output.
     feature_encoder: An optional feature encoder object. Defaults to
       EncDecFeatureEncoder.
+
 
   Returns:
     A tuple (preprocessing_output, metrics), where `preprocessing_output`
@@ -534,13 +555,15 @@ def test_task(task_name,
     `metrics` is a mapping from task name to computed metrics.
   """
   output = test_preprocessing(task_name, raw_data)
+  predict_output = [(0, output[output_feature_name])]
+
   eval_output, _, _ = test_postprocessing(
       task_name,
       raw_data,
       predict_output=predict_output,
-      score_output=score_output,
+      score_output=None,
       feature_encoder=feature_encoder)
-  return output, eval_output
+  return output, eval_output[task_name]
 
 
 def test_preprocessing(task_name, raw_data):
