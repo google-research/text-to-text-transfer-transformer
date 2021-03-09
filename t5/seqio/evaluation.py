@@ -14,9 +14,12 @@
 
 """Utilities for the class-based evaluation."""
 
+import abc
 import inspect
 import itertools
+import json
 import os
+import time
 from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 
 from absl import logging
@@ -176,7 +179,8 @@ class PredictFnCallable(typing_extensions.Protocol):
       self,
       dataset: tf.data.Dataset,
       model_feature_lengths: Mapping[str, int]
-  ) -> Sequence[Tuple[int, Sequence[int]]]: ...
+  ) -> Sequence[Tuple[int, Sequence[int]]]:
+    ...
 
 
 class ScoreFnCallable(typing_extensions.Protocol):
@@ -185,7 +189,8 @@ class ScoreFnCallable(typing_extensions.Protocol):
       self,
       dataset: tf.data.Dataset,
       model_feature_lengths: Mapping[str, int]
-  ) -> Sequence[Tuple[int, float]]: ...
+  ) -> Sequence[Tuple[int, float]]:
+    ...
 
 
 class LogFnCallable(typing_extensions.Protocol):
@@ -195,7 +200,29 @@ class LogFnCallable(typing_extensions.Protocol):
       task_metrics: Mapping[str, Metric],
       step: int,
       task_name: str
-  ) -> None: ...
+  ) -> None:
+    ...
+
+
+class Logger(abc.ABC):
+  """Abstract base class for logging.
+
+  Attributes:
+    summary_dir: a directory to save the logging results (e.g., TensorBoard
+      summary) as well as the evaluation results (e.g., "inputs_pretokenized",
+      "target_pretokenize" and "prediction").
+  """
+
+  @abc.abstractmethod
+  def __call__(self,
+               task_metrics: Mapping[str, Scalar],
+               step: int,
+               task_name: str) -> None:
+    """Logs the metric for each task."""
+
+  @abc.abstractproperty
+  def summary_dir(self) -> str:
+    pass
 
 
 class Evaluator:
@@ -227,7 +254,7 @@ class Evaluator:
     cached_targets: cached evaluation targets.
     model_feature_lengths: mapping from model feature to its length in the
       `cached_model_datasets`.
-    log_fn: a function called to log results.
+    logger: a subclass of `Logger`.
   """
 
   def __init__(self,
@@ -236,8 +263,7 @@ class Evaluator:
                eval_split: str = "validation",
                use_cached: bool = False,
                sequence_length: Mapping[str, int] = None,
-               summary_dir: Optional[str] = None,
-               log_fn: Optional[LogFnCallable] = None):
+               logger: Optional[Logger] = None):
     """Evaluator constructor.
 
     Args:
@@ -253,10 +279,7 @@ class Evaluator:
         none of the preprocessors depend on the sequence length, it can be left
         unspecified and the maximum length for each feature will be used. These
         lengths are computed while caching the datasets.
-      summary_dir: an optional directory to save the evaluation results in Event
-        protocol buffer format. If provided `log_fn` should be None.
-      log_fn: an optional function to use to log evaluation results. If a custom
-        logging function is provided `summary_dir` should be None.
+      logger: a subclass of `Logger`.
 
     Raises:
       ValueError if `sequence_length` is None but a preprocessor depends on its
@@ -324,6 +347,9 @@ class Evaluator:
           "for `sequence_length` to have them be automatically computed.\n")
 
     self._cached_model_datasets = {}
+
+    if feature_converter.pack:
+      raise ValueError("During evaluation, packing can't be used.")
     # Convert the task features to model features
     for task in self._eval_tasks:
       eval_ds = feature_converter(
@@ -337,18 +363,7 @@ class Evaluator:
     self._cached_task_datasets = cached_task_datasets
     self._model_feature_lengths = feature_converter.get_model_feature_lengths(
         sequence_length)
-
-    if summary_dir is not None and log_fn is not None:
-      raise ValueError(
-          "If using a custom logging function a summary dir should not be "
-          f"provided. Got: `log_fn`={log_fn} `summary_dir`={summary_dir}")
-    self._log_fn = None
-    if log_fn is not None:
-      self._log_fn = log_fn
-    else:
-      # If there is a summary dir but not a custom log use the default logger.
-      if summary_dir is not None:
-        self._log_fn = TensorboardLogging(summary_dir)
+    self._logger = logger
 
   def evaluate(self,
                *,
@@ -467,6 +482,7 @@ class Evaluator:
       targets = self.cached_targets[task.name]
 
       task_metrics = []
+      inferences = {}
 
       if task.predict_metric_fns:
         task_vocab = task.output_features["targets"].vocabulary
@@ -478,6 +494,7 @@ class Evaluator:
             task.postprocess_fn(d, example=ex, is_target=False)
             for d, ex in zip(outputs, tfds.as_numpy(task_dataset))
         ]
+        inferences["predictions"] = predictions
 
         task_metrics.extend([
             metric_fn(targets, predictions) for metric_fn in
@@ -489,6 +506,7 @@ class Evaluator:
             metric_fn(targets, scores[task.name])
             for metric_fn in task.score_metric_fns
         ])
+        inferences["scores"] = scores
 
       all_metrics[task.name] = {}
       for k, v in itertools.chain(*[m.items() for m in task_metrics]):
@@ -501,9 +519,50 @@ class Evaluator:
           k: Scalar(v) if not isinstance(v, Metric) else v
           for k, v in all_metrics[task.name].items()
       }
-      if self._log_fn is not None:
-        self._log_fn(metrics, step, task_name=task.name)
+      if self.logger is not None:
+        self.logger(metrics, step, task_name=task.name)  # pylint: disable=not-callable
+        output_fname = os.path.join(self.logger.summary_dir,
+                                    f"{task.name}-{step}.jsonl")
+        self._write_to_file(inferences, task_dataset, output_fname)
+
     return all_metrics
+
+  def _write_to_file(self,
+                     inferences: Mapping[str, Sequence[Any]],
+                     task_dataset: tf.data.Dataset,
+                     output_fname: str) -> None:
+    """Writes inputs, targets, predictions and scores to a file."""
+    write_tick = time.time()
+    logging.info("Writing evaluation results to %s", output_fname)
+    with tf.io.gfile.GFile(output_fname, "w") as f:
+      for inp, prediction, score in itertools.zip_longest(
+          task_dataset, inferences.get("predictions", []),
+          inferences.get("scores", [])):
+        input_dict = {}
+        for k, v in inp.items():
+          if k.endswith("_pretokenized"):
+            if isinstance(v.numpy(), bytes):
+              input_dict[k] = v.numpy().decode("utf-8")
+            else:
+              # Convert to Python list for json serialization.
+              input_dict[k] = v.numpy().tolist()
+        json_dict = {"input": input_dict}
+
+        # Only write `prediction` if it is JSON serializable.
+        if prediction is not None:
+          try:
+            json.dumps(prediction)
+            json_dict["prediction"] = prediction
+          except TypeError:
+            logging.warning("`prediction` is not JSON serializable")
+
+        if score is not None:
+          json_dict["score"] = score
+        f.write(json.dumps(json_dict) + "\n")
+    write_time = time.time() - write_tick
+    logging.info("Writing completed in %02f seconds (%02f examples/sec).",
+                 write_time,
+                 len(inferences) / write_time)
 
   @property
   def eval_tasks(self) -> Sequence[Task]:
@@ -525,8 +584,12 @@ class Evaluator:
   def model_feature_lengths(self) -> Mapping[str, int]:
     return self._model_feature_lengths
 
+  @property
+  def logger(self) -> Logger:
+    return self._logger
 
-class TensorboardLogging:
+
+class TensorboardLogging(Logger):
   """A class the encapulates summary writers to implement custom logging."""
 
   def __init__(self, summary_dir: str):
@@ -584,3 +647,7 @@ class TensorboardLogging:
       summary_writer.add_summary(summary, step)
 
     summary_writer.flush()
+
+  @property
+  def summary_dir(self) -> str:
+    return self._summary_dir

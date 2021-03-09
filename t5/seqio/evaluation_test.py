@@ -16,6 +16,7 @@
 # pylint:disable=g-bare-generic,g-long-lambda
 
 import functools
+import json
 import os
 from typing import Callable, Sequence
 from unittest import mock
@@ -197,7 +198,7 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_task_datasets = {task.name: tf.data.Dataset.range(3)}
       self._cached_targets = {task.name: ["e5 e6", "e6", "e7"]}
       self._eval_tasks = [task]
-      self._log_fn = None
+      self._logger = None
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -246,7 +247,7 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_task_datasets = {task.name: tf.data.Dataset.range(2)}
       self._cached_targets = {task.name: [[5, 6], [6, 7]]}
       self._eval_tasks = [task]
-      self._log_fn = None
+      self._logger = None
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -275,7 +276,7 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_task_datasets = {task.name: tf.data.Dataset.range(3)}
       self._cached_targets = {task.name: [0, 1, 2]}
       self._eval_tasks = [task]
-      self._log_fn = None
+      self._logger = None
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -324,7 +325,7 @@ class EvaluationTest(tf.test.TestCase):
           task2.name: [0, 1, 2]
       }
       self._eval_tasks = [task1, task2]
-      self._log_fn = None
+      self._logger = None
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       def predict_fn(ds):
@@ -361,7 +362,8 @@ class EvaluationTest(tf.test.TestCase):
         metrics_fn=[_sequence_accuracy_metric])
 
     feature_converter = mock.Mock(
-        get_model_feature_lengths=lambda x: {k: v+1 for k, v in x.items()})
+        get_model_feature_lengths=lambda x: {k: v+1 for k, v in x.items()},
+        pack=False)
     sequence_length = {"inputs": 10, "targets": 8}
     evaluator = Evaluator(
         mixture_or_task_name=task_name,
@@ -399,7 +401,8 @@ class EvaluationTest(tf.test.TestCase):
         metrics_fn=[_sequence_accuracy_metric])
 
     feature_converter = mock.Mock(
-        get_model_feature_lengths=lambda x: {k: v+1 for k, v in x.items()})
+        get_model_feature_lengths=lambda x: {k: v+1 for k, v in x.items()},
+        pack=False)
     evaluator = Evaluator(
         mixture_or_task_name=task_name,
         feature_converter=feature_converter,
@@ -427,7 +430,7 @@ class EvaluationTest(tf.test.TestCase):
         preprocessor=preprocessor_with_sequence_length,
         metrics_fn=[_sequence_accuracy_metric])
 
-    feature_converter = mock.Mock()
+    feature_converter = mock.Mock(pack=False)
 
     with self.assertRaisesWithLiteralMatch(
         ValueError,
@@ -452,7 +455,7 @@ class EvaluationTest(tf.test.TestCase):
         preprocessor=preprocessors.append_eos_after_trim,
         metrics_fn=[_sequence_accuracy_metric])
 
-    feature_converter = mock.Mock()
+    feature_converter = mock.Mock(pack=False)
     # Should not raise ValueError
     _ = Evaluator(
         mixture_or_task_name=task_name,
@@ -486,7 +489,8 @@ class EvaluationTest(tf.test.TestCase):
 
     # Feature converter that just pads "inputs" and "targets".
     feature_converter = mock.Mock(
-        get_model_feature_lengths=lambda x: {"inputs": 4, "targets": 4})
+        get_model_feature_lengths=lambda x: {"inputs": 4, "targets": 4},
+        pack=False)
     feature_converter.side_effect = (
         lambda ds, length: utils.trim_and_pad_dataset(ds, {
             "inputs": 4,
@@ -535,7 +539,7 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_model_datasets = {task.name: eval_ds}
       self._cached_task_datasets = {task.name: tf.data.Dataset.range(3)}
       self._eval_tasks = [task]
-      self._log_fn = None
+      self._logger = None
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -559,7 +563,7 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_task_datasets = {task.name: tf.data.Dataset.range(3)}
       self._cached_targets = {task.name: ["e5", "e6", "e7"]}
       self._eval_tasks = [task]
-      self._log_fn = None
+      self._logger = None
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -618,7 +622,7 @@ class EvaluationTest(tf.test.TestCase):
     summary_dir = self.create_tempdir().full_path
 
     def mock_init(self):
-      self._log_fn = evaluation.TensorboardLogging(summary_dir)
+      self._logger = evaluation.TensorboardLogging(summary_dir)
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -627,7 +631,7 @@ class EvaluationTest(tf.test.TestCase):
         "rouge1": evaluation.Scalar(50),
         "rouge2": evaluation.Scalar(100)
     }
-    evaluator._log_fn(
+    evaluator.logger(
         task_metrics=task_metrics, step=1, task_name="log_eval_task")
     task_summary_dir = os.path.join(summary_dir, "log_eval_task")
     event_file = os.path.join(
@@ -653,7 +657,7 @@ class EvaluationTest(tf.test.TestCase):
     summary_dir = self.create_tempdir().full_path
 
     def mock_init(self):
-      self._log_fn = evaluation.TensorboardLogging(summary_dir)
+      self._logger = evaluation.TensorboardLogging(summary_dir)
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -662,7 +666,7 @@ class EvaluationTest(tf.test.TestCase):
         "rouge1": 50.0,  # Test with float
         "rouge2": 100  # Test with int
     }
-    evaluator._log_fn(
+    evaluator.logger(
         task_metrics=task_metrics, step=1, task_name="log_eval_task")
     task_summary_dir = os.path.join(summary_dir, "log_eval_task")
     event_file = os.path.join(
@@ -688,7 +692,7 @@ class EvaluationTest(tf.test.TestCase):
     summary_dir = self.create_tempdir().full_path
 
     def mock_init(self):
-      self._log_fn = evaluation.TensorboardLogging(summary_dir)
+      self._logger = evaluation.TensorboardLogging(summary_dir)
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -698,37 +702,91 @@ class EvaluationTest(tf.test.TestCase):
         ValueError,
         "Value for metric 'wrong_type' should be of type 'Scalar', 'int', or "
         "'float', got 'str'."):
-      evaluator._log_fn(
+      evaluator.logger(
           task_metrics=task_metrics, step=1, task_name="wrong_value_type")
 
-  def test_summary_dir_and_log_fn_provided(self):
-    task_name = "summary_dir_and_log_fn_provided"
-    ds = tf.data.Dataset.from_tensors({
-        "inputs": [7, 8],
-        "targets": [3, 9],
-        "targets_pretokenized": "ex 1"
-    })
-    dataset_fn = lambda split, shuffle_files: ds
-    register_dummy_task(
-        task_name,
-        dataset_fn=dataset_fn,
-        # `append_eos_after_trim` has an optional sequence_length arg
-        preprocessor=preprocessors.append_eos_after_trim,
-        metrics_fn=[_sequence_accuracy_metric])
+  def _get_task_dataset_for_write_to_file_tests(self):
+    x = [{"inputs_pretokenized": "i0", "targets_pretokenized": "t0"},
+         {"inputs_pretokenized": "i1", "targets_pretokenized": "t1"}]
+    output_types = {
+        "inputs_pretokenized": tf.string,
+        "targets_pretokenized": tf.string
+    }
+    output_shapes = {"targets_pretokenized": [], "inputs_pretokenized": []}
+    task_dataset = tf.data.Dataset.from_generator(
+        lambda: x, output_types=output_types, output_shapes=output_shapes)
+    return task_dataset
 
-    feature_converter = mock.Mock()
-    summary_dir = "example_summary_dir"
-    log_fn = mock.Mock()
-    with self.assertRaisesWithLiteralMatch(
-        ValueError,
-        "If using a custom logging function a summary dir should not be "
-        f"provided. Got: `log_fn`={log_fn} `summary_dir`={summary_dir}"):
-      _ = Evaluator(
-          mixture_or_task_name=task_name,
-          feature_converter=feature_converter,
-          eval_split="validation",
-          summary_dir=summary_dir,
-          log_fn=log_fn)
+  def test_write_to_file_prediction_and_scores(self):
+    inferences = {"predictions": ["pred0", "pred1"], "scores": [0.2, 0.3]}
+    tmp_dir = self.create_tempdir().full_path
+    output_fname = os.path.join(tmp_dir, "infer.jsonl")
+    task_dataset = self._get_task_dataset_for_write_to_file_tests()
+    with mock.patch.object(Evaluator, "__init__", return_value=None):
+      evaluator = Evaluator()
+      evaluator._write_to_file(inferences, task_dataset, output_fname)
+
+    # Read the written jsonl file.
+    with open(output_fname) as f:
+      actual = [json.loads(line.strip()) for line in f]
+
+    expected = [{
+        "input": {"inputs_pretokenized": "i0", "targets_pretokenized": "t0"},
+        "prediction": "pred0",
+        "score": 0.2
+    }, {
+        "input": {"inputs_pretokenized": "i1", "targets_pretokenized": "t1"},
+        "prediction": "pred1",
+        "score": 0.3
+    }]
+    self.assertEqual(actual, expected)
+
+  def test_write_to_file_prediction_only(self):
+    inferences = {"predictions": ["pred0", "pred1"]}
+    tmp_dir = self.create_tempdir().full_path
+    output_fname = os.path.join(tmp_dir, "pred.jsonl")
+    task_dataset = self._get_task_dataset_for_write_to_file_tests()
+    with mock.patch.object(Evaluator, "__init__", return_value=None):
+      evaluator = Evaluator()
+      evaluator._write_to_file(inferences, task_dataset, output_fname)
+
+    # Read the written jsonl file.
+    with open(output_fname) as f:
+      actual = [json.loads(line.strip()) for line in f]
+
+    expected = [{
+        "input": {"inputs_pretokenized": "i0", "targets_pretokenized": "t0"},
+        "prediction": "pred0",
+    }, {
+        "input": {"inputs_pretokenized": "i1", "targets_pretokenized": "t1"},
+        "prediction": "pred1",
+    }]
+    self.assertEqual(actual, expected)
+
+  def test_write_to_file_non_serializable_prediction(self):
+    inferences = {
+        "predictions": [np.zeros((2, 2)), np.ones((2, 2))],
+        "scores": [0.2, 0.3]
+    }
+    tmp_dir = self.create_tempdir().full_path
+    output_fname = os.path.join(tmp_dir, "infer.jsonl")
+    task_dataset = self._get_task_dataset_for_write_to_file_tests()
+    with mock.patch.object(Evaluator, "__init__", return_value=None):
+      evaluator = Evaluator()
+      evaluator._write_to_file(inferences, task_dataset, output_fname)
+
+    # Read the written jsonl file.
+    with open(output_fname) as f:
+      actual = [json.loads(line.strip()) for line in f]
+
+    expected = [{
+        "input": {"inputs_pretokenized": "i0", "targets_pretokenized": "t0"},
+        "score": 0.2
+    }, {
+        "input": {"inputs_pretokenized": "i1", "targets_pretokenized": "t1"},
+        "score": 0.3
+    }]
+    self.assertEqual(actual, expected)
 
 
 if __name__ == "__main__":
