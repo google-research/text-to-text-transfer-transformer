@@ -71,7 +71,8 @@ class ProcessTaskBeamTest(test_utils.FakeTaskTest):
       output_dirs = cache_tasks_main.run_pipeline(
           p, ["cached_task", task_name], cache_dir=self.test_data_dir)
 
-    actual_task_dir = os.path.join(self.test_data_dir, task_name)
+    actual_task_dir = os.path.join(
+        self.test_data_dir, seqio.get_task_dir_from_name(task_name))
     expected_task_dir = os.path.join(test_utils.TEST_DATA_DIR,
                                      expected_task_dir)
     expected_tfrecord_files = [
@@ -109,7 +110,7 @@ class ProcessTaskBeamTest(test_utils.FakeTaskTest):
       self.assertEqual(expected_content, actual_content)
 
     # Add COMPLETED file so that we can load `uncached_task`.
-    mark_completed(self.test_data_dir, task_name)
+    mark_completed(self.test_data_dir, seqio.get_task_dir_from_name(task_name))
 
     # Check datasets.
     self.verify_task_matches_fake_datasets(
@@ -120,6 +121,9 @@ class ProcessTaskBeamTest(test_utils.FakeTaskTest):
 
   def test_tfds_pipeline(self):
     self.validate_pipeline("tfds_task")
+
+  def test_new_tfds_pipeline(self):
+    self.validate_pipeline("t5:tfds_task")
 
   def test_text_line_pipeline(self):
     self.validate_pipeline("text_line_task")

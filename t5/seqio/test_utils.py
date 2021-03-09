@@ -839,12 +839,15 @@ class FakeTaskTest(absltest.TestCase):
       for d in dirs + [""]:
         os.chmod(os.path.join(root, d), 0o777)
 
-    # Prepare uncached TextLineTask.
+    # Prepare uncached TFDS task.
     self.tfds_source = dataset_providers.TfdsDataSource(
         tfds_name="fake:0.0.0",
         splits=("train", "validation")
     )
     self.add_task("tfds_task", source=self.tfds_source)
+
+    # Add task with prefix
+    self.add_task("t5:tfds_task", source=self.tfds_source)
 
     # Prepare TextLineSource.
     _dump_fake_dataset(

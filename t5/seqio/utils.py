@@ -206,6 +206,10 @@ def get_cached_stats_path(data_dir, split):
   return os.path.join(data_dir, _STATS_FILENAME.format(split=split))
 
 
+def get_task_dir_from_name(task_name):
+  return os.path.join(*(task_name.split(":")))
+
+
 def stateless_shuffle(value, seed):
   """Randomly shuffles a tensor, statelessly."""
   flat_value = tf.reshape(value, [-1])

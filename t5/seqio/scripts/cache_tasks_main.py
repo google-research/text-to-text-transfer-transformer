@@ -319,7 +319,8 @@ def run_pipeline(
       continue
 
     task_cache_dir = task.cache_dir
-    output_dir = os.path.join(cache_dir, task.name)
+    output_dir = os.path.join(
+        cache_dir, seqio.get_task_dir_from_name(task.name))
 
     if task_cache_dir and not overwrite:
       logging.info("Skipping task '%s', which exists in cache dir: %s",

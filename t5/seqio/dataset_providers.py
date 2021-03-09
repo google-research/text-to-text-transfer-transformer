@@ -40,7 +40,7 @@ import typing_extensions
 
 _DEFAULT_FEATURE_KEYS = ["inputs", "targets"]
 
-_VALID_TASK_NAME_REGEX = re.compile(r"^[\w\d\._]+$")
+_VALID_TASK_NAME_REGEX = re.compile(r"^[\w\d\.\:_]+$")
 _MAX_EXAMPLES_TO_MEM_CACHE = 10000
 SHUFFLE_BUFFER_SIZE = 1000
 
@@ -860,7 +860,9 @@ class Task(DatasetProviderBase):
     if not self._cache_dir:
       # See if cached data exists in any of the cache directories.
       potential_cache_dirs = [
-          os.path.join(d, self.name) for d in utils.get_global_cache_dirs()]
+          os.path.join(d, utils.get_task_dir_from_name(self.name))
+          for d in utils.get_global_cache_dirs()
+      ]
       for cache_dir in potential_cache_dirs:
         try:
           if tf.io.gfile.exists(os.path.join(cache_dir, "COMPLETED")):
