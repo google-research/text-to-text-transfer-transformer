@@ -21,6 +21,7 @@ import gin
 import mesh_tensorflow.transformer.dataset as transformer_dataset
 import t5.data
 from t5.models import utils as model_utils
+import t5.seqio as seqio
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
 
@@ -48,7 +49,8 @@ def mesh_train_dataset_fn(
     shuffle=True,
     seed=None,
     use_cached=False,
-    pack=True):
+    pack=True,
+    shard_info_tuple=None):
   """Returns the tf.data.Dataset for training on a given mixture.
 
   This uses the format required for utils.run's `train_dataset_fn` argument in
@@ -67,6 +69,8 @@ def mesh_train_dataset_fn(
       shuffle seed for tf.data
     use_cached: bool, whether to load the cached version of this dataset.
     pack: bool, whether to pack the dataset.
+    shard_info_tuple: optional specification for loading a shard of the split.
+      Tuple of the form (index, num_shards) for seqio.ShardInfo.
 
   Returns:
     A tf.data.Dataset of preprocessed, tokenized, and batched examples.
@@ -76,7 +80,8 @@ def mesh_train_dataset_fn(
 
   ds = mixture_or_task.get_dataset(
       sequence_length, split=dataset_split, use_cached=use_cached,
-      shuffle=shuffle, num_epochs=None, seed=seed)
+      shuffle=shuffle, num_epochs=None, seed=seed,
+      shard_info=seqio.ShardInfo(shard_info_tuple[0], shard_info_tuple[1]))
 
   # Select just the output features which are present in the dataset.
   feature_keys = tuple(k for k in mixture_or_task.output_features
