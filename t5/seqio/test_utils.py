@@ -563,7 +563,7 @@ def test_task(task_name,
       predict_output=predict_output,
       score_output=None,
       feature_encoder=feature_encoder)
-  return output, eval_output[task_name]
+  return output, eval_output.result()[task_name]
 
 
 def test_preprocessing(task_name, raw_data):

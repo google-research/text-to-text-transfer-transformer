@@ -15,6 +15,7 @@
 """Tests for seqio.evaluation."""
 # pylint:disable=g-bare-generic,g-long-lambda
 
+import concurrent
 import functools
 import json
 import os
@@ -199,6 +200,9 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_targets = {task.name: ["e5 e6", "e6", "e7"]}
       self._eval_tasks = [task]
       self._logger = None
+      self._metrics_future = None
+      self._metrics_executor = concurrent.futures.ThreadPoolExecutor(
+          max_workers=1)
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -211,7 +215,7 @@ class EvaluationTest(tf.test.TestCase):
           else self.uncalled_fn)
       all_metrics, _, _ = evaluator.evaluate(
           compute_metrics=True, predict_fn=predict_fn, score_fn=score_fn)
-      return all_metrics
+      return all_metrics.result()
 
   def test_evaluate_single_task_predict(self):
     task = get_mocked_task(
@@ -248,6 +252,9 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_targets = {task.name: [[5, 6], [6, 7]]}
       self._eval_tasks = [task]
       self._logger = None
+      self._metrics_future = None
+      self._metrics_executor = concurrent.futures.ThreadPoolExecutor(
+          max_workers=1)
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -259,7 +266,7 @@ class EvaluationTest(tf.test.TestCase):
           score_fn=self.uncalled_fn)
       # expected = {"accuracy": 2.0 / 3 * 100}
       expected = {"sequence_accuracy": 50}
-      self.assertDictClose(expected, all_metrics[task.name])
+      self.assertDictClose(expected, all_metrics.result()[task.name])
 
   def test_evaluate_single_task_with_postprocessor(self):
     task = get_mocked_task(predict_metric_fns=[_accuracy_metric])
@@ -277,6 +284,9 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_targets = {task.name: [0, 1, 2]}
       self._eval_tasks = [task]
       self._logger = None
+      self._metrics_future = None
+      self._metrics_executor = concurrent.futures.ThreadPoolExecutor(
+          max_workers=1)
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -287,7 +297,7 @@ class EvaluationTest(tf.test.TestCase):
           compute_metrics=True, predict_fn=predict_fn,
           score_fn=self.uncalled_fn)
       expected = {"accuracy": 100}
-      self.assertDictClose(expected, all_metrics[task.name])
+      self.assertDictClose(expected, all_metrics.result()[task.name])
 
   def test_evaluate_mixture(self):
     id_to_vocab = {5: "e5", 6: "e6", 7: "e7"}
@@ -326,6 +336,9 @@ class EvaluationTest(tf.test.TestCase):
       }
       self._eval_tasks = [task1, task2]
       self._logger = None
+      self._metrics_future = None
+      self._metrics_executor = concurrent.futures.ThreadPoolExecutor(
+          max_workers=1)
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       def predict_fn(ds):
@@ -348,6 +361,7 @@ class EvaluationTest(tf.test.TestCase):
           },
           task2.name: {"accuracy": 100}
       }
+      all_metrics = all_metrics.result()
       self.assertDictClose(expected[task1.name], all_metrics[task1.name])
       self.assertDictClose(expected[task2.name], all_metrics[task2.name])
 
@@ -540,6 +554,9 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_task_datasets = {task.name: tf.data.Dataset.range(3)}
       self._eval_tasks = [task]
       self._logger = None
+      self._metrics_future = None
+      self._metrics_executor = concurrent.futures.ThreadPoolExecutor(
+          max_workers=1)
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -564,6 +581,9 @@ class EvaluationTest(tf.test.TestCase):
       self._cached_targets = {task.name: ["e5", "e6", "e7"]}
       self._eval_tasks = [task]
       self._logger = None
+      self._metrics_future = None
+      self._metrics_executor = concurrent.futures.ThreadPoolExecutor(
+          max_workers=1)
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()
@@ -578,7 +598,7 @@ class EvaluationTest(tf.test.TestCase):
           score_fn=self.uncalled_fn)
       expected_metric = {"sequence_accuracy": 100}
       expected_outputs = [np.array([5]), np.array([6]), np.array([7])]
-      self.assertDictEqual(expected_metric, all_metrics[task.name])
+      self.assertDictEqual(expected_metric, all_metrics.result()[task.name])
       self.assertEqual(expected_outputs, all_outputs[task.name])
 
   def test_duplicate_metric(self):
@@ -614,15 +634,38 @@ class EvaluationTest(tf.test.TestCase):
     dataset_fn = lambda split, shuffle_files: ds
     register_dummy_task(task_name, dataset_fn=dataset_fn, metrics_fn=[])
     evaluator = Evaluator(mixture_or_task_name=task_name)
-    ret = evaluator.evaluate(
+    all_metrics, all_output_tokens, all_output_scores = evaluator.evaluate(
         compute_metrics=True, predict_fn=mock.Mock(), score_fn=self.uncalled_fn)
-    self.assertEqual(({}, {}, {}), ret)
+    self.assertEqual({}, all_metrics.result())
+    self.assertEqual({}, all_output_tokens)
+    self.assertEqual({}, all_output_scores)
+
+  def test_task_with_no_compute_metrics(self):
+    task_name = "no_compute_metrics_task"
+    x = [{"targets_pretokenized": "ex 1"}]
+    dtypes = {"targets_pretokenized": tf.string}
+    shapes = {"targets_pretokenized": []}
+    ds = tf.data.Dataset.from_generator(
+        lambda: x, output_types=dtypes, output_shapes=shapes)
+    dataset_fn = lambda split, shuffle_files: ds
+    register_dummy_task(task_name, dataset_fn=dataset_fn, metrics_fn=[])
+    evaluator = Evaluator(mixture_or_task_name=task_name)
+    all_metrics, all_output_tokens, all_output_scores = evaluator.evaluate(
+        compute_metrics=False,
+        predict_fn=mock.Mock(),
+        score_fn=self.uncalled_fn)
+    self.assertIsNone(all_metrics.result())
+    self.assertEqual({}, all_output_tokens)
+    self.assertEqual({}, all_output_scores)
 
   def test_log_eval_results(self):
     summary_dir = self.create_tempdir().full_path
 
     def mock_init(self):
       self._logger = evaluation.TensorboardLogging(summary_dir)
+      self._metrics_future = None
+      self._metrics_executor = concurrent.futures.ThreadPoolExecutor(
+          max_workers=1)
 
     with mock.patch.object(Evaluator, "__init__", new=mock_init):
       evaluator = Evaluator()

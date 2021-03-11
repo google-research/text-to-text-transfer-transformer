@@ -15,6 +15,7 @@
 """Utilities for the class-based evaluation."""
 
 import abc
+import concurrent
 import inspect
 import itertools
 import json
@@ -39,7 +40,7 @@ AllOutputTokensType = Mapping[str, Sequence[Sequence[int]]]
 AllOutputScoresType = Mapping[str, Sequence[float]]
 AllMetricsType = Mapping[str, Sequence[Mapping[str, Any]]]
 MetricsAndOutputsType = Tuple[
-    Optional[AllMetricsType],  # metrics
+    concurrent.futures.Future,  # metrics
     AllOutputTokensType,  # output_tokens
     AllOutputScoresType]  # output_scores
 
@@ -290,6 +291,10 @@ class Evaluator:
         dataset_providers.get_mixture_or_task(mixture_or_task_name))
     self._eval_tasks = get_valid_eval_tasks(eval_tasks, eval_split)
 
+    self._metrics_executor = concurrent.futures.ThreadPoolExecutor(
+        max_workers=1)
+    self._metrics_future = None
+
     if not self._eval_tasks:
       logging.warning(
           "No eval task with valid split and metric fn found. Skipping eval.")
@@ -420,8 +425,8 @@ class Evaluator:
         metrics exist for the task.
 
     Returns:
-      metrics: a mapping from task name to computed metrics, or None if
-        `compute_metrics` is False.
+      metrics: a Future containing a mapping from task name to computed metrics,
+        or None if `compute_metrics` is False.
       predicted_tokens: a mapping from task name to the output tokens
         from `predict_fn`, for tasks that have `predict_metric_fns`.
       scores: a mapping from task name to the output scores from
@@ -450,11 +455,25 @@ class Evaluator:
             score_fn, task.name)
 
     if compute_metrics:
-      all_metrics = self._compute_metrics(
-          all_output_tokens, all_output_scores, step)
-    else:
-      all_metrics = None
+      if self._metrics_future:
+        # Ensure previous step's metrics are finished and raise any exceptions
+        # that may have occurred.
+        tick = time.time()
+        self._metrics_future.result()
+        logging.info("Time waiting for previous metrics run: %f",
+                     time.time() - tick)
 
+      def compute_metrics_fn():
+        tick = time.time()
+        metrics = self._compute_metrics(all_output_tokens, all_output_scores,
+                                        step)
+        logging.info("Time computing metrics: %f", time.time() - tick)
+        return metrics
+      self._metrics_future = self._metrics_executor.submit(compute_metrics_fn)
+      all_metrics = self._metrics_future
+    else:
+      all_metrics = concurrent.futures.Future()
+      all_metrics.set_result(None)
     return all_metrics, all_output_tokens, all_output_scores
 
   def _compute_metrics(
