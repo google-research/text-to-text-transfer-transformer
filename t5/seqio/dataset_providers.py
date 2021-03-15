@@ -328,6 +328,9 @@ class TfdsDataSource(DataSource):
       raise ValueError("TFDS name must contain a version number, got: %s" %
                        tfds_name)
 
+    if splits and not isinstance(splits, dict):
+      splits = {k: k for k in splits}
+
     self._tfds_dataset = utils.LazyTfdsLoader(
         tfds_name,
         data_dir=tfds_data_dir,

@@ -170,6 +170,19 @@ class TasksTest(test_utils.FakeTaskTest):
         ValueError, "TFDS name must contain a version number, got: fake"):
       dataset_providers.TfdsDataSource(tfds_name="fake")
 
+  def test_tfds_splits(self):
+    self.assertSameElements(
+        ["train", "validation"],
+        dataset_providers.TfdsDataSource(tfds_name="fake:0.0.0").splits)
+    self.assertSameElements(
+        ["validation"],
+        dataset_providers.TfdsDataSource(
+            tfds_name="fake:0.0.0", splits=["validation"]).splits)
+    self.assertSameElements(
+        ["validation"],
+        dataset_providers.TfdsDataSource(
+            tfds_name="fake:0.0.0", splits={"validation": "train"}).splits)
+
   def test_tfds_task(self):
     self.verify_task_matches_fake_datasets(
         "tfds_task", use_cached=False)
