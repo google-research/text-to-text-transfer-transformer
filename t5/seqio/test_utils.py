@@ -21,7 +21,7 @@ import functools
 import os
 import shutil
 import sys
-from typing import Any, Mapping, Optional, Sequence, Union
+from typing import Any, Mapping, Optional, Sequence, Union, Tuple
 
 from absl import flags
 from absl import logging
@@ -519,10 +519,12 @@ def create_prediction(task_name, s, output_feature_name="targets"):
   return [(0, task.output_features[output_feature_name].vocabulary.encode(s))]
 
 
-def test_task(task_name,
-              raw_data,
-              output_feature_name="targets",
-              feature_encoder=feature_converters.EncDecFeatureConverter()):
+def test_task(
+    task_name: str,
+    raw_data: Mapping[str, Any],
+    output_feature_name="targets",
+    feature_encoder=feature_converters.EncDecFeatureConverter(pack=False)
+) -> Tuple[Mapping[str, Any], Mapping[str, Any]]:
   """Test the preprocessing and metrics functionality for a given task.
 
   This function injects `raw_data` into the task, then creates an Evaluator
@@ -555,18 +557,17 @@ def test_task(task_name,
     `metrics` is a mapping from task name to computed metrics.
   """
   output = test_preprocessing(task_name, raw_data)
-  predict_output = [(0, output[output_feature_name])]
 
-  eval_output, _, _ = test_postprocessing(
+  eval_output = test_postprocessing(
       task_name,
       raw_data,
-      predict_output=predict_output,
-      score_output=None,
+      predict_output=output[output_feature_name],
       feature_encoder=feature_encoder)
-  return output, eval_output.result()[task_name]
+  return output, eval_output
 
 
-def test_preprocessing(task_name, raw_data):
+def test_preprocessing(
+    task_name: str, raw_data: Mapping[str, Any]) -> Mapping[str, Any]:
   """Test the preprocessing functionality of a given task.
 
   This function injects `raw_data` into `task` and runs the preprocessing
@@ -588,11 +589,13 @@ def test_preprocessing(task_name, raw_data):
 
 
 def test_postprocessing(
-    task_name,
-    raw_data,
-    predict_output=None,
-    score_output=None,
-    feature_encoder=feature_converters.EncDecFeatureConverter()):
+    task_name: str,
+    raw_data: Mapping[str, Any],
+    target_feature_name: str = "targets",
+    predict_output: Optional[Sequence[str]] = None,
+    score_output: Optional[Sequence[float]] = None,
+    feature_encoder: feature_converters.FeatureConverter = feature_converters
+    .EncDecFeatureConverter(pack=False)) -> Mapping[str, Any]:
   """Test the postprocessing and metrics for a given task.
 
   This function injects `raw_data` into `task`, then creates an Evaluator
@@ -610,19 +613,17 @@ def test_postprocessing(
     raw_data: A string-keyed dict of string-keyed dicts. The top-level dict
       should be keyed by dataset splits, and the second-level dict should hold
       the dataset data.
-    predict_output: A list of (int, [value]) tuples representing the model
-      predictions. Optional.
-    score_output: A list of (int, [value]) tuples representing the output of the
-      model scoring code. Optional.
+    target_feature_name: Feature whose vocabulary will be used to encode
+     predict_output. Defaults to 'targets'.
+    predict_output: A list of strings representing model predictions for the
+     raw_data. Optional, only used when the task specifies metric_fns.
+    score_output: A list of floats representing the score of the raw_data.
+     Optional, only used when the task specifies score_metric_fns.
     feature_encoder: An optional feature encoder object. Defaults to
-      EncDecFeatureEncoder.
+      None.
 
   Returns:
-    metrics: a mapping from task name to computed metrics.
-    predicted_tokens: a mapping from task name to the output tokens
-      from `predict_fn`, for tasks that have `predict_metric_fns`.
-    scores: a mapping from task name to the output scores from
-      `score_fn` for tasks that have `score_predict_fns`.
+    metrics: a mapping from metric name to values.
   """
 
   class PredictCallable(evaluation.PredictFnCallable):
@@ -630,7 +631,13 @@ def test_postprocessing(
     def __call__(self,
                  dataset: tf.data.Dataset = None,
                  model_feature_lengths: Mapping[str, int] = None):
-      return predict_output
+      if predict_output is None:
+        return []
+      task = dataset_providers.get_mixture_or_task(task_name)
+      return list(
+          enumerate(
+              task.output_features[target_feature_name].vocabulary.encode(s)
+              for s in predict_output))
 
   class ScoreCallable(evaluation.PredictFnCallable):
 
@@ -639,7 +646,9 @@ def test_postprocessing(
         dataset: tf.data.Dataset = None,
         model_feature_lengths: Mapping[str, int] = None,
     ):
-      return score_output
+      if score_output is None:
+        return []
+      return list(enumerate(score_output))
 
   with DataInjector(task_name, raw_data):
     evaluator = evaluation.Evaluator(
@@ -648,7 +657,7 @@ def test_postprocessing(
     return evaluator.evaluate(
         compute_metrics=True,
         predict_fn=PredictCallable(),
-        score_fn=ScoreCallable())
+        score_fn=ScoreCallable())[0].result()[task_name]
 
 
 class MockVocabulary(object):
