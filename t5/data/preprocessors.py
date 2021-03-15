@@ -2592,6 +2592,7 @@ def denoise(dataset,
             noise_mask_fn=gin.REQUIRED,
             inputs_fn=gin.REQUIRED,
             targets_fn=None,
+            passthrough_feature_keys: Optional[Sequence[str]] = None,
             **unused_kwargs):
   """Gin-configurable token preprocessor for self-supervised denoising tasks.
 
@@ -2631,6 +2632,7 @@ def denoise(dataset,
     noise_mask_fn: a function from (length, noise_density) -> boolean mask
     inputs_fn: a function from (tokens, noise_mask, vocabulary) -> tokens
     targets_fn: a function from (tokens, noise_mask, vocabulary) -> tokens
+    passthrough_feature_keys: names of additional features to include in output
 
   Returns:
     A preprocessed tf.data.Dataset.
@@ -2652,7 +2654,9 @@ def denoise(dataset,
       targets = targets_fn(tokens, noise_mask, vocabulary, seeds=seeds[4:6])
     else:
       targets = tokens
-    return {'inputs': inputs, 'targets': targets}
+    return {'inputs': inputs, 'targets': targets,
+            **{k: features[k] for k in features
+               if passthrough_feature_keys and k in passthrough_feature_keys}}
   return my_fn(dataset)
 
 
