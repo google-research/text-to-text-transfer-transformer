@@ -96,8 +96,9 @@ class Vocabulary(metaclass=abc.ABCMeta):
 
     # replace_with = 0 if self.unk_id is None else self.unk_id
     if self.unk_id is not None:
+      vocab_size = self._base_vocab_size
       clean_ids = [
-          self.unk_id if i >= self._base_vocab_size else i
+          self.unk_id if i >= vocab_size else i
           for i in clean_ids
       ]
 
