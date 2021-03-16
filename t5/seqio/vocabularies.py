@@ -119,7 +119,7 @@ class Vocabulary(metaclass=abc.ABCMeta):
     raise NotImplementedError
 
   def decode_tf(self, ids: tf.Tensor) -> tf.Tensor:
-    """Detokenizes int32 ND Tensor to string (N-1)D Tensor through first EOS."""
+    """Detokenizes int32 batched Tensor through first EOS."""
     clean_ids = ids
 
     if self.unk_id is not None:
@@ -134,6 +134,48 @@ class Vocabulary(metaclass=abc.ABCMeta):
       clean_ids = tf.where(tf.cast(after_eos, tf.bool), self.pad_id, clean_ids)
 
     return self._decode_tf(clean_ids)
+
+
+class PassThroughVocabulary(Vocabulary):
+  """Vocabulary that passes through inputs unchanged."""
+
+  def __init__(
+      self,
+      size: int,
+      eos_id: Optional[int] = None):
+    """PassThroughVocabulary constructor.
+
+    Args:
+      size: the full size of the vocabulary.
+      eos_id: the end-of-sequence token.
+    """
+    self._size = size
+    self._eos_id = eos_id
+    super().__init__()
+
+  @property
+  def _base_vocab_size(self):
+    return self._size
+
+  def _encode(self, s: Sequence[int]) -> Sequence[int]:
+    return s
+
+  def _decode(self, ids: Sequence[int]) -> Sequence[int]:
+    return ids
+
+  def _encode_tf(self, s: tf.Tensor) -> tf.Tensor:
+    return s
+
+  def _decode_tf(self, ids: tf.Tensor) -> tf.Tensor:
+    return ids
+
+  @property
+  def eos_id(self) -> Optional[int]:
+    return self._eos_id
+
+  @property
+  def unk_id(self) -> Optional[int]:
+    return None
 
 
 class SentencePieceVocabulary(Vocabulary):

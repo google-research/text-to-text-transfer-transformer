@@ -688,33 +688,6 @@ class MockVocabulary(object):
     return 1
 
 
-class PassThroughVocab(vocabularies.Vocabulary):
-  """Pass-through vocabulary for testing."""
-
-  def _base_vocab_size(self):
-    return 32
-
-  def _encode(self, s):
-    return s
-
-  def _decode(self, ids):
-    return ids
-
-  def _encode_tf(self, s):
-    return s
-
-  def _decode_tf(self, ids):
-    return ids
-
-  @property
-  def eos_id(self) -> Optional[int]:
-    return 1
-
-  @property
-  def unk_id(self) -> Optional[int]:
-    return 2
-
-
 def sentencepiece_vocab(extra_ids=0):
   return vocabularies.SentencePieceVocabulary(
       os.path.join(TEST_DATA_DIR, "sentencepiece", "sentencepiece.model"),

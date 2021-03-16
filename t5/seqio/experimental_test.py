@@ -19,6 +19,7 @@ from t5.seqio import dataset_providers
 from t5.seqio import experimental
 from t5.seqio import test_utils
 from t5.seqio import utils
+from t5.seqio import vocabularies
 import tensorflow.compat.v2 as tf
 
 assert_dataset = test_utils.assert_dataset
@@ -40,7 +41,7 @@ class FullyCachedTaskTest(absltest.TestCase):
     self.fake_source = dataset_providers.FunctionDataSource(
         lambda split, shuffle_files: tf.data.Dataset.range(2), ['train'])
 
-    self.vocabulary = test_utils.PassThroughVocab()
+    self.vocabulary = vocabularies.PassThroughVocabulary(100)
 
     self.metrics_fns = [lambda targets, predictions: 0]
 

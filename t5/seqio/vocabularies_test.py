@@ -15,6 +15,7 @@
 """Tests for seqio.vocabularies."""
 
 from absl.testing import absltest
+import numpy as np
 from t5.seqio import test_utils
 from t5.seqio import vocabularies
 import tensorflow.compat.v2 as tf
@@ -143,6 +144,34 @@ class VocabularyTest(absltest.TestCase):
         test_vocab.decode_tf(tf.constant(test_ids, tf.int32)).numpy()
     ]
     self.assertSequenceEqual(decoded, test_str)
+
+
+class PassThroughVocabularyTest(absltest.TestCase):
+
+  def test_no_eos(self):
+    vocab = vocabularies.PassThroughVocabulary(size=128, eos_id=None)
+    ids = list(range(2, 10))
+    ids.insert(3, 1)
+    self.assertIsNone(vocab.eos_id)
+    self.assertEqual(128, vocab.vocab_size)
+    self.assertSequenceEqual(ids, vocab.encode(ids))
+    self.assertSequenceEqual(ids, vocab.decode(ids))
+    ids_t = tf.constant([ids], tf.int32)
+    np.testing.assert_equal(ids_t, vocab.encode_tf(ids_t).numpy())
+    np.testing.assert_equal(ids_t, vocab.decode_tf(ids_t).numpy())
+
+  def test_eos(self):
+    vocab = vocabularies.PassThroughVocabulary(size=128, eos_id=1)
+    ids = list(range(2, 10))
+    ids.insert(3, 1)
+    self.assertEqual(128, vocab.vocab_size)
+    self.assertEqual(1, vocab.eos_id)
+    self.assertSequenceEqual(ids, vocab.encode(ids))
+    self.assertSequenceEqual(ids[0:4], vocab.decode(ids))
+    ids_t = tf.constant([ids], tf.int32)
+    np.testing.assert_equal(ids_t, vocab.encode_tf(ids_t).numpy())
+    np.testing.assert_equal(
+        [ids[0:4] + [0]*5], vocab.decode_tf(ids_t).numpy())
 
 
 class SentencepieceVocabularyTest(absltest.TestCase):
