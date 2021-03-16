@@ -1136,13 +1136,6 @@ class PreprocessorsTest(tf.test.TestCase):
         },
     ])
 
-  def test_take(self):
-    og_dataset = tf.data.Dataset.from_tensor_slices({'inputs': [1]*100})
-    dataset = prep.take(og_dataset, 5)
-    assert_dataset(dataset, [{'inputs': 1} for _ in range(5)])
-    dataset = prep.take(og_dataset, -1)
-    assert_dataset(dataset, [{'inputs': 1} for _ in range(100)])
-
   def test_parse_tsv(self):
     og_dataset = tf.data.Dataset.from_tensor_slices(['a\tb', 'c\td'])
     dataset = prep.parse_tsv(og_dataset, field_names=['f1', 'f2'])

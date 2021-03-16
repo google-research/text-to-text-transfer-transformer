@@ -2115,43 +2115,6 @@ def trim_tokens_at_front(x,
   return x
 
 
-@gin.configurable
-def take(dataset, num_examples=-1, **unused_kwargs):
-  """Takes the first `num_examples` examples from the dataset.
-
-  This is done to simulate that the dataset is smaller than it actually is. The
-  result will be cached via `tf.data.Dataset.cache`.  This ensures that the same
-  examples get repeated if `dataset` is stochastic and `repeat()` is called on
-  the dataset after `take`. To use this preprocessor, make sure your resulting
-  dataset can fit in memory.
-
-  Args:
-    dataset: tf.data.Dataset, dataset to process.
-    num_examples: int, the number of examples to take from the dataset. If
-      `num_examples == -1`, the new dataset will have as many examples as the
-      original dataset (i.e., no truncation will occur).
-  Returns:
-    A tf.data.Dataset with at most `num_examples` examples.
-  """
-  if num_examples == -1:
-    return dataset
-  else:
-    return dataset.take(num_examples).cache()
-
-
-def cache_in_memory(dataset):
-  """Cache dataset.
-
-  This function loads the dataset into memory by calling dataset.cache().
-  Useful for smaller datasets.
-  Args:
-    dataset: tf.data.Dataset to load into memory.
-  Returns:
-    A cached tf.data.Dataset.
-  """
-  return dataset.cache()
-
-
 def trivia_qa_truncate_inputs(dataset, output_features, sequence_length):
   """Token preprocessor for the trivia QA dataset to truncate inputs.
 
