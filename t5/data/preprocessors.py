@@ -2362,7 +2362,9 @@ def split_tokens(dataset: tf.data.Dataset,
               axis=0)
     if passthrough_feature_keys:
       for k in passthrough_feature_keys:
-        outputs[k] = tf.tile(x[k][tf.newaxis, :], [num_segments, 1])
+        outputs[k] = tf.tile(
+            tf.expand_dims(x[k], axis=0),
+            tf.concat([[num_segments], tf.tile([1], [tf.rank(x[k])])], axis=0))
     return outputs, orig_lengths
 
   def _strip_padding(inputs, orig_lengths):
