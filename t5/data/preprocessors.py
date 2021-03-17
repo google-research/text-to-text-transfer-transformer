@@ -1885,14 +1885,15 @@ def preprocess_tsv(line,
 
 
 # TODO(adarob): Add a test.
-def span_corruption(dataset, sequence_length, output_features):
+def span_corruption(dataset, sequence_length, output_features,
+                    mean_noise_span_length=3.0, noise_density=0.15):
   """Final pretraining objective used in Raffel et al., 2019."""
   input_length, targets_length = random_spans_helper(
       extra_tokens_per_span_inputs=1,
       extra_tokens_per_span_targets=1,
       inputs_length=sequence_length['inputs'],
-      mean_noise_span_length=3.0,
-      noise_density=0.15)
+      mean_noise_span_length=mean_noise_span_length,
+      noise_density=noise_density)
 
   if sequence_length['targets'] < targets_length:
     raise ValueError(
@@ -1914,10 +1915,10 @@ def span_corruption(dataset, sequence_length, output_features):
       output_features,
       inputs_fn=noise_span_to_unique_sentinel,
       targets_fn=nonnoise_span_to_unique_sentinel,
-      noise_density=0.15,
+      noise_density=noise_density,
       noise_mask_fn=functools.partial(
           random_spans_noise_mask,
-          mean_noise_span_length=3.0
+          mean_noise_span_length=mean_noise_span_length
       )
   )
   return ds
