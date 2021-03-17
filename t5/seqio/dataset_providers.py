@@ -1049,6 +1049,7 @@ class TaskRegistry(DatasetProviderRegistry):
       postprocess_fn: Optional[Callable[..., Any]] = None,
       metric_fns: Optional[Sequence[Callable[..., Mapping[str, float]]]] = None,
       **kwargs) -> Task:
+    """See `Task` constructor for docstring."""
     return super().add(name, Task, name, source, output_features, preprocessors,
                        postprocess_fn, metric_fns, **kwargs)
 
@@ -1354,6 +1355,7 @@ class MixtureRegistry(DatasetProviderRegistry):
 
   @classmethod
   def add(cls, name, tasks, default_rate=None) -> Mixture:
+    """See `Mixture` constructor for docstring."""
     return super().add(name, Mixture, name, tasks, default_rate)
 
   @classmethod
