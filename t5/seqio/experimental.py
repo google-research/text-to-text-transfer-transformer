@@ -87,7 +87,9 @@ def add_fully_cached_task(
     if sequence_length is not None and sequence_length != fixed_sequence_length:
       raise ValueError(
           f"Fully-cached task '{new_name}' can only be loaded with "
-          f'`sequence_length={fixed_sequence_length}` or `None`.')
+          f'`sequence_length={fixed_sequence_length}` or `None`. '
+          f'Given sequence_length={sequence_length}.'
+      )
     return ds
   new_preprocessors.append(validate_sequence_length)
 

@@ -76,7 +76,7 @@ class FullyCachedTaskTest(absltest.TestCase):
     ]
 
   def validate_fully_cached_task(
-      self, name, sequence_length, expected_dataset):
+      self, name, sequence_length, actual_sequence_length, expected_dataset):
     new_task = TaskRegistry.get(name)
     self.assertLen(new_task.preprocessors, 6)
     self.assertEqual(new_task.metric_fns, self.metrics_fns)
@@ -95,7 +95,8 @@ class FullyCachedTaskTest(absltest.TestCase):
     with self.assertRaisesWithLiteralMatch(
         ValueError,
         f"Fully-cached task '{name}' can only be loaded with "
-        f'`sequence_length={sequence_length}` or `None`.'):
+        f'`sequence_length={sequence_length}` or `None`. '
+        f'Given sequence_length={actual_sequence_length}.'):
       new_task.get_dataset(
           {k: v+1 for k, v in sequence_length.items()},
           use_cached=False)
@@ -122,10 +123,12 @@ class FullyCachedTaskTest(absltest.TestCase):
         metric_fns=self.metrics_fns)
 
     sequence_length = {'inputs': 5, 'targets': 6}
+    actual_sequence_length = {'inputs': 6, 'targets': 7}
     experimental.add_fully_cached_task('encoder_decoder_task', sequence_length)
     self.validate_fully_cached_task(
         'encoder_decoder_task_i5_t6',
         sequence_length,
+        actual_sequence_length,
         [
             {'inputs': [1, 5, 5], 'targets': [1, 6]},
             {'inputs': [2, 5, 5], 'targets': [2, 6]},
@@ -142,10 +145,12 @@ class FullyCachedTaskTest(absltest.TestCase):
         metric_fns=self.metrics_fns)
 
     sequence_length = {'targets': 6}
+    actual_sequence_length = {'targets': 7}
     experimental.add_fully_cached_task('decoder_task', sequence_length)
     self.validate_fully_cached_task(
         'decoder_task_6',
         sequence_length,
+        actual_sequence_length,
         [
             {'targets': [1, 6, 6]},
             {'targets': [2, 6, 6]},
@@ -163,11 +168,13 @@ class FullyCachedTaskTest(absltest.TestCase):
         metric_fns=self.metrics_fns)
 
     sequence_length = {'tar': 5, 'targets': 6}
+    actual_sequence_length = {'tar': 6, 'targets': 7}
     experimental.add_fully_cached_task(
         'feature_prefix_task', sequence_length)
     self.validate_fully_cached_task(
         'feature_prefix_task_tar5_targ6',
         sequence_length,
+        actual_sequence_length,
         [
             {'tar': [1, 5, 5], 'targets': [1, 6]},
             {'tar': [2, 5, 5], 'targets': [2, 6]},
@@ -244,7 +251,8 @@ class FullyCachedTaskTest(absltest.TestCase):
     with self.assertRaisesWithLiteralMatch(
         ValueError,
         "Fully-cached task 'task1_6' can only be loaded with "
-        "`sequence_length={'targets': 6}` or `None`."):
+        "`sequence_length={'targets': 6}` or `None`. "
+        "Given sequence_length={'targets: 7'}."):
       new_mix.get_dataset({'targets: 7'}, use_cached=False)
 
     expected_dataset = [
