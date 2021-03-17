@@ -199,6 +199,10 @@ class TasksTest(test_utils.FakeTaskTest):
     self.verify_task_matches_fake_datasets(
         "tf_example_task", use_cached=False, splits=["train"])
 
+  def test_proto_task(self):
+    self.verify_task_matches_fake_datasets(
+        "proto_task", use_cached=False, splits=["train"])
+
   def test_num_input_examples(self):
     self.assertEqual(30, self.cached_task.num_input_examples("train"))
     self.assertEqual(10, self.cached_task.num_input_examples("validation"))

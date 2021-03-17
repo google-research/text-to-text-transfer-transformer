@@ -861,6 +861,22 @@ class FakeTaskTest(absltest.TestCase):
     )
     self.add_task("tf_example_task", source=self.tf_example_source)
 
+    # Prepare ProtoDataSource.
+    def decode_tf_example_fn(example):
+      feature_description = {
+          "prefix": tf.io.FixedLenFeature([], tf.string),
+          "suffix": tf.io.FixedLenFeature([], tf.string),
+      }
+      return tf.io.parse_single_example(example, feature_description)
+
+    self.proto_source = dataset_providers.ProtoDataSource(
+        split_to_filepattern={
+            "train": os.path.join(self.test_data_dir, "train.tfrecord*"),
+        },
+        decode_proto_fn=decode_tf_example_fn,
+    )
+    self.add_task("proto_task", source=self.proto_source)
+
     # Prepare FunctionDataSource
     self.function_source = dataset_providers.FunctionDataSource(
         dataset_fn=get_fake_dataset,
