@@ -1968,7 +1968,7 @@ def select_random_chunk(dataset: tf.data.Dataset,
                         max_length: Optional[int] = None,
                         feature_key: str = 'targets',
                         additional_feature_keys: Optional[Sequence[str]] = None,
-                        additional_passthrough_keys: Optional[
+                        passthrough_feature_keys: Optional[
                             Sequence[str]] = None,
                         sequence_length: Optional[Mapping[str, int]] = None,
                         uniform_random_start: bool = False,
@@ -1989,7 +1989,7 @@ def select_random_chunk(dataset: tf.data.Dataset,
     additional_feature_keys: Additional features to use. The same chunk will be
       selected from these features as from the one specified in feature_key,
       so they should all have the same length.
-    additional_passthrough_keys: Additional keys to pass through unchanged.
+    passthrough_feature_keys: Additional keys to pass through unchanged.
     sequence_length: Used if max_length is not specified. Typically passed in
       by the data pipeline. feature_key will be used to select the length.
     uniform_random_start: If True, will select a starting point in
@@ -2000,6 +2000,13 @@ def select_random_chunk(dataset: tf.data.Dataset,
   Returns:
     a dataset
   """
+  if passthrough_feature_keys:
+    chunk_keys = set([feature_key] + (additional_feature_keys or []))
+    overlap_keys = chunk_keys & set(passthrough_feature_keys)
+    if overlap_keys:
+      raise ValueError(
+          f'chunk keys {overlap_keys} also included in passthrough keys')
+
   if max_length is None and sequence_length is not None:
     max_length = sequence_length[feature_key]
     if output_features[feature_key].add_eos:
@@ -2053,8 +2060,8 @@ def select_random_chunk(dataset: tf.data.Dataset,
             )
         ]):
           chunk[k] = x[k][start:end]
-    if additional_passthrough_keys is not None:
-      for k in additional_passthrough_keys:
+    if passthrough_feature_keys is not None:
+      for k in passthrough_feature_keys:
         chunk[k] = x[k]
     return chunk
   # Filter empty examples.
@@ -2307,11 +2314,18 @@ def split_tokens(dataset: tf.data.Dataset,
     feature_key: a string, the feature to split
     additional_feature_keys: Additional features to split. The same chunk size
       will be used, so they should be the same size as feature_key.
-    passthrough_feature_keys: Featues to pass through without any splitting.
+    passthrough_feature_keys: Features to pass through without any splitting.
 
   Returns:
     a dataset
   """
+  if passthrough_feature_keys:
+    split_keys = set([feature_key] + (additional_feature_keys or []))
+    overlap_keys = split_keys & set(passthrough_feature_keys)
+    if overlap_keys:
+      raise ValueError(
+          f'split keys {overlap_keys} also included in passthrough keys')
+
   @seqio.map_over_dataset(num_seeds=1)
   def _split_tokens(x, seed):
     """Split one token sequence into multiple sequences."""
@@ -2603,6 +2617,10 @@ def denoise(dataset,
   Returns:
     A preprocessed tf.data.Dataset.
   """
+  if passthrough_feature_keys and ('inputs' in passthrough_feature_keys or
+                                   'targets' in passthrough_feature_keys):
+    raise ValueError("passthrough keys cannot contain 'inputs' or 'targets'")
+
   @seqio.map_over_dataset(num_seeds=6)
   def my_fn(features, seeds):
     """Map function."""

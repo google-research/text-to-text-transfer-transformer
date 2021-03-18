@@ -1868,7 +1868,7 @@ class PreprocessorsTest(tf.test.TestCase):
     })
     dataset = prep.select_random_chunk(
         dataset, output_features=None, feature_key='targets', max_length=4,
-        additional_passthrough_keys=['notes'])
+        passthrough_feature_keys=['notes'])
     output = list(dataset.as_numpy_iterator())
     output = output[0]
     self.assertSequenceEqual(['targets', 'notes'], list(output.keys()))
