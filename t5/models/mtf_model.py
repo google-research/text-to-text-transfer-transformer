@@ -177,6 +177,7 @@ class MtfModel(T5Model):
     if not self._tpu or disable_tpu:
       with gin.unlock_config():
         gin.bind_parameter("utils.get_variable_dtype.slice_dtype", "float32")
+        gin.bind_parameter("utils.get_variable_dtype.master_dtype", "bfloat16")
         gin.bind_parameter(
             "utils.get_variable_dtype.activation_dtype", "float32")
     with gin.unlock_config():
