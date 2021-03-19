@@ -76,6 +76,7 @@ class Image(Metric):
   [here](https://www.tensorflow.org/api_docs/python/tf/summary/image).
   """
   image: np.ndarray
+  max_outputs: int = 3
 
 
 @dataclasses.dataclass
