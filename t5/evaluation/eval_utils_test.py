@@ -20,6 +20,7 @@ import os
 from absl.testing import absltest
 import numpy as np
 import pandas as pd
+from t5 import seqio
 from t5.evaluation import eval_utils
 import tensorflow.compat.v1 as tf
 
@@ -48,6 +49,26 @@ class EvalUtilsTest(absltest.TestCase):
         {
             "eval/foo_task/accuracy": [(20, 1.), (30, 2.)],
             "loss": [(40, 3.)],
+        },
+    )
+
+  def test_parse_events_files_seqio(self):
+    tb_summary_dir = self.create_tempdir()
+    metrics = [{"accuracy": 1.}, {"accuracy": 2.}]
+    steps = [20, 30]
+
+    logger = seqio.evaluation.TensorboardLogging(tb_summary_dir.full_path)
+    for metric, step in zip(metrics, steps):
+      logger(task_metrics=metric, step=step, task_name="foo_task")
+
+    events = eval_utils.parse_events_files(
+        os.path.join(tb_summary_dir.full_path, "foo_task"),
+        seqio_summaries=True)
+
+    self.assertDictEqual(
+        events,
+        {
+            "eval/accuracy": [(20, 1.), (30, 2.)],
         },
     )
 

@@ -101,14 +101,19 @@ def parse_events_files(tb_summary_dir, seqio_summaries=False):
   events = collections.defaultdict(list)
   for events_file in tf.io.gfile.glob(os.path.join(tb_summary_dir, "events.*")):
     try:
-      for e in tf.train.summary_iterator(events_file):
+      serialized_events = list(
+          tfds.as_numpy(tf.data.TFRecordDataset(events_file)))[1:]
+      for idx, e in enumerate(tf.train.summary_iterator(events_file)):
         for v in e.summary.value:
           if seqio_summaries:
-            serialized_events = list(
-                tfds.as_numpy(tf.data.TFRecordDataset(events_file)))[1:]
-            event1 = tf.compat.v1.Event.FromString(
-                serialized_events[0]).summary.value[0]
-            metric_value = tf.make_ndarray(event1.tensor)
+            event = tf.compat.v1.Event.FromString(
+                serialized_events[idx-1]).summary.value[0]
+            # Need to check if event has a tensor or scalar since we need to
+            # handle both cases.
+            if event.HasField("tensor"):
+              metric_value = tf.make_ndarray(event.tensor)
+            else:
+              metric_value = event.simple_value
           else:
             metric_value = v.simple_value
           events[v.tag].append(Event(e.step, metric_value))
