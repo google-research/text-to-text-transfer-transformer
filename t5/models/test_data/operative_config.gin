@@ -70,6 +70,7 @@ decoder/EncDecAttention.relative_attention_type = None
 # ==============================================================================
 get_variable_dtype.activation_dtype = 'float32'
 get_variable_dtype.slice_dtype = 'float32'
+get_variable_dtype.master_dtype = 'bfloat16'
 
 # Parameters for get_vocab_embedding_cls:
 # ==============================================================================
