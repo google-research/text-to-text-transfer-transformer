@@ -265,7 +265,7 @@ class Evaluator:
                eval_split: str = "validation",
                use_cached: bool = False,
                sequence_length: Mapping[str, int] = None,
-               logger: Optional[Logger] = None):
+               logger: Optional[Logger] = None):  # pytype: disable=annotation-type-mismatch
     """Evaluator constructor.
 
     Args:
