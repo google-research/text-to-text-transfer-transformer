@@ -633,7 +633,8 @@ class EvaluationTest(tf.test.TestCase):
         lambda: x, output_types=dtypes, output_shapes=shapes)
     dataset_fn = lambda split, shuffle_files: ds
     register_dummy_task(task_name, dataset_fn=dataset_fn, metrics_fn=[])
-    evaluator = Evaluator(mixture_or_task_name=task_name)
+    evaluator = Evaluator(mixture_or_task_name=task_name,
+                          feature_converter=evaluation.EncDecFeatureConverter())
     all_metrics, all_output_tokens, all_output_scores = evaluator.evaluate(
         compute_metrics=True, predict_fn=mock.Mock(), score_fn=self.uncalled_fn)
     self.assertEqual({}, all_metrics.result())
@@ -649,7 +650,8 @@ class EvaluationTest(tf.test.TestCase):
         lambda: x, output_types=dtypes, output_shapes=shapes)
     dataset_fn = lambda split, shuffle_files: ds
     register_dummy_task(task_name, dataset_fn=dataset_fn, metrics_fn=[])
-    evaluator = Evaluator(mixture_or_task_name=task_name)
+    evaluator = Evaluator(mixture_or_task_name=task_name,
+                          feature_converter=evaluation.EncDecFeatureConverter())
     all_metrics, all_output_tokens, all_output_scores = evaluator.evaluate(
         compute_metrics=False,
         predict_fn=mock.Mock(),

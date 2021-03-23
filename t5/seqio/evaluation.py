@@ -261,7 +261,7 @@ class Evaluator:
 
   def __init__(self,
                mixture_or_task_name: str,
-               feature_converter: FeatureConverter = EncDecFeatureConverter,
+               feature_converter: FeatureConverter,
                eval_split: str = "validation",
                use_cached: bool = False,
                sequence_length: Mapping[str, int] = None,
