@@ -31,14 +31,6 @@ TaskRegistry = seqio.TaskRegistry
 test_utils = seqio.test_utils
 
 
-def mark_completed(cache_dir, task_name):
-  dirname = os.path.join(cache_dir, task_name)
-  if not tf.io.gfile.isdir(dirname):
-    tf.io.gfile.mkdir(dirname)
-  with tf.io.gfile.GFile(os.path.join(dirname, "COMPLETED"), "w") as f:
-    f.write("")
-
-
 class ProcessTaskBeamTest(test_utils.FakeTaskTest):
 
   def test_get_info(self):
@@ -80,7 +72,7 @@ class ProcessTaskBeamTest(test_utils.FakeTaskTest):
         for i in range(num_shards)
     ]
     expected_auxiliary_files = [
-        "stats.train.json", "info.train.json"
+        "stats.train.json", "info.train.json", "COMPLETED"
     ]
 
     if "validation" in task.splits:
@@ -108,9 +100,6 @@ class ProcessTaskBeamTest(test_utils.FakeTaskTest):
       expected_content = expected_content.replace(
           '"seqio_version": "0.0.0"', f'"seqio_version": "{version}"')
       self.assertEqual(expected_content, actual_content)
-
-    # Add COMPLETED file so that we can load `uncached_task`.
-    mark_completed(self.test_data_dir, seqio.get_task_dir_from_name(task_name))
 
     # Check datasets.
     self.verify_task_matches_fake_datasets(
@@ -155,8 +144,6 @@ class ProcessTaskBeamTest(test_utils.FakeTaskTest):
     with TestPipeline() as p:
       _ = cache_tasks_main.run_pipeline(
           p, ["uncached_task"], cache_dir=self.test_data_dir, overwrite=True)
-    # Add COMPLETED file so that we can load `uncached_task`.
-    mark_completed(self.test_data_dir, "uncached_task")
 
     actual_task_dir = os.path.join(self.test_data_dir, "uncached_task")
     stat_old = tf.io.gfile.stat(

@@ -301,7 +301,8 @@ class GetStats(beam.PTransform):
 
 def run_pipeline(
     pipeline, task_names, cache_dir, max_input_examples=None,
-    excluded_tasks=None, modules_to_import=(), overwrite=False):
+    excluded_tasks=None, modules_to_import=(), overwrite=False,
+    completed_file_contents=""):
   """Run preprocess pipeline."""
   output_dirs = []
   # Includes all names by default.
@@ -350,6 +351,7 @@ def run_pipeline(
     print("Caching task '%s' with splits: %s" % (task.name, task.splits))
 
     output_dirs.append(output_dir)
+    completion_values = []
 
     if isinstance(task.source, seqio.FunctionDataSource):
       logging.warning(
@@ -363,23 +365,34 @@ def run_pipeline(
 
       pat = PreprocessTask(task, split, max_input_examples, modules_to_import)
       num_shards = len(pat.shards)
-      examples = (
-          pipeline
-          | "%s_pat" % label >> pat)
-      _ = (examples
-           | "%s_write_tfrecord" % label >> WriteExampleTfRecord(
-               seqio.get_cached_tfrecord_prefix(output_dir, split),
-               num_shards=num_shards))
-      _ = (
+      examples = pipeline | "%s_pat" % label >> pat
+      completion_values.append(
+          examples
+          | "%s_write_tfrecord" % label >> WriteExampleTfRecord(
+              seqio.get_cached_tfrecord_prefix(output_dir, split),
+              num_shards=num_shards))
+      completion_values.append(
           examples
           | "%s_info" % label >> GetInfo(num_shards)
           | "%s_write_info" % label >> WriteJson(
               seqio.get_cached_info_path(output_dir, split)))
-      _ = (
+      completion_values.append(
           examples
           | "%s_stats" % label >> GetStats(task.output_features)
           | "%s_write_stats" % label >> WriteJson(
               seqio.get_cached_stats_path(output_dir, split)))
+
+    # After all splits for this task have completed, write COMPLETED files to
+    # the task's output directory.
+    _ = (completion_values
+         | "%s_flatten_completion_values" % task.name >> beam.Flatten()
+         | "%s_discard_completion_values" % task.name >> beam.Filter(
+             lambda _: False)
+         | "%s_write_completed_file" % task.name >> beam.io.textio.WriteToText(
+             os.path.join(output_dir, "COMPLETED"),
+             append_trailing_newlines=False, num_shards=1,
+             shard_name_template="", header=completed_file_contents))
+
   return output_dirs
 
 
@@ -391,20 +404,15 @@ def main(_):
   seqio.add_global_cache_dirs(
       [FLAGS.output_cache_dir] + FLAGS.tasks_additional_cache_dirs)
 
-  output_dirs = []
   pipeline_options = beam.options.pipeline_options.PipelineOptions(
       FLAGS.pipeline_options)
   with beam.Pipeline(options=pipeline_options) as pipeline:
     tf.io.gfile.makedirs(FLAGS.output_cache_dir)
-    output_dirs = run_pipeline(
+    unused_output_dirs = run_pipeline(
         pipeline, FLAGS.tasks, FLAGS.output_cache_dir,
         FLAGS.max_input_examples, FLAGS.excluded_tasks, FLAGS.module_import,
-        FLAGS.overwrite)
-
-  # TODO(adarob): Figure out a way to write these when each task completes.
-  for output_dir in output_dirs:
-    with tf.io.gfile.GFile(os.path.join(output_dir, "COMPLETED"), "w") as f:
-      f.write("")
+        FLAGS.overwrite,
+    )
 
 
 def console_entry_point():
