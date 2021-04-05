@@ -252,8 +252,8 @@ class FullyCachedTaskTest(absltest.TestCase):
         ValueError,
         "Fully-cached task 'task1_6' can only be loaded with "
         "`sequence_length={'targets': 6}` or `None`. "
-        "Given sequence_length={'targets: 7'}."):
-      new_mix.get_dataset({'targets: 7'}, use_cached=False)
+        "Given sequence_length={'targets': 7}."):
+      new_mix.get_dataset({'targets': 7}, use_cached=False)
 
     expected_dataset = [
         {'targets': [1, 6, 6]},

@@ -84,7 +84,8 @@ def add_fully_cached_task(
 
   # Add post-cache preprocessor to ensure the runtime sequence length is valid.
   def validate_sequence_length(ds, sequence_length):
-    if sequence_length is not None and sequence_length != fixed_sequence_length:
+    if (sequence_length is not None and
+        dict(sequence_length) != dict(fixed_sequence_length)):
       raise ValueError(
           f"Fully-cached task '{new_name}' can only be loaded with "
           f'`sequence_length={fixed_sequence_length}` or `None`. '
