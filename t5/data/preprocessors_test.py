@@ -751,15 +751,26 @@ class PreprocessorsTest(tf.test.TestCase):
     test_utils.assert_dataset(output, expected_output)
 
   def test_split_text_to_words(self):
-    dataset = tf.data.Dataset.from_tensor_slices(
-        {'text': ['That good.', 'That.']})
-    dataset = prep._split_text_to_words(dataset)
-    assert_dataset(
-        dataset,
+    og_dataset = tf.data.Dataset.from_tensor_slices({
+        'text': [
+            'Here\'s a sentence. Here is another; it has a semicolon.',
+            'I\'m 2-words.',
+            'There_are_no_spaces_here_so_technically_this_is_one_word.',
+            '',
+        ]
+    })
+    dataset = prep.split_text_to_words(og_dataset)
+    test_utils.assert_dataset(dataset, [
         {
-            'text': 'That good.',
-            'words': ['That', 'good.']
-        })
+            'words': ['Here\'s', 'a', 'sentence.', 'Here', 'is', 'another;',
+                      'it', 'has', 'a', 'semicolon.',],
+            'text': 'Here\'s a sentence. Here is another; it has a semicolon.'
+        },
+        {
+            'words': ['I\'m', '2-words.'],
+            'text': 'I\'m 2-words.'
+        },
+    ])
 
   def test_definite_pronoun_resolution_simple(self):
     # Test where the pronoun is in the middle of the sentence. Also test the

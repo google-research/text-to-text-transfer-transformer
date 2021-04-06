@@ -496,7 +496,7 @@ def random_split_text(dataset,
   return my_fn(dataset).unbatch()
 
 
-def _split_text_to_words(dataset, text_key='text', min_num_words=2):
+def split_text_to_words(dataset, text_key='text', min_num_words=2):
   """Split text to words and filter out examples with too few words."""
   def split(x):
     res = dict(x)
@@ -615,7 +615,7 @@ def fill_in_the_blank(dataset,
                        tf.strings.join([label, results[1]])])
     targets = tf.stack([results[1], results[0]])
     return {'inputs': inputs, 'targets': targets}
-  dataset = _split_text_to_words(dataset, text_key, min_num_words=2)
+  dataset = split_text_to_words(dataset, text_key, min_num_words=2)
   return my_fn(dataset).unbatch()
 
 
@@ -677,7 +677,7 @@ def fill_in_the_blank_sized(
     return {
         'inputs': tf.strings.strip(input_),
         'targets': tf.strings.strip(target)}
-  dataset = _split_text_to_words(dataset, text_key, min_num_words=2)
+  dataset = split_text_to_words(dataset, text_key, min_num_words=2)
   # Filter out examples with fewer words than the minimum.
   dataset = dataset.filter(lambda x: tf.size(x['words']) >= bins[0])
   return my_fn(dataset)
