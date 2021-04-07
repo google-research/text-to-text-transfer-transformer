@@ -380,12 +380,14 @@ def _assert_compare_to_fake_dataset(
 def create_default_dataset(
     x: Sequence[Mapping[str, int]],
     feature_names: Sequence[str] = ("inputs", "targets"),
-    output_types: Mapping[str, tf.dtypes.DType] = None) -> tf.data.Dataset:
+    output_types: Mapping[str, tf.dtypes.DType] = None,
+    output_shapes: Mapping[str, Tuple[None]] = None) -> tf.data.Dataset:
   """Creates a dataset from the given sequence."""
   if output_types is None:
     output_types = {feature_name: tf.int32 for feature_name in feature_names}
+  if output_shapes is None:
+    output_shapes = {feature_name: [None] for feature_name in feature_names}
 
-  output_shapes = {feature_name: [None] for feature_name in feature_names}
   ds = tf.data.Dataset.from_generator(
       lambda: x, output_types=output_types, output_shapes=output_shapes)
   return ds
