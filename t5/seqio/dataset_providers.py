@@ -51,7 +51,7 @@ DecodeFnType = Callable[..., Mapping[str, tf.train.Feature]]
 @dataclasses.dataclass(frozen=True)
 class Feature:
   """A container for attributes of output features of data providers."""
-  vocabulary: Vocabulary
+  vocabulary: Optional[Vocabulary]
   add_eos: bool = True
   required: bool = True
   dtype: tf.DType = tf.int32

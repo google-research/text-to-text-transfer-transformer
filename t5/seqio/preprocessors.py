@@ -55,9 +55,10 @@ def tokenize(
         if copy_pretokenized:
           ret[f'{k}_pretokenized'] = v
         vocab = output_features[k].vocabulary
-        v = vocab.encode_tf(v)
-        if with_eos and output_features[k].add_eos:
-          v = tf.concat([v, [vocab.eos_id]], axis=-1)
+        if vocab is not None:
+          v = vocab.encode_tf(v)
+          if with_eos and output_features[k].add_eos:
+            v = tf.concat([v, [vocab.eos_id]], axis=-1)
       ret[k] = v
     return ret
 
@@ -111,7 +112,8 @@ def append_eos(
     features.
   """
   def _maybe_add_eos(key: str, value: tf.Tensor) -> tf.Tensor:
-    if key not in output_features or not output_features[key].add_eos:
+    if (key not in output_features or not output_features[key].add_eos or
+        output_features[key].vocabulary is None):
       return value
     else:
       eos_id = output_features[key].vocabulary.eos_id
@@ -150,7 +152,8 @@ def append_eos_after_trim(
     features.
   """
   def _maybe_add_eos_and_trim(key: str, value: tf.Tensor) -> tf.Tensor:
-    if key not in output_features or not output_features[key].add_eos:
+    if (key not in output_features or not output_features[key].add_eos or
+        output_features[key].vocabulary is None):
       return value
     eos_id = output_features[key].vocabulary.eos_id
     if sequence_length is not None:
