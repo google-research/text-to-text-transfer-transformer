@@ -264,7 +264,7 @@ class Evaluator:
                feature_converter: FeatureConverter,
                eval_split: str = "validation",
                use_cached: bool = False,
-               sequence_length: Mapping[str, int] = None,
+               sequence_length: Optional[Mapping[str, int]] = None,
                logger: Optional[Logger] = None):
     """Evaluator constructor.
 
@@ -522,11 +522,17 @@ class Evaluator:
         ])
 
       if task.score_metric_fns:
+
+        def _make_kwargs(scoring_fn):
+          # We only pass "aux" if the scoring function has a kwarg for it.
+          needs_aux = "aux" in inspect.signature(scoring_fn).parameters
+          return {"aux": scores[task.name][1]} if needs_aux else {}  # pylint: disable=cell-var-from-loop
+
         task_metrics.extend([
-            metric_fn(targets, scores[task.name])
+            metric_fn(targets, scores[task.name][0], **_make_kwargs(metric_fn))
             for metric_fn in task.score_metric_fns
         ])
-        inferences["scores"] = scores
+        inferences["scores"] = {k: v[0] for k, v in scores.items()}
 
       all_metrics[task.name] = {}
       for k, v in itertools.chain(*[m.items() for m in task_metrics]):
