@@ -2,7 +2,16 @@
 
 **SeqIO** is a library for processing sequential data to be fed into downstream
 sequence models. It uses [`tf.data.Dataset`](https://www.tensorflow.org/api_docs/python/tf/data/Dataset)
-to create data pipelines but requires minimal use of TensorFlow.
+to create scalable data pipelines but requires minimal use of TensorFlow. In
+particular, with one line of code, the returned dataset can be transformed to a
+numpy iterator and hence it is fully compatible with other frameworks such as
+[JAX](https://github.com/google/jax) or
+[PyTorch](https://pytorch.org/).
+
+Currently, SeqIO assumes that the dataset is a sequence, i.e., each feature is
+one-dimensional array. Modalities such as text of audio are naturally supported.
+We will release this constraint in the future in order to support other
+modalities such as images.
 
 SeqIO is a refactor of the [`t5.data`](https://github.com/google-research/text-to-text-transfer-transformer/)
 library used (in conjunction with the [Mesh Tensorflow](https://github.com/tensorflow/mesh)
@@ -30,6 +39,18 @@ pip install -e .
 
 ## Usage Tutorial
 
+At a high level, we use SeqIO with the following steps.
+
+  1. Define a `Task`.
+
+  1. Define (or use an existing) a `FeatureConverter` based on the model architecture.
+
+  1. Use the top-level function `seqio.get_dataset` to obtain the
+     `tf.data.Dataset` instance.
+
+We will look at each of these steps in detail.
+
+
 ### Defining a `Task`
 
 The most important class in SeqIO is the `Task`. It is an abstraction that combines:
@@ -40,24 +61,17 @@ The most important class in SeqIO is the `Task`. It is an abstraction that combi
   * a *postprocessor* to convert detokenized model outputs into a format for evaluation
   * one or more *metrics* to evaluate with
 
-Oftentimes a `Task` lines up with a common benchmark. In this tutorial we will
-create a task definition for the closed-book, open-domain version of [TriviaQA](https://nlp.cs.washington.edu/triviaqa/),
-defining various parts as we go. In the end, our `Task` will look like this:
+Oftentimes a `Task` lines up with a common benchmark. In this tutorial, we use
+[WMT 19 English-German](http://www.statmt.org/wmt19/translation-task.html) machine
+translation task. In the end, our `Task` will look like this:
+
 
 ```py
 seqio.TaskRegistry.add(
-    "trivia_qa_open",
-    source=seqio.TfdsDataSource(
-      tfds_name="trivia_qa/unfiltered.nocontext:1.1.0",
-      splits={
-          "train": "train[:90%]",
-          "validation": "train[90%:]",
-          "test": "validation"
-      }),
+    "wmt19_ende",
+    seqio.TfdsDataSource(tfds_name="wmt19_translate/de-en:1.0.0"),
     preprocessors=[
-        tqa_open_preprocessor,
-        seqio.tokenize,
-        seqio.append_eos,
+        translate, seqio.preprocessors.tokenize, seqio.preprocessors.append_eos
     ],
     output_features={
         "inputs": seqio.Feature(
@@ -69,13 +83,12 @@ seqio.TaskRegistry.add(
            add_eos=True, dtype=tf.int32
         ),
     },
-    postprocess_fn=tqa_open_postprocessor,
-    metric_fns=[tqa_metric])
+    metric_fns=[metrics.bleu])
 ```
 
 We typically add the `Task` to the global registry when we define it (as shown
 above) to make it easier to use with model configs and flags. Thus, it  must
-have a unique string name (`"trivia_qa_open"` in this case). Note, however, that
+have a unique string name (`"wmt19_ende"` in this case). Note, however, that
 you may also instantiate a `seqio.Task` directly without adding it to the
 registry, if desired.
 
@@ -95,7 +108,7 @@ Existing implementations include:
   * `TFExampleDataSource` for loading [`tf.train.Example`](https://www.tensorflow.org/tutorials/load_data/tfrecord) protos from a file (e.g. a `TFRecord` file.)
   * `FunctionDataSource` for providing an custom function that returns a `tf.data.Dataset`.
 
-In our example, we are using the `TfdsDataSource`. We specify the name of the TriviaQA dataset in TFDS ([`"trivia_qa"`](https://www.tensorflow.org/datasets/catalog/trivia_qa)), the specific config that excludes the context for the open domain setting (`"unfiltered.nocontext"`), and the version number (`"1.1.0"`). We also override the default splits to match what is commonly used for the open domain setting. Specifically, we set our "test" split to be the TFDS "validation" split, and create a small pseudo-"validation" set by taking examples out of the TFDS "train" split.
+In our example, we are using the `TfdsDataSource`. We specify the name of the WMT dataset in TFDS ([`"wmt19_translate"`](https://www.tensorflow.org/datasets/catalog/wmt19_translate)), the specific config for the language pair that excludes the context for the open domain setting (`"de-en"`), and the version number (`"1.0.0"`).
 
 #### Output Features
 
@@ -121,40 +134,46 @@ Nevertheless, SeqIO is flexible enough to generate arbitrary output features wha
 
 Preprocessors are functions that transform one `tf.data.Dataset` into a new `tf.data.Dataset`. Typically this involves executing a `map` over the given dataset. The preprocessors provided to the `Task` will be executed sequentially.
 
-As an example, let's look at the previously undefined `tqa_open_preprocessor` from the "trivia_qa_open" example above.
+
+As an example, let's look at the previously undefined `translate` from the "wmt19_ende" example above.
 
 ```py
-def trivia_qa_open(
-    dataset: tf.data.Dataset,
-    prefix:str = "trivia_qa question: "
-  ) -> tf.data.Dataset:
-  """Convert TriviaQA dataset to open domain qa examples.
+def translate(dataset: tf.data.Dataset,
+              source_language: str,
+              target_language: str) -> tf.data.Dataset:
+  def _translate(ex: Mapping[str, tf.Tensor]) -> Mapping[str, tf.Tensor]:
+    """Convert a translation example to a text2text pair.
 
-  The function takes the trivia_qa TFDS dataset and emits examples of the
-  form:
-  {
-    "inputs": "trivia_qa question: What are the names of the Olsen Twins?"
-    "targets": "Mary-Kate and Ashley",
-    "answers": ["Mary-Kate and Ashley", "Ashley and Mary-Kate"]
-  }
+    For example, say the dataset returns examples of this format:
+      {'de': 'Das ist gut.', 'en': 'That is good.'}
+    If source_language = 'de', target_language = 'en', then the outputs will have
+    the format:
+      {'inputs': 'translate German to English: Das ist gut.',
+      'targets': 'That is good.'}
 
-  Args:
-    dataset: a tf.data.Dataset to process.
-    prefix: str, prefix to prepend to the inputs.
+    Args:
+      x: an example to process.
+      source_language: source language code (e.g. 'en') to translate from.
+      target_language: target language code (e.g. 'de') to translate to.
 
-  Returns:
-    a tf.data.Dataset
-  """
-  def tqa_map(ex):
-    """Map TriviaQA example to text-to-text example."""
+    Returns:
+      A preprocessed example with the format listed above.
+    """
+    src_str = f'translate {source_language}'
+    tgt_str = f' to {target_language}: '
     return {
-        "inputs": prefix + ex["question"],
-        "targets": ex["answer"]["value"],
-        "answers": ex["answer"]["aliases"],
+        'inputs': tf.strings.join([src_str, tgt_str, ex[source_language]]),
+        'targets': ex[target_language],
     }
 
-  return dataset.map(tqa_map, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  return dataset.map(_translate,
+                     num_parallel_calls=tf.data.experimental.AUTOTUNE)
 ```
+
+The TFDS dataset provides the dataset where each example has the form: `{'de':
+'Das ist gut.', 'en': 'That is good.'}`. We convert this to "inputs" and
+"targets" with the appropriate prompt to inform the model of the task.
+
 
 A few **important** notes:
 
@@ -162,24 +181,38 @@ A few **important** notes:
 
   1. Mapping functions operate on and return `tf.Tensor`s using TensorFlow operations, although it is possible to take advantage of automatic [AutoGraph](https://blog.tensorflow.org/2018/07/autograph-converts-python-into-tensorflow-graphs.html) conversion for `numpy` or use [`tf.py_function`](https://www.tensorflow.org/api_docs/python/tf/py_function) to wrap arbitrary Python code. See `tf.data.Dataset` [documentation](https://www.tensorflow.org/api_docs/python/tf/data/Dataset) for more details.
 
-  1. When calling `map`, it is important to **always** set `num_parallel_calls=tf.data.experimental.AUTOTUNE` to avoid creating a bottleneck. The `seqio.map_over_dataset` decorator helps enforce this as follows:
+  1. When calling `map`, it is important to **always** set `num_parallel_calls=tf.data.experimental.AUTOTUNE` to avoid creating a bottleneck. The `seqio.map_over_dataset` decorator helps enforce this as follows. Also it allows the preprocessing function to handle each "example" instead of the dataset
+itself. This makes the preprocessors easier to debug and test. In our running
+example, `translate` preprocessor can be simplified as follows:
 
   ```py
-  def trivia_qa_open(
-    dataset: tf.data.Dataset,
-    prefix: str = "trivia_qa question: "
-  ) -> tf.data.Dataset:
+  @seqio.map_over_dataset
+  def translate(ex: Mapping[str, tf.Tensor],
+                source_language: str,
+                target_language: str) -> Mapping[str, tf.Tensor]:
+    """Convert a translation dataset to a text2text pair.
 
-    @seqio.map_over_dataset
-    def tqa_map(ex: Mapping[str, tf.Tensor]) -> Mapping[str, tf.Tensor]:
-      """Map TriviaQA example to text-to-text example."""
-      return {
-          "inputs": prefix + ex["question"],
-          "targets": ex["answer"]["value"],
-          "answers": ex["answer"]["aliases"],
-      }
+    For example, say the dataset returns examples of this format:
+      {'de': 'Das ist gut.', 'en': 'That is good.'}
+    If source_language = 'de', target_language = 'en', then the outputs will have
+    the format:
+      {'inputs': 'translate German to English: Das ist gut.',
+      'targets': 'That is good.'}
 
-  return tqa_map(dataset)
+    Args:
+      x: an example to process.
+      source_language: source language code (e.g. 'en') to translate from.
+      target_language: target language code (e.g. 'de') to translate to.
+
+    Returns:
+      A preprocessed example with the format listed above.
+    """
+    src_str = f'translate {source_language}'
+    tgt_str = f' to {target_language}: '
+    return {
+        'inputs': tf.strings.join([src_str, tgt_str, ex[source_language]]),
+        'targets': ex[target_language],
+    }
   ```
 
   1. Stochastic operations must be [stateless](https://www.tensorflow.org/guide/random_numbers#stateless_rngs) if deterministic pipelines are needed. To get (optionally deterministic) seeds for these operations, use the `seqio.map_over_dataset(num_seeds=n)` decorator. For example:
@@ -212,25 +245,15 @@ A few **important** notes:
 
   If `num_seeds > 1`, the arg will instead be called `seeds` and will contain a sequence of seeds.
 
-In our "trivia_qa_open" task, we also use the predefined preprocessors `seqio.tokenize` and `seqio.append_eos`. The former uses each `Feature.vocabulary` to tokenize it, and the the latter appends `Feature.vocabulary.eos_id` to the feature if the `Feaure.add_eos` is True. See [preprocessors.py](https://github.com/google-research/text-to-text-transfer-transformer/tree/master/t5/seqio/preprocessors.py) for their implementations and other useful preprocessors.
+In our "wmt_19_ende" task, we also use the predefined preprocessors `seqio.preprocessors.tokenize` and `seqio.preprocessors.append_eos`. The former uses each `Feature.vocabulary` to tokenize it, and the the latter appends `Feature.vocabulary.eos_id` to the feature if the `Feaure.add_eos` is True. See [preprocessors.py](https://github.com/google-research/text-to-text-transfer-transformer/tree/master/t5/seqio/preprocessors.py) for their implementations and other useful preprocessors.
 
 #### Postprocessor
 
 During evaluation, the model outputs are first detokenized using the output feature vocabulary. Before passing these predictions to the metric functions, they can be run through a Python postprocessing function, alongside the full input example. Similarly, the raw targets are run through this function before being passed to the metrics.
 Since the postprocess function is used on both the model output and the targets, it is passed an `is_target` boolean in case the behavior should be different. It is also passed the fully preprocessed example, including fields that were excluded from `output_features`.
 
-As an example, lets look at the previously undefined `tqa_open_postprocessor`.
-
-```py
-def tqa_open_postprocessor(output_or_target, example=None, is_target=False):
-  """Returns output as answer, or all answers if the full example is provided."""
-  if is_target:
-    return [a.decode("utf-8") for a in example["answers"]]
-  else:
-    return output_or_target.decode("utf-8")
-```
-
-When processing the target, we ignore `output_or_target` (equivalent to `example["targets"]`) since it is just selecting a single answer in `trivia_qa_open`. Instead, we extract the full list of answers from the example and convert them from bytes to text. When handling the model output, we simply convert it to text from detokenized bytes.
+For the "wmt19_ende", we don't need any postprocessors. See "trivia_qa_open"
+task in the Task Examples section for an example postprocessor.
 
 #### Metrics
 
@@ -245,49 +268,37 @@ If multiple metric functions are provided, they will all be used and their retur
 Prediction metrics are computed using the postprocessed targets and model outputs (predictions).
 The args must be named `targets` and `predictions`.
 
-Let's look at the previously undefined `tqa_metric` prediction metric:
+Let's look at the metric function used for "wmt19_ende" task. A standard metric
+for the translation task is BLEU and we use `sacrebleu` implementation.
 
-```
-def tqa_metric(
-  targets: Sequence[Sequence[str]],
-  predictions: Sequence[str]
-) -> Mapping[str, seqio.Metric]:
-  """Computes official TriviaQA metrics.
+```py
+def bleu(targets: Sequence[str], predictions: Sequence[str]):
+  """Computes BLEU score.
 
   Args:
-    targets: list of lists of strings
+    targets: list of strings or list of list of strings if multiple references
+      are present.
     predictions: list of strings
 
   Returns:
-    dict with score_key: squad score across all targets and predictions
+    bleu_score across all targets and predictions
   """
+  if isinstance(targets[0], list):
+    targets = [[x for x in target] for target in targets]
+  else:
+    # Need to wrap targets in another list for corpus_bleu.
+    targets = [targets]
 
-  if len(targets) != len(predictions):
-    raise ValueError("Number of targets and predictions must match.")
-
-  def _normalize_answer(text):
-    """Lower text and remove punctuation, articles and extra whitespace."""
-    # Remove articles.
-    text = re.sub(r"\b(a|an|the)\b", " ", s)
-    # Remove punctuation.
-    for punc in string.punctuation:
-      text = text.replace(punc, '')
-    # Normalize white space
-    text = " ".join(s.split())
-    return text
-
-  # Normalize answers before comparing.
-  targets = [[_normalize_answer(t) for t in u] for u in targets]
-  predictions = [_normalize_answer(p) for p in predictions]
-
-  em = np.mean([
-      max(pred == gt for gt in ground_truths)
-      for pred, ground_truths in zip(predictions, targets)
-  ])
-  return {
-      "exact_match": seqio.evaluation.Scalar(em),
-  }
+  bleu_score = sacrebleu.corpus_bleu(predictions, targets,
+                                     smooth_method="exp",
+                                     smooth_value=0.0,
+                                     force=False,
+                                     lowercase=False,
+                                     tokenize="intl",
+                                     use_effective_order=False)
+  return {"bleu": bleu_score.score}
 ```
+
 
 ##### Score Metrics
 
@@ -362,8 +373,8 @@ After that, you can call `get_dataset` to build the `tf.data.Dataset`. For examp
 
 ```py
 dataset = seqio.get_mixture_or_task("mix1").get_dataset(
-    sequence_length={"inputs": 256, targets": 128},
-    dataset_split="train",
+    sequence_length={"inputs": 256, "targets": 128},
+    split="train",
     shuffle=True,
     num_epochs=1,
     shard_info=seqio.ShardInfo(index=0, num_shards=10),
@@ -421,3 +432,156 @@ SeqIO removes some of the constraints of this abstraction:
 * Users can control when and where EOS tokens are added.
 
 Furthermore, SeqIO has been made more modular with respect to the Mesh TensorFlow Transformer. This allows it to be used with other model implementations with more consistency and much less code duplication.
+
+
+## Example `Task`s
+
+### TriviaQA (Closed-book, open-domain version)
+This version of TriviaQA was introduced in [Roberts et al.
+2020](https://arxiv.org/abs/2002.08910).
+
+
+```py
+seqio.TaskRegistry.add(
+    "trivia_qa_open",
+    source=seqio.TfdsDataSource(
+      tfds_name="trivia_qa/unfiltered.nocontext:1.1.0",
+      splits={
+          "train": "train[:90%]",
+          "validation": "train[90%:]",
+          "test": "validation"
+      }),
+    preprocessors=[
+        tqa_open_preprocessor,
+        seqio.preprocessors.tokenize,
+        seqio.preprocessors.append_eos,
+    ],
+    output_features={
+        "inputs": seqio.Feature(
+           seqio.SentencePieceVocabulary("/path/to/inputs/vocab"),
+           add_eos=False, dtype=tf.int32
+        ),
+        "targets": seqio.Feature(
+           seqio.SentencePieceVocabulary("/path/to/targets/vocab"),
+           add_eos=True, dtype=tf.int32
+        ),
+    },
+    postprocess_fn=tqa_open_postprocessor,
+    metric_fns=[tqa_metric])
+```
+
+In this example, we are using the `TfdsDataSource`. We specify the name of the TriviaQA dataset in TFDS ([`"trivia_qa"`](https://www.tensorflow.org/datasets/catalog/trivia_qa)), the specific config that excludes the context for the open domain setting (`"unfiltered.nocontext"`), and the version number (`"1.1.0"`). We also override the default splits to match what is commonly used for the open domain setting. Specifically, we set our "test" split to be the TFDS "validation" split, and create a small pseudo-"validation" set by taking examples out of the TFDS "train" split.
+
+The preprocessor `tqa_open_preprocessor` is defined as follows.
+
+```py
+def trivia_qa_open(
+    dataset: tf.data.Dataset,
+    prefix:str = "trivia_qa question: "
+  ) -> tf.data.Dataset:
+  """Convert TriviaQA dataset to open domain qa examples.
+
+  The function takes the trivia_qa TFDS dataset and emits examples of the
+  form:
+  {
+    "inputs": "trivia_qa question: What are the names of the Olsen Twins?"
+    "targets": "Mary-Kate and Ashley",
+    "answers": ["Mary-Kate and Ashley", "Ashley and Mary-Kate"]
+  }
+
+  Args:
+    dataset: a tf.data.Dataset to process.
+    prefix: str, prefix to prepend to the inputs.
+
+  Returns:
+    a tf.data.Dataset
+  """
+  def tqa_map(ex):
+    """Map TriviaQA example to text-to-text example."""
+    return {
+        "inputs": prefix + ex["question"],
+        "targets": ex["answer"]["value"],
+        "answers": ex["answer"]["aliases"],
+    }
+
+  return dataset.map(tqa_map, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+```
+
+Or with the `seqio.map_overdataset` decorator, we have
+
+```py
+def trivia_qa_open(
+  dataset: tf.data.Dataset,
+  prefix: str = "trivia_qa question: "
+) -> tf.data.Dataset:
+
+  @seqio.map_over_dataset
+  def tqa_map(ex: Mapping[str, tf.Tensor]) -> Mapping[str, tf.Tensor]:
+    """Map TriviaQA example to text-to-text example."""
+    return {
+        "inputs": prefix + ex["question"],
+        "targets": ex["answer"]["value"],
+        "answers": ex["answer"]["aliases"],
+    }
+
+return tqa_map(dataset)
+```
+
+
+The postprocessor for this example is `tqa_open_postprocessor`, which is defined
+as follows:
+
+```py
+def tqa_open_postprocessor(output_or_target, example=None, is_target=False):
+  """Returns output as answer, or all answers if the full example is provided."""
+  if is_target:
+    return [a.decode("utf-8") for a in example["answers"]]
+  else:
+    return output_or_target.decode("utf-8")
+```
+
+When processing the target, we ignore `output_or_target` (equivalent to `example["targets"]`) since it is just selecting a single answer in `trivia_qa_open`. Instead, we extract the full list of answers from the example and convert them from bytes to text. When handling the model output, we simply convert it to text from detokenized bytes.
+
+The metric function `tqa_metric` is defined as:
+
+```
+def tqa_metric(
+  targets: Sequence[Sequence[str]],
+  predictions: Sequence[str]
+) -> Mapping[str, seqio.Metric]:
+  """Computes official TriviaQA metrics.
+
+  Args:
+    targets: list of lists of strings
+    predictions: list of strings
+
+  Returns:
+    dict with score_key: squad score across all targets and predictions
+  """
+
+  if len(targets) != len(predictions):
+    raise ValueError("Number of targets and predictions must match.")
+
+  def _normalize_answer(text):
+    """Lower text and remove punctuation, articles and extra whitespace."""
+    # Remove articles.
+    text = re.sub(r"\b(a|an|the)\b", " ", s)
+    # Remove punctuation.
+    for punc in string.punctuation:
+      text = text.replace(punc, '')
+    # Normalize white space
+    text = " ".join(s.split())
+    return text
+
+  # Normalize answers before comparing.
+  targets = [[_normalize_answer(t) for t in u] for u in targets]
+  predictions = [_normalize_answer(p) for p in predictions]
+
+  em = np.mean([
+      max(pred == gt for gt in ground_truths)
+      for pred, ground_truths in zip(predictions, targets)
+  ])
+  return {
+      "exact_match": seqio.evaluation.Scalar(em),
+  }
+```
