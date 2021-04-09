@@ -18,9 +18,9 @@ import functools
 
 from absl.testing import absltest
 import gin
-from t5 import seqio
+import seqio
+from seqio import test_utils
 from t5.data import preprocessors as prep
-from t5.seqio import test_utils
 import tensorflow.compat.v2 as tf
 
 tf.compat.v1.enable_eager_execution()

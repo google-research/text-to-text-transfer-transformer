@@ -23,7 +23,7 @@ from typing import Any, Callable, Iterable, Mapping, MutableSequence, Optional, 
 from absl import logging
 import numpy as np
 import pandas as pd
-from t5 import seqio
+import seqio
 import t5.data
 from t5.models import mesh_transformer
 from t5.models import utils as model_utils

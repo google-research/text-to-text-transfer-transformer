@@ -25,7 +25,7 @@ between.
 
 import re
 
-from t5 import seqio
+import seqio
 from t5.data import utils
 import tensorflow.compat.v2 as tf
 

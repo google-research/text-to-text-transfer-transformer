@@ -13,19 +13,18 @@
 # limitations under the License.
 
 """Import data modules."""
-# pylint:disable=wildcard-import
+# pylint:disable=wildcard-import,g-bad-import-order
 from t5.data.dataset_providers import *
 from t5.data.glue_utils import *
 import t5.data.postprocessors
 import t5.data.preprocessors
 from t5.data.utils import *
 
-
 # For backward compatibility
 # TODO(adarob): Remove need for these imports.
-from t5.seqio.dataset_providers import *
-from t5.data.dataset_providers import TaskRegistry  # pylint:disable=g-bad-import-order
-from t5.data.dataset_providers import FunctionTask as Task  # pylint:disable=g-bad-import-order
-from t5.seqio.test_utils import assert_dataset
-from t5.seqio.utils import *
-from t5.seqio.vocabularies import *
+from seqio.dataset_providers import *
+from t5.data.dataset_providers import TaskRegistry
+from t5.data.dataset_providers import FunctionTask as Task
+from seqio.test_utils import assert_dataset
+from seqio.utils import *
+from seqio.vocabularies import *

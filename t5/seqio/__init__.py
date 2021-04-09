@@ -12,17 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Import data modules."""
-# pylint:disable=wildcard-import,g-bad-import-order
+"""Redirect to seqio."""
 
-from t5.seqio.dataset_providers import *
-import t5.seqio.evaluation
-from t5.seqio.evaluation import Evaluator
-import t5.seqio.experimental
-from t5.seqio.feature_converters import *
-import t5.seqio.test_utils
-from t5.seqio.utils import *
-from t5.seqio.vocabularies import *
-
-# Version number.
-from t5.seqio.version import __version__
+# TODO(adarob): Remove this file once external imports are updated.
+from seqio import *  # pylint:disable=wildcard-import

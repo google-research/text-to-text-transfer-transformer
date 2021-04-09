@@ -25,7 +25,7 @@ import uuid
 from absl import logging
 import babel
 import gin
-from t5 import seqio
+import seqio
 import tensorflow.compat.v2 as tf
 
 # We disable no-value-for-parameter since the seqio.map_over_dataset leads to

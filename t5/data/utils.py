@@ -15,9 +15,8 @@
 # Lint as: python3
 """Utilities for data loading and processing."""
 
-from absl import logging
 import gin
-from t5 import seqio
+import seqio
 
 DEFAULT_SPM_PATH = "gs://t5-data/vocabs/cc_all.32000/sentencepiece.model"  # GCS
 DEFAULT_EXTRA_IDS = 100

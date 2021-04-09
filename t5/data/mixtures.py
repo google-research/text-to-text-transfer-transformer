@@ -16,7 +16,7 @@
 
 This module contains different mixtures for training T5 models.
 """
-from t5 import seqio
+import seqio
 import t5.data
 from t5.data.glue_utils import get_glue_weight_mapping
 from t5.data.glue_utils import get_super_glue_weight_mapping

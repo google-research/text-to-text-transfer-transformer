@@ -17,7 +17,7 @@
 
 import functools
 
-from t5 import seqio
+import seqio
 import t5.data
 from t5.data import postprocessors
 from t5.data import preprocessors

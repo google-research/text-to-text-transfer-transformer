@@ -15,7 +15,7 @@
 """Tests for t5.models.mesh_transformer."""
 
 from absl.testing import absltest
-from t5 import seqio
+import seqio
 from t5.models import mesh_transformer
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds

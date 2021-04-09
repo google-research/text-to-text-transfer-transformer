@@ -20,7 +20,7 @@ import os
 from absl.testing import absltest
 import numpy as np
 import pandas as pd
-from t5 import seqio
+import seqio
 from t5.evaluation import eval_utils
 import tensorflow.compat.v1 as tf
 
