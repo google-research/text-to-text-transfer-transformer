@@ -63,15 +63,17 @@ setuptools.setup(
         'transformers>=2.7.0',
     ],
     extras_require={
-        'gcp': ['gevent', 'google-api-python-client', 'google-compute-engine',
-                'google-cloud-storage', 'oauth2client'],
+        'gcp': [
+            'gevent', 'google-api-python-client', 'google-compute-engine',
+            'google-cloud-storage', 'oauth2client'
+        ],
         'cache-tasks': ['apache-beam'],
         'test': ['pytest'],
     },
     entry_points={
         'console_scripts': [
             't5_mesh_transformer = t5.models.mesh_transformer_main:console_entry_point',
-            't5_cache_tasks = t5.seqio.scripts.cache_tasks_main:console_entry_point'
+            't5_cache_tasks = seqio.scripts.cache_tasks_main:console_entry_point'
         ],
     },
     classifiers=[
