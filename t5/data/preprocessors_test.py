@@ -165,26 +165,6 @@ class PreprocessorsTest(tf.test.TestCase):
         seeds=[(55, 56), (57, 58)], random_prob=0.2))
     self.assertAllEqual(output, expected_output)
 
-  def test_rekey(self):
-    og_dataset = tf.data.Dataset.from_tensors({
-        'text': 'That is good.', 'other': 'That is bad.'})
-    dataset = prep.rekey(og_dataset, {'inputs': 'other', 'targets': 'text'})
-    assert_dataset(
-        dataset,
-        {'inputs': 'That is bad.', 'targets': 'That is good.'})
-
-    dataset = prep.rekey(og_dataset, {'targets': 'text'})
-    assert_dataset(dataset, {'targets': 'That is good.'})
-
-    dataset = prep.rekey(og_dataset, {'inputs': 'text'})
-    assert_dataset(dataset, {'inputs': 'That is good.'})
-
-    dataset = prep.rekey(og_dataset)
-    assert_dataset(dataset, {'text': 'That is good.', 'other': 'That is bad.'})
-
-    dataset = prep.rekey(og_dataset, {'inputs': 'text', 'targets': None})
-    assert_dataset(dataset, {'inputs': 'That is good.', 'targets': ''})
-
   def test_translate(self):
     og_dataset = tf.data.Dataset.from_tensor_slices(
         {'en': ['That is good.'], 'de': ['Das ist gut.']}
