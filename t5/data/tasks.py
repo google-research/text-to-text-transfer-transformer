@@ -29,7 +29,6 @@ from t5.evaluation import metrics
 import tensorflow_datasets as tfds
 
 TaskRegistry = seqio.TaskRegistry
-TfdsTask = t5.data.TfdsTask
 
 
 
