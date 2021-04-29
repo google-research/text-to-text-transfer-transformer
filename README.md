@@ -91,7 +91,7 @@ A usage example of HfPyTorchModel is available [here](https://github.com/google-
 
 ## Usage
 
-The easiest way to try out T5 is with a free TPU in our [Colab Tutorial](https://tiny.cc/t5-colab).
+The easiest way to try out T5 is with a free TPU in our [Colab Tutorial](https://colab.research.google.com/github/google-research/text-to-text-transfer-transformer/blob/master/notebooks/t5-trivia.ipynb).
 
 Below we provide examples for how to pre-train, fine-tune, evaluate, and decode from a model from the command-line with our codebase. You can use these instructions to reproduce our results, fine-tune one of our released checkpoints with your own data and/or hyperparameters, or pre-train a model from scratch.
 
