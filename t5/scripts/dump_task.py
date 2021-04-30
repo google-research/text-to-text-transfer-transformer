@@ -31,7 +31,7 @@ from absl import flags
 
 # from mesh_tensorflow.transformer import utils
 import gin
-import t5
+import seqio
 
 
 _DEFAULT_MODULE_IMPORTS = [
@@ -87,7 +87,7 @@ def main(_):
   gin.parse_config_files_and_bindings(FLAGS.gin_file, FLAGS.gin_param)
 
   total_examples = 0
-  task = t5.data.TaskRegistry.get(FLAGS.task)
+  task = seqio.TaskRegistry.get(FLAGS.task)
 
   ds = task.get_dataset(sequence_length=sequence_length(),
                         split=FLAGS.split,
