@@ -2269,6 +2269,7 @@ def split_tokens(dataset: tf.data.Dataset,
                  feature_key: str = 'targets',
                  additional_feature_keys: Optional[Sequence[str]] = None,
                  passthrough_feature_keys: Optional[Sequence[str]] = None,
+                 num_parallel_calls: int = AUTOTUNE,
                  **unused_kwargs) -> tf.data.Dataset:
   """Split examples into multiple examples each.
 
@@ -2291,6 +2292,7 @@ def split_tokens(dataset: tf.data.Dataset,
     additional_feature_keys: Additional features to split. The same chunk size
       will be used, so they should be the same size as feature_key.
     passthrough_feature_keys: Features to pass through without any splitting.
+    num_parallel_calls: num_parallel_calls value to pass to map_over_dataset
 
   Returns:
     a dataset
@@ -2302,7 +2304,7 @@ def split_tokens(dataset: tf.data.Dataset,
       raise ValueError(
           f'split keys {overlap_keys} also included in passthrough keys')
 
-  @seqio.map_over_dataset(num_seeds=1)
+  @seqio.map_over_dataset(num_seeds=1, num_parallel_calls=num_parallel_calls)
   def _split_tokens(x, seed):
     """Split one token sequence into multiple sequences."""
     tokens = x[feature_key]
