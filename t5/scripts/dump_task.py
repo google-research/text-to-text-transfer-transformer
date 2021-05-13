@@ -84,7 +84,12 @@ def main(_):
   if FLAGS.module_import:
     import_modules(FLAGS.module_import)
 
-  gin.parse_config_files_and_bindings(FLAGS.gin_file, FLAGS.gin_param)
+  # Load gin parameters if they've been defined.
+  try:
+    gin.parse_config_files_and_bindings(FLAGS.gin_file, FLAGS.gin_param)
+  except AttributeError:
+    # Otherwise, use default settings.
+    gin.parse_config_files_and_bindings(None, None)
 
   total_examples = 0
   task = seqio.TaskRegistry.get(FLAGS.task)
