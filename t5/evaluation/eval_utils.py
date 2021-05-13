@@ -344,7 +344,8 @@ def run_eval(
       seqio.evaluation.get_targets_and_examples(
           tasks=tasks,
           dataset_fn=functools.partial(
-              dataset_fn, split=split, sequence_length=None))
+              dataset_fn, split=split, sequence_length=None),
+          sequence_dims={})
 
   if summary_dir:
     model_utils.write_targets_and_examples(
