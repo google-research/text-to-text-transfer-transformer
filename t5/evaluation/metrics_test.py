@@ -587,6 +587,25 @@ class MetricsTest(test_utils.BaseMetricsTest):
         metrics.coqa_f1([["jump the box"], ["maru"]], ["jump", "cat"]),
         {"f1": 1 / 3})
 
+  def test_multi_class_classification(self):
+    self.assertDictClose(
+        metrics.multi_class_classification(
+            ["cat", "ant", "cat", "cat", "ant", "bird"],
+            ["ant", "ant", "cat", "cat", "ant", "cat"]), {
+                "ant_precision": 2 / (2 + 1),
+                "ant_recall": 2 / (2 + 0),
+                "ant_f1": 0.8,
+                "ant_accuracy": (2 + 3) / 6,
+                "bird_precision": 0,
+                "bird_recall": 0,
+                "bird_f1": 0,
+                "bird_accuracy": (0 + 5) / 6,
+                "cat_precision": 2 / (2 + 1),
+                "cat_recall": 2 / (2 + 1),
+                "cat_f1": 2 / 3,
+                "cat_accuracy": (2 + 2) / 6
+            })
+
 
 if __name__ == "__main__":
   absltest.main()
