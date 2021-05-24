@@ -156,6 +156,49 @@ class EvalUtilsTest(absltest.TestCase):
     self.assertTrue(metric_max_step.keys().equals(df.columns))
     self.assertSequenceEqual(list(metric_max_step.values), [40, 20, 20])
 
+  def test_super_glue_max(self):
+    mets = eval_utils.METRIC_NAMES.items()
+    glue_metric_names = [
+        v.name for k, v in mets if k.startswith("glue") and "average" not in k
+    ]
+    super_glue_metric_names = [
+        v.name for k, v in mets if k.startswith("super") and "average" not in k
+    ]
+    extra_metric_names = ["Fake metric", "Average GLUE Score"]
+    columns = glue_metric_names + super_glue_metric_names + extra_metric_names
+    n_total_metrics = len(columns)
+    metrics_1 = np.arange(n_total_metrics)
+    metrics_2 = np.ones(n_total_metrics)
+    metrics_2[12] = 100.
+    df = pd.DataFrame(
+        [metrics_1, metrics_2],
+        columns=columns,
+    )
+    df = eval_utils.compute_avg_glue(df)
+
+    expected_super_1 = (
+        12 + (13 + 14)/2. + 15 + (16 + 17)/2. + (18 + 19)/2. + 20 + 21 + 22
+    )/8.
+
+    expected_super_2 = (
+        100 + (1 + 1)/2. + 1 + (1 + 1)/2. + (1 + 1)/2. + 1 + 1 + 1)/8.
+
+    expected_super_max = (
+        100 + (13 + 14)/2. + 15 + (16 + 17)/2. + (18 + 19)/2. + 20 + 21 + 22
+    )/8.
+
+    self.assertSequenceAlmostEqual(
+        df["Average SuperGLUE Score"], [expected_super_1, expected_super_2]
+    )
+
+    df = eval_utils.sort_columns(df)
+    metric_names = collections.OrderedDict([
+        ("super_glue_average", eval_utils.Metric("Average SuperGLUE Score"))])
+
+    metric_max, _ = eval_utils.metric_group_max(df, metric_names)
+    self.assertAlmostEqual(metric_max["Average SuperGLUE Score"],
+                           expected_super_max)
+
   def test_log_csv(self):
     metric_names = list(eval_utils.METRIC_NAMES.values())
     df = pd.DataFrame(
