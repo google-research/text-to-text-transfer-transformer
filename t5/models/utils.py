@@ -14,16 +14,20 @@
 
 """Utilities for models."""
 
+import functools
 import os
 import re
+from typing import Iterable, Mapping, MutableSequence, Optional, Sequence, Union
 
 from absl import logging
 
 import gin
 import numpy as np
+import seqio
 import t5.data
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
+import typing_extensions
 
 # List of features used by model.
 _MODEL_FEATURES = [
@@ -224,3 +228,157 @@ def get_checkpoints_iterator(checkpoint_steps, model_dir):
       return checkpoint_steps
 
 
+class PredictOrScoreFnCallable(typing_extensions.Protocol):
+  """Signature for `predict_or_score_fn` passed to `run_eval`."""
+
+  def __call__(
+      self,
+      checkpoint_step: int,
+      vocabulary: seqio.Vocabulary,
+      tasks: Sequence[seqio.Task],
+      datasets: Mapping[str, tf.data.Dataset],
+      sequence_length: Union[None, Mapping[str, int]]
+  ) -> MutableSequence[Union[str, float]]: ...
+
+
+class DatasetFnCallable(typing_extensions.Protocol):
+
+  def __call__(
+      self,
+      task: seqio.Task,
+      sequence_length: Mapping[str, int],
+      split: str,
+  ) -> tf.data.Dataset: ...
+
+
+def run_eval(
+    mixture_or_task_name: str,
+    predict_or_score_fn: PredictOrScoreFnCallable,
+    checkpoint_steps: Iterable[int],
+    dataset_fn: DatasetFnCallable,
+    summary_dir: Optional[str] = None,
+    split: Optional[str] = "validation",
+    sequence_length: Optional[Mapping[str, int]] = None,
+    batch_size: Optional[int] = None):
+  """Run evaluation on the given mixture or task.
+
+  Args:
+    mixture_or_task_name: str, the name of the Mixture or Task to evaluate
+      on. Must be pre-registered in the global `TaskRegistry` or
+      `MixtureRegistry.`
+    predict_or_score_fn: function, This function takes in the sequence length,
+      checkpoint step, tasks to evaluate, an eval_dataset_fn, a dict mapping
+      task names to cached examples, a dict mapping task names to datasets,
+      and returns a list of outputs or a list of scores.
+    checkpoint_steps: an iterator with integers for checkpoint steps to
+      evaluate on.
+    dataset_fn: function, This function takes a task and returns the dataset
+      associated with it.
+    summary_dir: str, path to write TensorBoard events file summaries for
+      eval. If None, use model_dir/eval_{split}.
+    split: str, the mixture/task split to evaluate on.
+    sequence_length: an integer or a dict from feature-key to integer
+      the sequence length to pad or truncate to,
+      e.g. {"inputs": 512, "targets": 128}.
+      If None, sequence length is automatically computed during eval.
+    batch_size: integer, used only to check that expected padding matches the
+      targets. If None, the check is skipped.
+  """
+
+  vocabulary = get_vocabulary(mixture_or_task_name)
+
+  tasks = t5.data.get_subtasks(
+      t5.data.get_mixture_or_task(mixture_or_task_name))
+  tasks = seqio.evaluation.get_valid_eval_tasks(tasks, split)
+
+  if not tasks:
+    logging.info(
+        "All provided tasks have metric_fns=[] or no matching splits; "
+        "eval is not possible.")
+    return
+
+  summary_writer = None
+
+  cached_targets, cached_datasets, max_sequence_length = (
+      seqio.evaluation.get_targets_and_examples(
+          tasks=tasks,
+          dataset_fn=functools.partial(
+              dataset_fn, split=split, sequence_length=None),
+          sequence_dims={}))
+
+  if summary_dir:
+    write_targets_and_examples(summary_dir, cached_targets, cached_datasets)
+
+  if sequence_length is None:
+    logging.info("Setting sequence lengths to %s", max_sequence_length)
+    sequence_length = max_sequence_length
+  elif (sequence_length["inputs"] < max_sequence_length["inputs"] or
+        sequence_length["targets"] < max_sequence_length["targets"]):
+    logging.warning(
+        "Given sequence lengths are insufficient for some evaluation inputs "
+        "or targets. These sequences will be truncated to fit, likely "
+        "leading to sub-optimal results. Consider passing `None` for "
+        "sequence_length to have them be automatically computed.\n Got: %s, "
+        "\n Max Lengths:%s", sequence_length, max_sequence_length)
+  elif (sequence_length["inputs"] > max_sequence_length["inputs"] or
+        sequence_length["targets"] > max_sequence_length["targets"]):
+    logging.warning(
+        "Given sequence lengths are longer than necessary for some "
+        "evaluation inputs or targets, resulting in wasted computation. "
+        "Consider passing `None` for sequence_length to have them be "
+        "automatically computed.\n Got: %s,\n Max Lengths: %s",
+        sequence_length, max_sequence_length)
+
+  for step in checkpoint_steps:
+    logging.info("Evaluating checkpoint step: %d", step)
+    outputs = predict_or_score_fn(
+        checkpoint_step=step,
+        vocabulary=vocabulary,
+        tasks=tasks,
+        datasets=cached_datasets,
+        sequence_length=sequence_length)
+
+    for task in tasks:
+      # Extract the portion of decodes corresponding to this dataset
+      dataset = cached_datasets[task.name]
+      dataset_size = len(cached_targets[task.name])
+      predictions = [
+          task.postprocess_fn(d, example=ex)
+          for d, ex in zip(outputs[:dataset_size], tfds.as_numpy(dataset))
+      ]
+
+      # Remove the used decodes.
+      del outputs[:dataset_size]
+
+      if summary_dir:
+        predictions_filename = os.path.join(
+            summary_dir,
+            "{}_{}_predictions".format(task.name, step))
+        write_lines_to_file(predictions, predictions_filename)
+
+      with tf.Graph().as_default():
+        if summary_dir:
+          summary_writer = summary_writer or tf.summary.FileWriter(
+              summary_dir)
+
+        for metric_fn in task.metric_fns:
+          if summary_dir:
+            summary = tf.Summary()
+          targets = cached_targets[task.name]
+          metric_result = metric_fn(targets, predictions)
+          for metric_name, metric_value in metric_result.items():
+            tag = "eval/{}/{}".format(task.name, metric_name)
+            logging.info("%s at step %d: %.3f", tag, step, metric_value)
+            if summary_dir:
+              summary.value.add(tag=tag, simple_value=metric_value)
+              summary_writer.add_summary(summary, step)  # pytype: disable=attribute-error
+        if summary_dir:
+          summary_writer.flush()  # pytype: disable=attribute-error
+
+    # Only padding should remain.
+    if batch_size:
+      expected_pad = -sum(len(t)
+                          for t in cached_targets.values()) % batch_size
+      if outputs and len(outputs) != expected_pad:
+        raise ValueError("{} padded outputs, {} expected.".format(
+            len(outputs), expected_pad))

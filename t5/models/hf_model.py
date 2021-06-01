@@ -87,7 +87,6 @@ import time
 from absl import logging
 import mesh_tensorflow.transformer.dataset as transformer_dataset
 import t5.data
-from t5.evaluation.eval_utils import run_eval
 from t5.models import utils
 from t5.models.t5_model import T5Model
 import tensorflow.compat.v1 as tf
@@ -443,7 +442,7 @@ class HfPyTorchModel(T5Model):
     summary_dir = summary_dir or os.path.join(self._model_dir, f"{split}_eval")
     tf.io.gfile.makedirs(summary_dir)
 
-    run_eval(
+    utils.run_eval(
         mixture_or_task_name=mixture_or_task_name,
         predict_or_score_fn=_predict_from_tasks,
         checkpoint_steps=checkpoint_steps,

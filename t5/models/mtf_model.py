@@ -25,10 +25,8 @@ from mesh_tensorflow import optimize
 from mesh_tensorflow.transformer import dataset as transformer_dataset
 from mesh_tensorflow.transformer import learning_rate_schedules
 from mesh_tensorflow.transformer import utils as mtf_utils
-import t5.data
-from t5.evaluation.eval_utils import run_eval
+from t5.models import mesh_transformer
 from t5.models import utils
-import t5.models.mesh_transformer
 from t5.models.t5_model import T5Model
 import tensorflow.compat.v1 as tf
 
@@ -37,7 +35,7 @@ def _parse_operative_config(model_dir):
   with gin.unlock_config():
     gin.parse_config_file(
         os.path.join(model_dir, "operative_config.gin"),
-        skip_unknown=t5.models.mesh_transformer.DEPRECATED_GIN_REFERENCES)
+        skip_unknown=mesh_transformer.DEPRECATED_GIN_REFERENCES)
 
 
 @gin.configurable
@@ -220,9 +218,9 @@ class MtfModel(T5Model):
         variables that appear both in the current graph and the checkpoint.
       split: str, the mixture/task split to train on.
     """
-    vocabulary = t5.models.mesh_transformer.get_vocabulary(mixture_or_task_name)
+    vocabulary = mesh_transformer.get_vocabulary(mixture_or_task_name)
     dataset_fn = functools.partial(
-        t5.models.mesh_transformer.mesh_train_dataset_fn,
+        mesh_transformer.mesh_train_dataset_fn,
         mixture_or_task_name=mixture_or_task_name,
     )
     mtf_utils.train_model(
@@ -268,7 +266,7 @@ class MtfModel(T5Model):
       # Concatenate all dataset inputs to only have to do one decode loop
       combined_ds = None
       for task in tasks:
-        ds = t5.models.mesh_transformer.mesh_eval_dataset_fn(
+        ds = mesh_transformer.mesh_eval_dataset_fn(
             mixture_or_task_name=task.name,
             sequence_length=sequence_length,
             dataset_split=split)[0].dataset_fn()
@@ -334,12 +332,22 @@ class MtfModel(T5Model):
     checkpoint_steps = utils.get_checkpoints_iterator(checkpoint_steps,
                                                       self._model_dir)
 
-    run_eval(
+    def _get_task_eval_dataset(task, sequence_length, split):
+      eval_datasets = mesh_transformer.mesh_eval_dataset_fn(
+          sequence_length=sequence_length,
+          dataset_split=split,
+          mixture_or_task_name=task.name,
+      )
+
+      return eval_datasets[0].dataset_fn()
+
+    utils.run_eval(
         mixture_or_task_name=mixture_or_task_name,
         predict_or_score_fn=functools.partial(self._predict_or_score_fn,
                                               eval_with_score=eval_with_score,
                                               split=split),
         checkpoint_steps=checkpoint_steps,
+        dataset_fn=_get_task_eval_dataset,
         summary_dir=summary_dir,
         split=split,
         sequence_length=(None
@@ -479,7 +487,7 @@ class MtfModel(T5Model):
 
     if mixture_or_task_name:
       score_dataset_fn = functools.partial(
-          t5.models.mesh_transformer.mesh_eval_dataset_fn,
+          mesh_transformer.mesh_eval_dataset_fn,
           mixture_or_task_name=mixture_or_task_name,
       )
       return mtf_utils.score_from_dataset(
