@@ -537,3 +537,58 @@ def coqa_f1(
     prediction_tokens = _coqa_tokenize(p)
     f1s.append(_sequence_f1(target_tokens, prediction_tokens))
   return {"f1": np.mean(np.array(f1s))}
+
+
+def multi_class_classification(
+    targets: Sequence[str], predictions: Sequence[str]) -> Mapping[str, float]:
+  """Computes metrics per class in multi-class classification.
+
+  Args:
+    targets: list of target strings.
+    predictions: list of predicted strings.
+
+  Returns:
+    Precision, recall, f1 score and accuracy per class.
+  """
+  classes = []
+  for target in targets:
+    if target not in classes:
+      classes.append(target)
+  classes.sort()
+
+  # Returns per class precision, recall and f1 score in dict format:
+  # {'class 1': {'precision':0.5,
+  #              'recall':1.0,
+  #              'f1-score':0.67},
+  #  'class 2': { ... },
+  #   ...
+  # }
+  report = sklearn.metrics.classification_report(
+      targets, predictions, labels=classes, output_dict=True)
+
+  # Returns a matrix where matrix[i][j] = number of samples with true label
+  # being i-th class and predicted label being j-th class.
+  cm = sklearn.metrics.confusion_matrix(
+      targets, predictions, labels=classes, normalize="all")
+  # Accuracy for ith class = (tp[i] + tn[i]) / total predictions
+  per_class_accuracies = {}
+  for idx, cls in enumerate(classes):
+    # True negatives are all the samples that are not our current class
+    # (not the current row) and were not predicted as the current class
+    # (not the current column)
+    true_negatives = np.sum(np.delete(np.delete(cm, idx, axis=0), idx, axis=1))
+    # True positives are all the samples of our current class that were
+    # predicted as such.
+    true_positives = cm[idx, idx]
+    # The accuracy for the current class is ratio between correct predictions
+    # to all predictions.
+    per_class_accuracies[cls] = (true_positives + true_negatives) / np.sum(cm)
+
+  metrics = {}
+  for cls in classes:
+    metrics["%s_precision" % cls] = report[cls]["precision"]
+    metrics["%s_recall" % cls] = report[cls]["recall"]
+    metrics["%s_f1" % cls] = report[cls]["f1-score"]
+    metrics["%s_accuracy" % cls] = per_class_accuracies[cls]
+
+  return metrics
