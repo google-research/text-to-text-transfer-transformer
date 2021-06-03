@@ -45,6 +45,7 @@ setuptools.setup(
     install_requires=[
         'absl-py',
         'babel',
+        'editdistance',
         'gin-config',
         'mesh-tensorflow[transformer]>=0.1.13',
         'nltk',

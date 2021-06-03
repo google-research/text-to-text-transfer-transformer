@@ -27,6 +27,7 @@ import string
 from typing import Dict, Mapping, Optional, Sequence, Tuple, Union
 
 from absl import logging
+import editdistance
 import numpy as np
 import sacrebleu
 import scipy.stats
@@ -537,3 +538,24 @@ def coqa_f1(
     prediction_tokens = _coqa_tokenize(p)
     f1s.append(_sequence_f1(target_tokens, prediction_tokens))
   return {"f1": np.mean(np.array(f1s))}
+
+
+def edit_distance(targets, predictions, lower=True):
+  """Word-level edit distance between targets and predictions."""
+  edit_distances = []
+  for pred, target in zip(predictions, targets):
+    if lower:
+      pred = pred.lower()
+      target = target.lower()
+
+    # For simplicity, use regex-based tokenization that treats each
+    # contiguous chunk of characters matched by \w as a word.
+    pred = re.split("[^\\w]", pred)
+    target = re.split("[^\\w]", target)
+    edit_distances.append(editdistance.distance(pred, target))
+
+  return {"min_edit": min(edit_distances),
+          "max_edit": max(edit_distances),
+          "mean_edit": np.mean(edit_distances),
+          "median_edit": np.median(edit_distances),
+          "sum_edit": sum(edit_distances)}
