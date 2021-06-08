@@ -2876,14 +2876,14 @@ def noise_span_to_unique_sentinel(tokens, noise_mask, vocabulary, seeds):
   """
   del seeds
 
-  vocab_size = vocabulary.vocab_size
   prev_token_is_noise = tf.pad(noise_mask[:-1], [[1, 0]])
 
   first_noise_tokens = tf.logical_and(
       noise_mask, tf.logical_not(prev_token_is_noise))
   subsequent_noise_tokens = tf.logical_and(noise_mask, prev_token_is_noise)
 
-  sentinel = vocab_size - tf.cumsum(tf.cast(first_noise_tokens, tokens.dtype))
+  sentinel = sentinel_id(vocabulary) + 1 - tf.cumsum(
+      tf.cast(first_noise_tokens, tokens.dtype))
 
   tokens = tf.where(first_noise_tokens, sentinel, tokens)
   return tf.boolean_mask(tokens, tf.logical_not(subsequent_noise_tokens))
