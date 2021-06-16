@@ -23,6 +23,7 @@ Functions should assume all text inputs are unicode strings.
 import collections
 import itertools
 import re
+import Levenshtein
 import string
 from typing import Dict, Mapping, Optional, Sequence, Tuple, Union
 
@@ -55,13 +56,15 @@ def bleu(targets, predictions):
     # Need to wrap targets in another list for corpus_bleu.
     targets = [targets]
 
-  bleu_score = sacrebleu.corpus_bleu(predictions, targets,
-                                     smooth_method="exp",
-                                     smooth_value=0.0,
-                                     force=False,
-                                     lowercase=False,
-                                     tokenize="intl",
-                                     use_effective_order=False)
+  bleu_score = sacrebleu.corpus_bleu(
+      predictions,
+      targets,
+      smooth_method="exp",
+      smooth_value=0.0,
+      force=False,
+      lowercase=False,
+      tokenize="intl",
+      use_effective_order=False)
   return {"bleu": bleu_score.score}
 
 
@@ -72,6 +75,7 @@ def rouge(targets, predictions, score_keys=None):
     targets: list of strings
     predictions: list of strings
     score_keys: list of strings with the keys to compute.
+
   Returns:
     dict with score_key: rouge score across all targets and predictions
   """
@@ -96,11 +100,11 @@ def rouge(targets, predictions, score_keys=None):
     logging.info(
         "%s = %.2f, 95%% confidence [%.2f, %.2f]",
         key,
-        result[key].mid.fmeasure*100,
-        result[key].low.fmeasure*100,
-        result[key].high.fmeasure*100,
+        result[key].mid.fmeasure * 100,
+        result[key].low.fmeasure * 100,
+        result[key].high.fmeasure * 100,
     )
-  return {key: result[key].mid.fmeasure*100 for key in score_keys}
+  return {key: result[key].mid.fmeasure * 100 for key in score_keys}
 
 
 def span_squad(targets, predictions):
@@ -136,7 +140,7 @@ def span_squad(targets, predictions):
     except ValueError:
       return ""
 
-    return " ".join(context[start_index:end_index+1])
+    return " ".join(context[start_index:end_index + 1])
 
   contexts = [space_tok(t["context"]) for t in targets]
   answers = [t["answers"] for t in targets]
@@ -180,7 +184,9 @@ def trivia_qa(targets, predictions):
 
 
 def accuracy(targets, predictions):
-  return {"accuracy": 100*sklearn.metrics.accuracy_score(targets, predictions)}
+  return {
+      "accuracy": 100 * sklearn.metrics.accuracy_score(targets, predictions)
+  }
 
 
 def sequence_accuracy(targets, predictions):
@@ -192,6 +198,7 @@ def sequence_accuracy(targets, predictions):
   Args:
     targets: list of strings
     predictions: list of strings
+
   Returns:
     float. Average sequence-level accuracy.
   """
@@ -203,14 +210,16 @@ def sequence_accuracy(targets, predictions):
 
 def pearson_corrcoef(targets, predictions):
   """Pearson correlation coefficient."""
-  return {"pearson_corrcoef":
-              100 * scipy.stats.pearsonr(targets, predictions)[0]}
+  return {
+      "pearson_corrcoef": 100 * scipy.stats.pearsonr(targets, predictions)[0]
+  }
 
 
 def spearman_corrcoef(targets, predictions):
   """Spearman correlation coefficient."""
-  return {"spearman_corrcoef":
-              100 * scipy.stats.spearmanr(targets, predictions)[0]}
+  return {
+      "spearman_corrcoef": 100 * scipy.stats.spearmanr(targets, predictions)[0]
+  }
 
 
 def mean_multiclass_f1(num_classes, **metric_fn_kwargs):
@@ -236,6 +245,7 @@ def f1_score_with_invalid(targets, predictions):
   Args:
     targets: np.ndarray of targets, either 0 or 1
     predictions: np.ndarray of predictions, any integer value
+
   Returns:
     F1 score, where any prediction != 0 or 1 is counted as wrong.
   """
@@ -263,6 +273,7 @@ def mean_group_metric(metric_fn, group_key="group", value_key="value"):
     group_key: string, the key for the grouping value in the target dictionary.
     value_key: string, the key for the value in the dictionaries.
   """
+
   def my_metric(targets, predictions):
     """Computes mean of `metric_fn` over subgroups of results."""
     grouped_values = collections.defaultdict(lambda: ([], []))
@@ -275,6 +286,7 @@ def mean_group_metric(metric_fn, group_key="group", value_key="value"):
       for metric, score in metric_fn(targets, predictions).items():
         group_scores[metric].append(score)
     return {metric: np.mean(scores) for metric, scores in group_scores.items()}
+
   return my_metric
 
 
@@ -289,12 +301,12 @@ def multirc_f1_over_all_answers(targets, predictions):
   Args:
     targets: list of dicts, where each dict has a "value" key.
     predictions: list of dicts, where each dict has a "value" key.
+
   Returns:
     F1 score over values, where any prediction != 0 or 1 is counted as wrong.
   """
-  return f1_score_with_invalid(
-      [t["value"] for t in targets], [p["value"] for p in predictions]
-  )
+  return f1_score_with_invalid([t["value"] for t in targets],
+                               [p["value"] for p in predictions])
 
 
 def auc(targets, predictions, targets_threshold=None):
@@ -308,6 +320,7 @@ def auc(targets, predictions, targets_threshold=None):
     predictions: np.ndarray of predictions, any value.
     targets_threshold: float, if target values are continuous values, this
       threshold binarizes them.
+
   Returns:
     A dictionary with AUC-ROC and AUC-PR scores.
   """
@@ -337,6 +350,7 @@ def sklearn_metrics_wrapper(metric_str,
     metric_post_process_fn: callable, if specified the final computed metric
       will be passed through this.
     **metric_fn_kwargs: kwargs, passed to the metric function we are calling.
+
   Returns:
     the function that calculates the metric in a dict.
   """
@@ -349,6 +363,7 @@ def sklearn_metrics_wrapper(metric_str,
     if metric_post_process_fn is not None:
       metric_val = metric_post_process_fn(metric_val)
     return {metric_dict_str or metric_str: metric_val}
+
   return fn
 
 
@@ -443,6 +458,7 @@ def rank_classification(
     b = x.max(-1)[:, np.newaxis]
     y = np.exp(x - b)
     return y / y.sum(-1)[:, np.newaxis]
+
   probs = exp_normalize(log_likelihoods)
 
   metrics = {
@@ -469,8 +485,11 @@ def rank_classification(
     metrics.update({
         "auc-roc":
             100 * sklearn.metrics.roc_auc_score(
-                labels_indicator, probs, multi_class="ovr",
-                sample_weight=weights, average="macro"),
+                labels_indicator,
+                probs,
+                multi_class="ovr",
+                sample_weight=weights,
+                average="macro"),
         "auc-pr":
             100 * sklearn.metrics.average_precision_score(
                 labels_indicator, probs, sample_weight=weights,
@@ -515,8 +534,8 @@ def _sequence_f1(target_tokens: Sequence[str],
     return int(target_tokens == prediction_tokens)
 
   common_token_counts = (
-      collections.Counter(target_tokens) &
-      collections.Counter(prediction_tokens))
+      collections.Counter(target_tokens)
+      & collections.Counter(prediction_tokens))
   sum_common = sum(common_token_counts.values())
   if sum_common == 0:
     return 0
@@ -527,9 +546,8 @@ def _sequence_f1(target_tokens: Sequence[str],
   return f1
 
 
-def coqa_f1(
-    targets: Sequence[Sequence[str]], predictions: Sequence[str]
-) -> Mapping[str, float]:
+def coqa_f1(targets: Sequence[Sequence[str]],
+            predictions: Sequence[str]) -> Mapping[str, float]:
   """Return mean sequence F1 score over all QA turns."""
   f1s = []
   for (t, p) in zip(targets, predictions):
@@ -554,8 +572,27 @@ def edit_distance(targets, predictions, lower=True):
     target = re.split("[^\\w]", target)
     edit_distances.append(editdistance.distance(pred, target))
 
-  return {"min_edit": min(edit_distances),
-          "max_edit": max(edit_distances),
-          "mean_edit": np.mean(edit_distances),
-          "median_edit": np.median(edit_distances),
-          "sum_edit": sum(edit_distances)}
+  return {
+      "min_edit": min(edit_distances),
+      "max_edit": max(edit_distances),
+      "mean_edit": np.mean(edit_distances),
+      "median_edit": np.median(edit_distances),
+      "sum_edit": sum(edit_distances)
+  }
+
+
+def levenshtein_distance(targets, predictions, lower=True):
+  """Levenshtein distance between targets and predictions."""
+  distances = []
+  for pred, target in zip(predictions, targets):
+    if lower:
+      pred = pred.lower()
+      target = target.lower()
+    distances.append(Levenshtein.distance(pred, target))
+  return {
+      "min_edit": min(distances),
+      "max_edit": max(distances),
+      "mean_edit": np.mean(distances),
+      "median_edit": np.median(distances),
+      "sum_edit": sum(distances)
+  }
