@@ -26,15 +26,27 @@ The checkpoints are located here:
 * **t5.1.1.xl** (~3 billion parameters): [gs://t5-data/pretrained_models/t5.1.1.xl](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/t5.1.1.xl/)
 * **t5.1.1.xxl** (~11 billion parameters): [gs://t5-data/pretrained_models/t5.1.1.xxl](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/t5.1.1.xxl/)
 
+### LM-Adapted: t5.1.1.lm100k
+
+These "LM adapted" models are initialized from t5.1.1 (above) and train for an
+additional 100K steps on the LM objective discussed in the [T5 paper][paper].
+This adaptation improves the ability of the model to be used for [prompt
+tuning](https://arxiv.org/abs/2104.08691).
+
+* **t5.1.1.lm100k.small** (~77 million parameters): [gs://t5-data/pretrained_models/t5.1.1.lm100k.small](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/t5.1.1.lm100k.small/)
+* **t5.1.1.lm100k.base** (~250 million parameters): [gs://t5-data/pretrained_models/t5.1.1.lm100k.base](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/t5.1.1.lm100k.base/)
+* **t5.1.1.lm100k.large** (~800 million parameters): [gs://t5-data/pretrained_models/t5.1.1.lm100k.large](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/t5.1.1.lm100k.large/)
+* **t5.1.1.lm100k.xl** (~3 billion parameters): [gs://t5-data/pretrained_models/t5.1.1.lm100k.xl](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/t5.1.1.lm100k.xl/)
+* **t5.1.1.lm100k.xxl** (~11 billion parameters): [gs://t5-data/pretrained_models/t5.1.1.lm100k.xxl](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/t5.1.1.lm100k.xxl/)
+
 ### Talking Heads: t5.1.th.*
 
-Variation on the  t5.1.1 models using talking-heads attention (https://arxiv.org/abs/2003.02436).
+Variation on the t5.1.1 models using talking-heads attention (https://arxiv.org/abs/2003.02436).
 
 * **t5.1.th.base** (~250 million parameters): [gs://t5-data/pretrained_models/t5.1.th.base](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/t5.1.th.base/)
 * **t5.1.th.large** (~800 million parameters): [gs://t5-data/pretrained_models/t5.1.th.large](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/t5.1.th.large/)
 
 [paper]: https://arxiv.org/abs/1910.10683
-
 
 ### First Layers Narrow: t5.1.n4w10.*
 
@@ -49,7 +61,6 @@ decreasing the amount of communication necessary for model parallelism.
 * **t5.1.n4w10.base** (~250 million parameters): [gs://t5-data/pretrained_models/t5.1.n4w10.base](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/t5.1.n4w10.base/)
 * **t5.1.n4w10.large** (~800 million parameters): [gs://t5-data/pretrained_models/t5.1.n4w10.large](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/t5.1.n4w10.large/)
 * **t5.1.n4w10.xl** (~3 billion parameters): [gs://t5-data/pretrained_models/t5.1.n4w10.xl](https://console.cloud.google.com/storage/browser/t5-data/pretrained_models/t5.1.n4w10.xl/)
-
 
 
 
