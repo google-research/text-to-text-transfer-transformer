@@ -84,14 +84,14 @@ Finally, `t5.data` contains a `Mixture` class that can be instantiated to combin
 
 Currently there are two shims available: One for the [Mesh TensorFlow Transformer][mtft] that we used in our paper and another for the [Hugging Face Transformers library](https://huggingface.co/transformers/).
 The Hugging Face API is currently experimental and subject to change, but provides a simple and easy way to load, fine-tune, and evaluate our pre-trained models using PyTorch on a single GPU.
-If you want to use our largest models on TPUs and/or reproduce the results in our paper, you should use the [MtfModel](https://github.com/google-research/text-to-text-transfer-transformer/tree/master/t5/models/mtf_model.py) API and the `t5_mesh_transformer` binary.
-If you are interested fine-tuning our models on a GPU in PyTorch, you should try the [HfPyTorchModel](https://github.com/google-research/text-to-text-transfer-transformer/tree/master/t5/models/hf_model.py) API.
+If you want to use our largest models on TPUs and/or reproduce the results in our paper, you should use the [MtfModel](https://github.com/google-research/text-to-text-transfer-transformer/tree/main/t5/models/mtf_model.py) API and the `t5_mesh_transformer` binary.
+If you are interested fine-tuning our models on a GPU in PyTorch, you should try the [HfPyTorchModel](https://github.com/google-research/text-to-text-transfer-transformer/tree/main/t5/models/hf_model.py) API.
 Since the HfPyTorchModel is experimental, the remainder of this README assumes usage of the MtfModel and its associated binary.
 A usage example of HfPyTorchModel is available [here](https://github.com/google-research/text-to-text-transfer-transformer/blob/a08f0d1c4a7caa6495aec90ce769a29787c3c87c/t5/models/hf_model.py#L38).
 
 ## Usage
 
-The easiest way to try out T5 is with a free TPU in our [Colab Tutorial](https://colab.research.google.com/github/google-research/text-to-text-transfer-transformer/blob/master/notebooks/t5-trivia.ipynb).
+The easiest way to try out T5 is with a free TPU in our [Colab Tutorial](https://colab.research.google.com/github/google-research/text-to-text-transfer-transformer/blob/main/notebooks/t5-trivia.ipynb).
 
 Below we provide examples for how to pre-train, fine-tune, evaluate, and decode from a model from the command-line with our codebase. You can use these instructions to reproduce our results, fine-tune one of our released checkpoints with your own data and/or hyperparameters, or pre-train a model from scratch.
 
@@ -332,7 +332,7 @@ The command above exports the latest checkpoint in the model directory. To expor
   --checkpoint_steps=1000000
 ```
 
-The [t5-deploy notebook](https://colab.research.google.com/github/google-research/text-to-text-transfer-transformer/blob/master/notebooks/t5-deploy.ipynb) demonstrates exporting a `SavedModel` and packaging it in a [Docker](https://docs.docker.com) image for serving.
+The [t5-deploy notebook](https://colab.research.google.com/github/google-research/text-to-text-transfer-transformer/blob/main/notebooks/t5-deploy.ipynb) demonstrates exporting a `SavedModel` and packaging it in a [Docker](https://docs.docker.com) image for serving.
 
 ### GPU Usage
 
@@ -455,7 +455,7 @@ If you extend or use this work, please cite the [paper][paper] where it was intr
 ```
 
 [paper]: https://arxiv.org/abs/1910.10683
-[released_checkpoints]: https://github.com/google-research/text-to-text-transfer-transformer/blob/master/released_checkpoints.md
+[released_checkpoints]: https://github.com/google-research/text-to-text-transfer-transformer/blob/main/released_checkpoints.md
 [beam]: https://beam.apache.org
 [c4]: https://www.tensorflow.org/datasets/catalog/c4
 [cc]: https://commoncrawl.org
