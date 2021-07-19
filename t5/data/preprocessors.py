@@ -2029,10 +2029,11 @@ def select_random_chunk(dataset: tf.data.Dataset,
       for k in additional_feature_keys:
         with tf.control_dependencies([
             tf.assert_equal(
-                tf.size(tokens),
-                tf.size(x[k]),
+                tf.shape(tokens)[0],
+                tf.shape(x[k])[0],
                 message=(f'Additional feature {k} is not the same size as '
-                         f'{feature_key} in select_random_chunk().')
+                         f'{feature_key} along axis 0 in select_random_chunk().'
+                         )
             )
         ]):
           chunk[k] = x[k][start:end]

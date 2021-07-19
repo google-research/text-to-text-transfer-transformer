@@ -1899,9 +1899,10 @@ class PreprocessorsTest(tf.test.TestCase):
         'inputs': [4, 5]
     })
     with self.assertRaises(tf.errors.InvalidArgumentError):
-      prep.select_random_chunk(
+      dataset = prep.select_random_chunk(
           dataset, output_features=None, feature_key='targets',
           additional_feature_keys=['inputs'], max_length=4)
+      _ = list(dataset.as_numpy_iterator())
 
 
 if __name__ == '__main__':
