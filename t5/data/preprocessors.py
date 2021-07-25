@@ -1534,7 +1534,7 @@ def rank_classification(ds: tf.data.Dataset,
   inputs_fn=lambda ex: ex['prefix'],
   targets_fn=lambda ex: ex['suffix'],
   is_correct_fn=lambda ex: tf.one_hot(ex['label'], num_classes)
-  weight_fn=lambda ex: tf.fill([num_classes], ex['weight'])
+  weight_fn=lambda ex: ex['weight']
 
   Given the following example:
 
