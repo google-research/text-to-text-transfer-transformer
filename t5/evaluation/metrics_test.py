@@ -163,9 +163,10 @@ class MetricsTest(test_utils.BaseMetricsTest):
 
   def test_exact_match(self):
     self.assertDictEqual(
-        metrics.exact_match([0, 1], [0, 1]), {"exact_match": 100.0})
+        metrics.exact_match([[0, 1], [0, 2]], [[0, 1], [0, 3]]),
+        {"exact_match": 50.0})
     self.assertDictEqual(
-        metrics.exact_match([0, 1], [0, 2]), {"exact_match": 0.0})
+        metrics.exact_match([0, 1], [0, 2]), {"exact_match": 50.0})
 
   def test_pearson_corrcoef(self):
     self.assertDictClose(
