@@ -1846,10 +1846,10 @@ class PreprocessorsTest(tf.test.TestCase):
     dataset = prep.select_random_chunk(
         dataset, output_features=None, feature_key='targets', max_length=4)
     output = list(dataset.as_numpy_iterator())
-    self.assertEqual(1, len(output))
+    self.assertLen(output, 1)
     output = output[0]
     self.assertSequenceEqual(['targets'], list(output.keys()))
-    self.assertGreater(len(output['targets']), 0)
+    self.assertNotEmpty(output['targets'])
 
   def test_select_random_chunk_passthrough(self):
     dataset = tf.data.Dataset.from_tensors({
@@ -1874,10 +1874,10 @@ class PreprocessorsTest(tf.test.TestCase):
         dataset, output_features=None, feature_key='targets', max_length=4,
         uniform_random_start=True)
     output = list(dataset.as_numpy_iterator())
-    self.assertEqual(1, len(output))
+    self.assertLen(output, 1)
     output = output[0]
     self.assertSequenceEqual(['targets'], list(output.keys()))
-    self.assertGreater(len(output['targets']), 0)
+    self.assertNotEmpty(output['targets'])
 
   def test_select_random_chunk_additional_features(self):
     dataset = tf.data.Dataset.from_tensors({
@@ -1888,10 +1888,24 @@ class PreprocessorsTest(tf.test.TestCase):
         dataset, output_features=None, feature_key='targets',
         additional_feature_keys=['inputs'], max_length=3)
     output = list(dataset.as_numpy_iterator())
-    self.assertEqual(1, len(output))
+    self.assertLen(output, 1)
     output = output[0]
     self.assertSequenceEqual(['inputs', 'targets'], sorted(list(output.keys())))
     self.assertAllEqual(output['inputs'] - 4, output['targets'])
+
+  def test_select_random_chunk_min_length(self):
+    dataset = tf.data.Dataset.from_tensors({
+        'targets': [0, 1, 2, 3],
+        'inputs': [4, 5, 6, 7]
+    })
+    dataset = prep.select_random_chunk(
+        dataset, output_features=None, feature_key='targets', max_length=4,
+        uniform_random_start=True, min_length=1)
+    output = list(dataset.as_numpy_iterator())
+    self.assertLen(output, 1)
+    output = output[0]
+    self.assertSequenceEqual(['targets'], list(output.keys()))
+    self.assertNotEmpty(output['targets'])
 
   def test_select_random_chunk_different_sizes(self):
     dataset = tf.data.Dataset.from_tensors({
