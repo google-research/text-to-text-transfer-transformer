@@ -75,6 +75,12 @@ flags.DEFINE_boolean("use_model_api", False,
 flags.DEFINE_list("additional_deprecated_gin_references", [],
                   "Deprecated gin configs to be ignored.")
 
+flags.DEFINE_boolean("skip_all_gin_unknowns", False,
+                     "Don't throw any errors if any gin config params are "
+                     "not found. Overrides the specific list of names in "
+                     "--additional_deprecated_gin_references and "
+                     "DEPRECATED_GIN_REFERENCES.")
+
 # Note: All the args from here on are only used when use_model_api is set
 flags.DEFINE_enum(
     "mode", None, ["train", "finetune", "eval", "predict",
@@ -166,8 +172,9 @@ def main(_):
         "No write access to model directory. Skipping command logging.")
 
   utils.parse_gin_defaults_and_flags(
-      skip_unknown=mesh_transformer.DEPRECATED_GIN_REFERENCES +
-      tuple(FLAGS.additional_deprecated_gin_references),
+      skip_unknown=(FLAGS.skip_all_gin_unknowns or (
+          mesh_transformer.DEPRECATED_GIN_REFERENCES +
+          tuple(FLAGS.additional_deprecated_gin_references))),
       finalize_config=False)
   # We must overide this binding explicitly since it is set to a deprecated
   # function or class in many existing configs.
