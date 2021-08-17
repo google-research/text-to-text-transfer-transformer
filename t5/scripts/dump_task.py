@@ -41,6 +41,8 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_string("task", None,
                     "A registered Task.")
+flags.DEFINE_string("mixture", None,
+                    "A registered Mixture.")
 flags.DEFINE_integer("max_examples", -1,
                      "maximum number of examples. -1 for no limit")
 flags.DEFINE_string(
@@ -92,12 +94,16 @@ def main(_):
     gin.parse_config_files_and_bindings(None, None)
 
   total_examples = 0
-  task = seqio.TaskRegistry.get(FLAGS.task)
+  if FLAGS.task is not None:
+    task_or_mixture = seqio.TaskRegistry.get(FLAGS.task)
+  elif FLAGS.mixture is not None:
+    task_or_mixture = seqio.MixtureRegistry.get(FLAGS.mixture)
 
-  ds = task.get_dataset(sequence_length=sequence_length(),
-                        split=FLAGS.split,
-                        use_cached=False,
-                        shuffle=FLAGS.shuffle)
+  ds = task_or_mixture.get_dataset(
+      sequence_length=sequence_length(),
+      split=FLAGS.split,
+      use_cached=False,
+      shuffle=FLAGS.shuffle)
 
   keys = re.findall(r"{([\w+]+)}", FLAGS.format_string)
   def _example_to_string(ex):
@@ -108,7 +114,8 @@ def main(_):
         if (FLAGS.detokenize
             and v and isinstance(v, list)
             and isinstance(v[0], int)):
-          s = task.output_features[k].vocabulary.decode([abs(i) for i in v])
+          s = task_or_mixture.output_features[k].vocabulary.decode(
+              [abs(i) for i in v])
         elif isinstance(v, bytes):
           s = v.decode("utf-8")
         else:
