@@ -2006,7 +2006,7 @@ def select_random_chunk(dataset: tf.data.Dataset,
       a 1d Tensor
     """
     tokens = x[feature_key]
-    n_tokens = tf.size(tokens)
+    n_tokens = tf.shape(tokens)[0]
     if min_length is not None:
       length = tf.random.stateless_uniform(
           [],
@@ -2322,7 +2322,7 @@ def split_tokens(dataset: tf.data.Dataset,
   def _split_tokens(x, seed):
     """Split one token sequence into multiple sequences."""
     tokens = x[feature_key]
-    n_tokens = tf.size(tokens)
+    n_tokens = tf.shape(tokens)[0]
     if min_tokens_per_segment is None:
       length = max_tokens_per_segment
     else:
@@ -2345,28 +2345,31 @@ def split_tokens(dataset: tf.data.Dataset,
             tf.cast(n_tokens, tf.float32) / tf.cast(length, tf.float32))
         ,
         tf.int32)
-    padding = num_segments * length - tf.size(tokens)
-    padded = tf.pad(tokens, [[0, padding]])
-    orig_lengths = {
-        feature_key: tf.concat(
-            [tf.repeat(length, num_segments - 1), [length - padding]], axis=0)
-    }
-    outputs = {feature_key: tf.reshape(padded, [-1, length])}
+    padding = num_segments * length - tf.shape(tokens)[0]
+    feature_keys_to_split = [feature_key]
+    orig_lengths = {}
+    outputs = {}
     if additional_feature_keys is not None:
-      for k in additional_feature_keys:
-        with tf.control_dependencies([
-            tf.assert_equal(
-                tf.size(tokens),
-                tf.size(x[k]),
-                message=(f'Additional feature {k} is not the same size as '
-                         f'{feature_key} in split_tokens().')
-            )
-        ]):
-          padded = tf.pad(x[k], [[0, padding]])
-          outputs[k] = tf.reshape(padded, [-1, length])
-          orig_lengths[k] = tf.concat(
-              [tf.repeat(length, num_segments - 1), [length - padding]],
-              axis=0)
+      feature_keys_to_split.extend(additional_feature_keys)
+    for k in feature_keys_to_split:
+      with tf.control_dependencies([
+          tf.assert_equal(
+              tf.shape(tokens)[0],
+              tf.shape(x[k])[0],
+              message=(f'Additional feature {k} is not the same size as '
+                       f'{feature_key} along axis 0 in split_tokens().')
+          )
+      ]):
+        shape = tf.shape(x[k])[1:]
+        padded = tf.pad(
+            x[k],
+            tf.concat([[[0, padding]],
+                       tf.zeros([len(shape), 2], dtype=tf.int32)],
+                      axis=0))
+        orig_lengths[k] = tf.concat(
+            [tf.repeat(length, num_segments - 1), [length - padding]], axis=0)
+        outputs[k] = tf.reshape(
+            padded, tf.concat([[-1, length], shape], axis=0))
     if passthrough_feature_keys:
       for k in passthrough_feature_keys:
         outputs[k] = tf.tile(

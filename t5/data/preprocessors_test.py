@@ -579,6 +579,30 @@ class PreprocessorsTest(tf.test.TestCase):
     _verify_split(100, 1)
     _verify_split(1000, 1)
 
+  def test_split_tokens_rank2(self):
+    original = list([i, 2 * i] for i in range(2, 102))
+    og_dataset = tf.data.Dataset.from_tensors({'targets': original})
+
+    # Verify splits with no max segments.
+    def _verify_split(length, n_expected_outputs):
+      ds = prep.split_tokens(
+          og_dataset, unused_vocabulary=None, max_tokens_per_segment=length)
+      outputs = list(test_utils.dataset_as_text(ds))
+      self.assertLen(outputs, n_expected_outputs)
+      reconstructed = []
+      for ex in outputs[:-1]:
+        t = ex['targets']
+        self.assertLen(t, length)
+        reconstructed.extend(t)
+      final_t = outputs[-1]['targets']
+      self.assertLessEqual(len(final_t), length)
+      reconstructed.extend(final_t)
+      self.assertAllEqual(reconstructed, original)
+    _verify_split(25, 4)
+    _verify_split(30, 4)
+    _verify_split(100, 1)
+    _verify_split(1000, 1)
+
   def test_split_padding_tokens(self):
     original = [0] * 100
     og_dataset = tf.data.Dataset.from_tensors({'targets': original})
@@ -606,22 +630,25 @@ class PreprocessorsTest(tf.test.TestCase):
   def test_split_tokens_additional_features_passthrough(self):
     original = list(range(2, 102))
     original_aux = list(range(4, 104))
+    original_aux2d = list([i, 2 * i] for i in range(6, 106))
     original_passthrough = list(range(20))
     og_dataset = tf.data.Dataset.from_tensors({
         'targets': original,
         'aux': original_aux,
+        'aux2d': original_aux2d,
         'passthrough': original_passthrough
     })
     # Verify splits with no max segments.
     def _verify_split(length, n_expected_outputs):
       ds = prep.split_tokens(
           og_dataset, unused_vocabulary=None, max_tokens_per_segment=length,
-          additional_feature_keys=['aux'],
+          additional_feature_keys=['aux', 'aux2d'],
           passthrough_feature_keys=['passthrough'])
       outputs = list(test_utils.dataset_as_text(ds))
       self.assertLen(outputs, n_expected_outputs)
       reconstructed = []
       reconstructed_aux = []
+      reconstructed_aux2d = []
       for ex in outputs[:-1]:
         t = ex['targets']
         self.assertLen(t, length)
@@ -630,6 +657,10 @@ class PreprocessorsTest(tf.test.TestCase):
         a = ex['aux']
         self.assertLen(a, length)
         reconstructed_aux.extend(a)
+
+        a2d = ex['aux2d']
+        self.assertLen(a2d, length)
+        reconstructed_aux2d.extend(a2d)
       final_t = outputs[-1]['targets']
       self.assertLessEqual(len(final_t), length)
       reconstructed.extend(final_t)
@@ -639,6 +670,11 @@ class PreprocessorsTest(tf.test.TestCase):
       self.assertLessEqual(len(final_a), length)
       reconstructed_aux.extend(final_a)
       self.assertEqual(reconstructed_aux, original_aux)
+
+      final_a2d = outputs[-1]['aux2d']
+      self.assertLessEqual(len(final_a2d), length)
+      reconstructed_aux2d.extend(final_a2d)
+      self.assertAllEqual(reconstructed_aux2d, original_aux2d)
 
       for ex in outputs:
         self.assertAllEqual(original_passthrough, ex['passthrough'])
@@ -1851,6 +1887,19 @@ class PreprocessorsTest(tf.test.TestCase):
     self.assertSequenceEqual(['targets'], list(output.keys()))
     self.assertNotEmpty(output['targets'])
 
+  def test_select_random_chunk_rank2(self):
+    dataset = tf.data.Dataset.from_tensors({
+        'targets': [[0, 9], [1, 8], [2, 7], [3, 6]],
+        'inputs': [4, 5, 6, 7]
+    })
+    dataset = prep.select_random_chunk(
+        dataset, output_features=None, feature_key='targets', max_length=4)
+    output = list(dataset.as_numpy_iterator())
+    self.assertLen(output, 1)
+    output = output[0]
+    self.assertSequenceEqual(['targets'], list(output.keys()))
+    self.assertNotEmpty(output['targets'])
+
   def test_select_random_chunk_passthrough(self):
     dataset = tf.data.Dataset.from_tensors({
         'targets': [0, 1, 2, 3],
@@ -1882,7 +1931,7 @@ class PreprocessorsTest(tf.test.TestCase):
   def test_select_random_chunk_additional_features(self):
     dataset = tf.data.Dataset.from_tensors({
         'targets': [0, 1, 2, 3],
-        'inputs': [4, 5, 6, 7]
+        'inputs': [[4, 8], [5, 10], [6, 12], [7, 14]]
     })
     dataset = prep.select_random_chunk(
         dataset, output_features=None, feature_key='targets',
@@ -1891,7 +1940,7 @@ class PreprocessorsTest(tf.test.TestCase):
     self.assertLen(output, 1)
     output = output[0]
     self.assertSequenceEqual(['inputs', 'targets'], sorted(list(output.keys())))
-    self.assertAllEqual(output['inputs'] - 4, output['targets'])
+    self.assertAllEqual(output['inputs'][:, 0] - 4, output['targets'])
 
   def test_select_random_chunk_min_length(self):
     dataset = tf.data.Dataset.from_tensors({
