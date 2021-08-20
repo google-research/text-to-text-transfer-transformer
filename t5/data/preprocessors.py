@@ -3055,3 +3055,104 @@ def noise_token_to_random_token_or_sentinel(
           tokens, noise_mask, vocabulary, seeds=seeds[1:]),
       noise_token_to_sentinel(
           tokens, noise_mask, vocabulary, seeds=()))
+
+
+def postprocess_fn_remove_sentinel(string_label, *args, **kwargs):
+  """If sentinels are appended to the task, then remove them before eval."""
+  del args
+  del kwargs
+  sentinel_str = '<extra_id_0>'
+  if string_label[:len(sentinel_str)] == sentinel_str:
+    string_label = string_label[len(sentinel_str):].strip()
+  return string_label
+
+
+def wrap_postprocess_fn_remove_sentinel(postprocess_fn):
+  """Wrap around another postprocess_fn to remove sentinel first."""
+  def new_fn(string_label, *args, **kwargs):
+    string_label = postprocess_fn_remove_sentinel(
+        string_label, *args, **kwargs)
+    return postprocess_fn(string_label, *args, **kwargs)
+  return new_fn
+
+
+def add_sentinel(dataset, sequence_length, output_features):
+  """Add sentinel to end of inputs and beginning of targets."""
+  del sequence_length
+  vocabulary = output_features['targets'].vocabulary
+  @seqio.map_over_dataset
+  def _my_fn(x):
+    x['inputs'] = tf.concat([x['inputs'], [sentinel_id(vocabulary)]], 0)
+    x['targets'] = tf.concat([[sentinel_id(vocabulary)], x['targets']], 0)
+    return x
+  return _my_fn(dataset)
+
+
+def add_to_task_registry_with_sentinel(add_task_reg_fn):
+  """Wrap a TaskRegistry.add call to add sentinels for the task.
+
+  Adds a sentinel to the end of 'inputs' and at the beginning of 'targets'. This
+  is known to help fine-tuning span corruption models, especially on smaller
+  datasets.
+
+  This will also rename the task by adding a "_sentinel" suffix to the
+  task name, but making sure it comes before the following suffixes:
+  '_train', '_dev', '_test', '.'.
+
+  Example before:
+  'inputs': What is the captial of illinois?
+  'targets': Springfield.
+
+  Example after:
+  'inputs': What is the captial of illinois? <extra_id_0>
+  'targets': <extra_id_0> Springfield.
+
+  Args:
+    add_task_reg_fn: function, which is the "add" method of a
+      seqio.TaskRegistry or t5.data.TaskRegistry.
+
+  Returns:
+    a new function with the same signature as seqio.TaskRegistry, but where
+    a sentinel will be appended to the output of 'inputs' and at the beginning
+    of 'targets'.
+
+  """
+  def new_fn(*args, **kwargs):
+    def _create_new_task_name(task_name):
+      sentinel_name = '_sentinel'
+      # Avoid messing up evaluation suffixes, so insert the sentinel name right
+      # before these keywords.
+      for suffix in ['_train', '_dev', '_test', '.']:
+        idx = task_name.find(suffix)
+        if idx >= 0:
+          return task_name[:idx] + sentinel_name + task_name[idx:]
+      return task_name + sentinel_name
+
+    # args[0] is always the task name.
+    args = tuple([_create_new_task_name(args[0])] + list(args)[1:])
+    if 'preprocessors' in kwargs:  # seqio task registry
+      preprocessors = kwargs['preprocessors']
+      if preprocessors[-1] is not seqio.preprocessors.append_eos_after_trim:
+        raise ValueError('Must have the seqio preprocessor '
+                         'append_eos_after_trim if creating task with sentinel')
+      # Insert sentinels right before `preprocessors.append_eos_after_trim`.
+      preprocessors.insert(-1, add_sentinel)
+      kwargs['preprocessors'] = preprocessors
+    else:  # t5.data task registry
+      # Always add this as the last token preprocessor.
+      if 'token_preprocessor' not in kwargs:
+        kwargs['token_preprocessor'] = []
+      token_preprocessor = kwargs['token_preprocessor']
+      if not isinstance(token_preprocessor, list):
+        token_preprocessor = [token_preprocessor]
+      token_preprocessor.append(add_sentinel)
+      kwargs['token_preprocessor'] = token_preprocessor
+
+    # Handle postprocessing of removing sentinel for eval.
+    if 'postprocess_fn' in kwargs:
+      kwargs['postprocess_fn'] = wrap_postprocess_fn_remove_sentinel(
+          kwargs['postprocess_fn'])
+    else:
+      kwargs['postprocess_fn'] = postprocess_fn_remove_sentinel
+    return add_task_reg_fn(*args, **kwargs)
+  return new_fn
