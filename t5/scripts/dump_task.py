@@ -33,6 +33,15 @@ from absl import flags
 import gin
 import seqio
 
+import tensorflow.compat.v1 as tf
+
+try:
+  tf.flags.DEFINE_multi_string("gin_file", None, "Path to a Gin file.")
+  tf.flags.DEFINE_multi_string("gin_param", None, "Gin parameter binding.")
+  tf.flags.DEFINE_list("gin_location_prefix", [], "Gin file search path.")
+except tf.flags.DuplicateFlagError:
+  pass
+
 
 _DEFAULT_MODULE_IMPORTS = [
 ]
@@ -88,6 +97,8 @@ def main(_):
 
   # Load gin parameters if they've been defined.
   try:
+    for gin_file_path in FLAGS.gin_location_prefix:
+      gin.add_config_file_search_path(gin_file_path)
     gin.parse_config_files_and_bindings(FLAGS.gin_file, FLAGS.gin_param)
   except AttributeError:
     # Otherwise, use default settings.
