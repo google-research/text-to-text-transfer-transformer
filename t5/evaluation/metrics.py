@@ -247,7 +247,10 @@ def f1_score_with_invalid(targets, predictions):
   return {"f1": 100 * sklearn.metrics.f1_score(targets, predictions)}
 
 
-def mean_group_metric(metric_fn, group_key="group", value_key="value"):
+def mean_group_metric(metric_fn,
+                      group_key="group",
+                      value_key="value",
+                      return_subgroup_scores=False):
   """Returns a metric that averages `metric_fn` on sub-groups of results.
 
   The sub-groups are defined by aggregating results (targets and predictions)
@@ -262,6 +265,7 @@ def mean_group_metric(metric_fn, group_key="group", value_key="value"):
     metric_fn: function, the metric to compute on the subgroups.
     group_key: string, the key for the grouping value in the target dictionary.
     value_key: string, the key for the value in the dictionaries.
+    return_subgroup_scores: if true the scores for each sub-group are included.
   """
   def my_metric(targets, predictions):
     """Computes mean of `metric_fn` over subgroups of results."""
@@ -271,9 +275,11 @@ def mean_group_metric(metric_fn, group_key="group", value_key="value"):
       grouped_values[g][0].append(targ[value_key])
       grouped_values[g][1].append(pred[value_key])
     group_scores = collections.defaultdict(list)
-    for (targets, predictions) in grouped_values.values():
+    for group, (targets, predictions) in grouped_values.items():
       for metric, score in metric_fn(targets, predictions).items():
         group_scores[metric].append(score)
+        if return_subgroup_scores:
+          group_scores["%s-%s" % (group, metric)].append(score)
     return {metric: np.mean(scores) for metric, scores in group_scores.items()}
   return my_metric
 

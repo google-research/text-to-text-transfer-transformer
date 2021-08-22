@@ -199,6 +199,19 @@ class MetricsTest(test_utils.BaseMetricsTest):
              {"value": 1}]),
         {"accuracy": 25.})
 
+  def test_mean_group_metric_subgroups(self):
+    metric_fn = metrics.mean_group_metric(
+        metrics.accuracy, return_subgroup_scores=True)
+    self.assertDictClose(
+        metric_fn(
+            [{"group": "a", "value": 0},
+             {"group": "a", "value": 1},
+             {"group": "b", "value": 0}],
+            [{"value": 0},
+             {"value": 0},
+             {"value": 1}]),
+        {"accuracy": 25.0, "a-accuracy": 50.0, "b-accuracy": 0.0})
+
   def test_multirc_f1_over_all_answers(self):
     metric_fn = metrics.multirc_f1_over_all_answers
     self.assertDictClose(
