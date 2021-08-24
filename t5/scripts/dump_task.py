@@ -67,6 +67,8 @@ flags.DEFINE_string(
 flags.DEFINE_bool("detokenize", False, "If True, then decode ids to strings.")
 
 flags.DEFINE_bool("shuffle", True, "Whether to shuffle dataset or not.")
+flags.DEFINE_bool("apply_postprocess_fn", False,
+                  "Whether to apply the postprocess function or not.")
 
 
 @gin.configurable
@@ -127,6 +129,9 @@ def main(_):
             and isinstance(v[0], int)):
           s = task_or_mixture.output_features[k].vocabulary.decode(
               [abs(i) for i in v])
+          if (FLAGS.apply_postprocess_fn and k == "targets"
+              and hasattr(task_or_mixture, "postprocess_fn")):
+            s = task_or_mixture.postprocess_fn(s)
         elif isinstance(v, bytes):
           s = v.decode("utf-8")
         else:
