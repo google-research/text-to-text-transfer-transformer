@@ -60,7 +60,8 @@ class FunctionTask(seqio.Task):
                num_input_examples=None,
                supports_caching=True,
                shuffle_buffer_size=SHUFFLE_BUFFER_SIZE,
-               source=None):
+               source=None,
+               append_eos_after_trim=True):
 
     if (dataset_fn, source).count(None) != 1:
       raise ValueError(
@@ -85,7 +86,8 @@ class FunctionTask(seqio.Task):
     if supports_caching:
       preprocessors.append(seqio.CacheDatasetPlaceholder())
     preprocessors.extend(token_preprocessor or [])
-    preprocessors.append(seqio.preprocessors.append_eos_after_trim)
+    if append_eos_after_trim:
+      preprocessors.append(seqio.preprocessors.append_eos_after_trim)
 
     if hasattr(output_features, "__len__") and not output_features:
       raise ValueError("output_features must be non-empty.")
