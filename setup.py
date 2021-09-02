@@ -74,7 +74,8 @@ setuptools.setup(
     entry_points={
         'console_scripts': [
             't5_mesh_transformer = t5.models.mesh_transformer_main:console_entry_point',
-            't5_cache_tasks = seqio.scripts.cache_tasks_main:console_entry_point'
+            't5_cache_tasks = seqio.scripts.cache_tasks_main:console_entry_point',
+            't5_inspect_tasks = seqio.scripts.inspect_tasks_main:console_entry_point',
         ],
     },
     classifiers=[
