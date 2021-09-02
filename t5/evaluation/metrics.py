@@ -227,7 +227,12 @@ def mean_multiclass_f1(num_classes, **metric_fn_kwargs):
 
 def exact_match(targets, predictions):
   """Computes whether the targets match predictions exactly."""
-  return {"exact_match": 100 * float(np.array_equal(targets, predictions))}
+  return {
+      "exact_match":
+          100 * np.mean(
+              np.char.equal([str(t.strip()) for t in targets],
+                            [str(p.strip()) for p in predictions]))
+  }
 
 
 def f1_score_with_invalid(targets, predictions):
