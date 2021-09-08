@@ -207,7 +207,13 @@ def scores_to_df(scores, metric_names=None):
   )
   for tag in sorted_tags:
     for step, value in scores[tag]:
-      step_scores[step][tag] = value
+      # If a job gets evicted and restarts from a prior checkpoint, it's
+      # possible that a single step has more than one eval result. In that case,
+      # we pick the max value across all the eval results.
+      if step_scores[step][tag]:
+        step_scores[step][tag] = max(value, step_scores[step][tag])
+      else:
+        step_scores[step][tag] = value
   sorted_items = sorted(list(step_scores.items()))
   data = [list(r.values()) for _, r in sorted_items]
   index = [s for s, _ in sorted_items]
