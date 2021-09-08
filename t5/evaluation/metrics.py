@@ -225,8 +225,8 @@ def mean_multiclass_f1(num_classes, **metric_fn_kwargs):
       **metric_fn_kwargs)
 
 
-def exact_match(targets, predictions):
-  """Computes whether the targets match predictions exactly."""
+def all_match(targets, predictions):
+  """Computes whether all targets match all predictions exactly."""
   return {"exact_match": 100 * float(np.array_equal(targets, predictions))}
 
 

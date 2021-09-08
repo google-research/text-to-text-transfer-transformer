@@ -161,11 +161,11 @@ class MetricsTest(test_utils.BaseMetricsTest):
         metrics.mean_multiclass_f1(num_classes=3)([0, 1, 1, 2], [0, 0, 2, 2]),
         {"mean_3class_f1": 44.44444444444444})
 
-  def test_exact_match(self):
+  def test_all_match(self):
     self.assertDictEqual(
-        metrics.exact_match([0, 1], [0, 1]), {"exact_match": 100.0})
+        metrics.all_match([0, 1], [0, 1]), {"exact_match": 100.0})
     self.assertDictEqual(
-        metrics.exact_match([0, 1], [0, 2]), {"exact_match": 0.0})
+        metrics.all_match([0, 1], [0, 2]), {"exact_match": 0.0})
 
   def test_pearson_corrcoef(self):
     self.assertDictClose(

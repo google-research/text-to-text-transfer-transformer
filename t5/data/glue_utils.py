@@ -137,14 +137,11 @@ def get_glue_metric(task_name):
 
 SUPERGLUE_METRICS = collections.OrderedDict([
     ("boolq", [metrics.accuracy]),
-    ("cb", [
-        metrics.mean_multiclass_f1(num_classes=3),
-        metrics.accuracy
-    ]),
+    ("cb", [metrics.mean_multiclass_f1(num_classes=3), metrics.accuracy]),
     ("copa", [metrics.accuracy]),
     ("multirc", [
         metrics.multirc_f1_over_all_answers,
-        metrics.mean_group_metric(metrics.exact_match)
+        metrics.mean_group_metric(metrics.all_match)
     ]),
     ("record", [metrics.squad]),
     ("rte", [metrics.accuracy]),
