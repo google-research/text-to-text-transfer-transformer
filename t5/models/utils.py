@@ -347,14 +347,18 @@ def run_eval(
           for d, ex in zip(outputs[:dataset_size], tfds.as_numpy(dataset))
       ]
 
-      # Remove the used decodes.
-      del outputs[:dataset_size]
-
       if summary_dir:
+        outputs_filename = os.path.join(
+            summary_dir,
+            "{}_{}_outputs".format(task.name, step))
+        write_lines_to_file(outputs[:dataset_size], outputs_filename)
         predictions_filename = os.path.join(
             summary_dir,
             "{}_{}_predictions".format(task.name, step))
         write_lines_to_file(predictions, predictions_filename)
+
+      # Remove the used decodes.
+      del outputs[:dataset_size]
 
       with tf.Graph().as_default():
         if summary_dir:
