@@ -20,12 +20,14 @@ import seqio
 import t5.data
 from t5.data.glue_utils import get_glue_weight_mapping
 from t5.data.glue_utils import get_super_glue_weight_mapping
+from t5.data.glue_utils import get_super_glue_weight_mapping_sentinel
 import t5.data.tasks  # pylint: disable=unused-import
 
 MixtureRegistry = seqio.MixtureRegistry
 
 _GLUE_WEIGHT_MAPPING = get_glue_weight_mapping()
 _SUPER_GLUE_WEIGHT_MAPPING = get_super_glue_weight_mapping()
+_SUPER_GLUE_WEIGHT_MAPPING_SENTINEL = get_super_glue_weight_mapping_sentinel()
 
 _glue_tasks = list(_GLUE_WEIGHT_MAPPING.keys())
 _glue_tasks_with_weight = list(_GLUE_WEIGHT_MAPPING.items())
@@ -38,6 +40,8 @@ _wsc_dpr_tasks = [
 
 _super_glue_tasks = list(_SUPER_GLUE_WEIGHT_MAPPING.keys())
 _super_glue_tasks_with_weight = list(_SUPER_GLUE_WEIGHT_MAPPING.items())
+_super_glue_tasks_with_weight_sentinel = list(
+    _SUPER_GLUE_WEIGHT_MAPPING_SENTINEL.items())
 
 _supervised_tasks = (
     _glue_tasks + _super_glue_tasks +
@@ -71,6 +75,11 @@ MixtureRegistry.add(
 MixtureRegistry.add(
     "super_glue_v102_proportional",
     _super_glue_tasks_with_weight)
+
+
+MixtureRegistry.add(
+    "super_glue_v102_proportional_sentinel",
+    _super_glue_tasks_with_weight_sentinel)
 
 
 # mnli and its associated dev sets: mnli_matched and mnli_mismatched

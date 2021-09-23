@@ -37,6 +37,22 @@ SUPER_GLUE_WEIGHT_MAPPING = {
     "super_glue_axg_v102": 0.,
 }
 
+# Mappings for the SuperGLUE tasks with sentinel tokens added.
+SUPER_GLUE_WEIGHT_MAPPING_SENTINEL = {
+    "dpr_v001_simple_1_sentinel": 1_322.,
+    "super_glue_wsc_v102_simple_1_sentinel_train": 259.,
+    "super_glue_wsc_v102_simple_1_sentinel_eval": 0.,
+    "super_glue_boolq_v102_1_sentinel": 9_427.,
+    "super_glue_cb_v102_1_sentinel": 250.,
+    "super_glue_copa_v102_1_sentinel": 400.,
+    "super_glue_multirc_v102_1_sentinel": 27_243.,
+    "super_glue_record_v102_1_sentinel": 138_854.,
+    "super_glue_rte_v102_1_sentinel": 2_490.,
+    "super_glue_wic_v102_1_sentinel": 5_428.,
+    "super_glue_axb_v102_1_sentinel": 0.,
+    "super_glue_axg_v102_1_sentinel": 0.,
+}
+
 # These weights are based on the number of examples in each dataset.
 # We omit WNLI because we train on WSC/DPR simple instead
 GLUE_WEIGHT_MAPPING = {
@@ -60,6 +76,10 @@ def get_glue_weight_mapping():
 
 def get_super_glue_weight_mapping():
   return SUPER_GLUE_WEIGHT_MAPPING
+
+
+def get_super_glue_weight_mapping_sentinel():
+  return SUPER_GLUE_WEIGHT_MAPPING_SENTINEL
 
 
 def get_glue_text_preprocessor(builder_config):
