@@ -113,6 +113,7 @@ def get_glue_postprocess_fn(builder_config):
     return functools.partial(
         postprocessors.string_label_to_class_id,
         label_classes=builder_config.label_classes,
+        use_default=False,
     )
 
 GLUE_METRICS = collections.OrderedDict([
