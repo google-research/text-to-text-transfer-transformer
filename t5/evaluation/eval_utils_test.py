@@ -54,12 +54,14 @@ class EvalUtilsTest(absltest.TestCase):
 
   def test_parse_events_files_seqio(self):
     tb_summary_dir = self.create_tempdir()
-    metrics = [{"accuracy": 1.}, {"accuracy": 2.}]
+    metrics = [{"accuracy": seqio.evaluation.Scalar(1.)},
+               {"accuracy": seqio.evaluation.Scalar(2.)}]
     steps = [20, 30]
 
-    logger = seqio.evaluation.TensorboardLogging(tb_summary_dir.full_path)
+    logger = seqio.evaluation.TensorBoardLogger(tb_summary_dir.full_path)
     for metric, step in zip(metrics, steps):
-      logger(task_metrics=metric, step=step, task_name="foo_task")
+      logger(task_name="foo_task", metrics=metric, step=step,
+             dataset=tf.data.Dataset.range(0), inferences={}, targets=[])
 
     events = eval_utils.parse_events_files(
         os.path.join(tb_summary_dir.full_path, "foo_task"),
