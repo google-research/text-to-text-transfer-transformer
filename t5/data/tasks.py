@@ -260,6 +260,9 @@ for b in tfds.text.super_glue.SuperGlue.builder_configs.values():
       output_features=DEFAULT_OUTPUT_FEATURES,
       postprocess_fn=get_glue_postprocess_fn(b))
 
+  # Create SuperGLUE tasks with 1 sentinel token added.
+  seqio.experimental.add_task_with_sentinels("super_glue_%s_v102" % b.name,
+                                             num_sentinels=1)
 
 # ======================== Definite Pronoun Resolution =========================
 TaskRegistry.add(
@@ -274,6 +277,9 @@ TaskRegistry.add(
     metric_fns=[metrics.accuracy],
     output_features=DEFAULT_OUTPUT_FEATURES)
 
+# Create SuperGLUE tasks with 1 sentinel token added.
+seqio.experimental.add_task_with_sentinels("dpr_v001_simple", num_sentinels=1)
+
 # =================================== WSC ======================================
 TaskRegistry.add(
     "super_glue_wsc_v102_simple_train",
@@ -287,6 +293,11 @@ TaskRegistry.add(
     ],
     metric_fns=[],
     output_features=DEFAULT_OUTPUT_FEATURES)
+
+# Create SuperGLUE tasks with 1 sentinel token added.
+seqio.experimental.add_task_with_sentinels("super_glue_wsc_v102_simple_train",
+                                           num_sentinels=1)
+
 TaskRegistry.add(
     "super_glue_wsc_v102_simple_eval",
     source=seqio.TfdsDataSource(
@@ -301,6 +312,9 @@ TaskRegistry.add(
     postprocess_fn=postprocessors.wsc_simple,
     metric_fns=[metrics.accuracy],
     output_features=DEFAULT_OUTPUT_FEATURES)
+# Create SuperGLUE tasks with 1 sentinel token added.
+seqio.experimental.add_task_with_sentinels("super_glue_wsc_v102_simple_eval",
+                                           num_sentinels=1)
 
 # =================================== WNLI =====================================
 TaskRegistry.add(
