@@ -58,7 +58,7 @@ class EvalUtilsTest(absltest.TestCase):
                {"accuracy": seqio.evaluation.Scalar(2.)}]
     steps = [20, 30]
 
-    logger = seqio.evaluation.TensorBoardLogger(tb_summary_dir.full_path)
+    logger = seqio.TensorBoardLogger(tb_summary_dir.full_path)
     for metric, step in zip(metrics, steps):
       logger(task_name="foo_task", metrics=metric, step=step,
              dataset=tf.data.Dataset.range(0), inferences={}, targets=[])
