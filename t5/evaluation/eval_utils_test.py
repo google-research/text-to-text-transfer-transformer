@@ -54,8 +54,8 @@ class EvalUtilsTest(absltest.TestCase):
 
   def test_parse_events_files_seqio(self):
     tb_summary_dir = self.create_tempdir()
-    metrics = [{"accuracy": seqio.evaluation.Scalar(1.)},
-               {"accuracy": seqio.evaluation.Scalar(2.)}]
+    metrics = [{"accuracy": seqio.metrics.Scalar(1.)},
+               {"accuracy": seqio.metrics.Scalar(2.)}]
     steps = [20, 30]
 
     logger = seqio.TensorBoardLogger(tb_summary_dir.full_path)
