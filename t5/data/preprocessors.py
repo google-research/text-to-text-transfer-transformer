@@ -2525,7 +2525,7 @@ def random_spans_helper(inputs_length=gin.REQUIRED,
         num_noise_tokens +
         num_noise_spans * extra_tokens_per_span_targets + 1)
 
-  tokens_length = inputs_length
+  tokens_length = inputs_length - 1
   while (_tokens_length_to_inputs_length_targets_length(tokens_length + 1)[0]
          <= inputs_length):
     tokens_length += 1

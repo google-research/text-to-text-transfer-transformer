@@ -57,6 +57,17 @@ class PreprocessorsTest(tf.test.TestCase):
       self.assertTrue(self.evaluate(first))
       self.assertFalse(self.evaluate(last))
 
+  def test_random_spans_helper(self):
+    input_length = 64
+    noise_density = 0.20
+    mean_noise_span_lengths = [2.0, 1.0]
+    expected_outputs = [(70, 22), (63, 27)]
+    for mean_length, expected_output in zip(mean_noise_span_lengths,
+                                            expected_outputs):
+      output = prep.random_spans_helper(input_length, noise_density,
+                                        mean_length, 1, 1)
+      self.assertAllEqual(output, expected_output)
+
   def test_random_spans_noise_mask(self):
     length = 32
     noise_density = 0.25
