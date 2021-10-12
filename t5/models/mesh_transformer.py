@@ -147,6 +147,10 @@ def mesh_inference_dataset_fn(
   def _split_targets_for_primed_inference(ex):
     ex["inputs"] = ex["targets"][:priming_sequence_length]
     ex["targets"] = ex["targets"][priming_sequence_length:]
+    ex["inputs"] = tf.pad(
+        ex["inputs"],
+        [[0, priming_sequence_length - tf.shape(ex["inputs"])[0]]], "CONSTANT")
+    ex["inputs"] = tf.reshape(ex["inputs"], shape=(priming_sequence_length,))
     return ex
 
   def _prepare_for_unprimed_inference(ex):
