@@ -1861,13 +1861,17 @@ def preprocess_tsv(line,
 
 
 # TODO(adarob): Add a test.
-def span_corruption(dataset, sequence_length, output_features,
-                    mean_noise_span_length=3.0, noise_density=0.15):
+def span_corruption(dataset,
+                    sequence_length,
+                    output_features,
+                    mean_noise_span_length=3.0,
+                    noise_density=0.15,
+                    input_feature_key='inputs'):
   """Final pretraining objective used in Raffel et al., 2019."""
   input_length, targets_length = random_spans_helper(
       extra_tokens_per_span_inputs=1,
       extra_tokens_per_span_targets=1,
-      inputs_length=sequence_length['inputs'],
+      inputs_length=sequence_length[input_feature_key],
       mean_noise_span_length=mean_noise_span_length,
       noise_density=noise_density)
 
@@ -1878,8 +1882,11 @@ def span_corruption(dataset, sequence_length, output_features,
         f"({sequence_length['targets']})")
 
   ds = dataset
-  ds = select_random_chunk(ds, output_features=output_features,
-                           feature_key='targets', max_length=65536)
+  ds = select_random_chunk(
+      ds,
+      output_features=output_features,
+      feature_key='targets',
+      max_length=65536)
   ds = reduce_concat_tokens(ds, feature_key='targets', batch_size=128)
   ds = split_tokens(
       ds,
@@ -1894,9 +1901,8 @@ def span_corruption(dataset, sequence_length, output_features,
       noise_density=noise_density,
       noise_mask_fn=functools.partial(
           random_spans_noise_mask,
-          mean_noise_span_length=mean_noise_span_length
-      )
-  )
+          mean_noise_span_length=mean_noise_span_length),
+      input_feature_key=input_feature_key)
   return ds
 
 
@@ -2568,6 +2574,7 @@ def denoise(dataset,
             inputs_fn=gin.REQUIRED,
             targets_fn=None,
             passthrough_feature_keys: Optional[Sequence[str]] = None,
+            input_feature_key='inputs',
             **unused_kwargs):
   """Gin-configurable token preprocessor for self-supervised denoising tasks.
 
@@ -2608,34 +2615,42 @@ def denoise(dataset,
     inputs_fn: a function from (tokens, noise_mask, vocabulary) -> tokens
     targets_fn: a function from (tokens, noise_mask, vocabulary) -> tokens
     passthrough_feature_keys: names of additional features to include in output
+    input_feature_key: name of feature to use as inputs
 
   Returns:
     A preprocessed tf.data.Dataset.
   """
-  if passthrough_feature_keys and ('inputs' in passthrough_feature_keys or
-                                   'targets' in passthrough_feature_keys):
-    raise ValueError("passthrough keys cannot contain 'inputs' or 'targets'")
+  if passthrough_feature_keys and (input_feature_key in passthrough_feature_keys
+                                   or 'targets' in passthrough_feature_keys):
+    raise ValueError(
+        f"passthrough keys cannot contain '{input_feature_key}' or 'targets'")
 
   @seqio.map_over_dataset(num_seeds=6)
   def my_fn(features, seeds):
     """Map function."""
     tokens = features['targets']
     vocabulary = output_features['targets'].vocabulary
-    if ('inputs' in output_features and
-        vocabulary != output_features['inputs'].vocabulary):
+    if (input_feature_key in output_features and
+        vocabulary != output_features[input_feature_key].vocabulary):
       raise ValueError(
           'denoise creates inputs based on tokenized targets but was applied '
-          'to a task that uses different vocabularies for inputs and targets.'
-      )
+          'to a task that uses different vocabularies for inputs and targets.')
     noise_mask = noise_mask_fn(tf.size(tokens), noise_density, seeds=seeds[:2])
     inputs = inputs_fn(tokens, noise_mask, vocabulary, seeds=seeds[2:4])
     if targets_fn:
       targets = targets_fn(tokens, noise_mask, vocabulary, seeds=seeds[4:6])
     else:
       targets = tokens
-    return {'inputs': inputs, 'targets': targets,
-            **{k: features[k] for k in features
-               if passthrough_feature_keys and k in passthrough_feature_keys}}
+    return {
+        input_feature_key: inputs,
+        'targets': targets,
+        **{
+            k: features[k]
+            for k in features
+            if passthrough_feature_keys and k in passthrough_feature_keys
+        }
+    }
+
   return my_fn(dataset)
 
 

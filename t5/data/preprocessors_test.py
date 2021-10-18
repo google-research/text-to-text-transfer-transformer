@@ -1250,13 +1250,14 @@ class PreprocessorsTest(tf.test.TestCase):
           noise_density=0.3,
           noise_mask_fn=prep.random_spans_noise_mask,
           inputs_fn=prep.noise_span_to_unique_sentinel,
-          targets_fn=prep.nonnoise_span_to_unique_sentinel)
+          targets_fn=prep.nonnoise_span_to_unique_sentinel,
+          input_feature_key='text_tokens')
 
     # Two spans corrupted, [2] and [22, 3, 2, 7, 2], replaced by unique
     # sentinels 25 and 24 respectively.
     assert_dataset(denoised_dataset, [
         {
-            'inputs': [
+            'text_tokens': [
                 3, 2, 20, 4, 25, 2, 8, 13, 2, 3, 2, 23, 7, 19, 24
             ],
             'targets': [
