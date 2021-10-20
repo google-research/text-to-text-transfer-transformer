@@ -33,6 +33,7 @@ import os
 from absl import app
 from absl import flags
 import t5.data
+import t5.data.tasks
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
@@ -65,8 +66,12 @@ FILE_NAME_MAP = {
     "qnli": "QNLI",
     "wnli": "WNLI",
     "wsc": "WSC",
+    "axb": "AX-b",
+    "axg": "AX-g",
 }
-USES_TEXT = ["cb", "rte", "mnli_matched", "mnli_mismatched", "qnli"]
+USES_TEXT = [
+    "cb", "rte", "mnli_matched", "mnli_mismatched", "qnli", "axb", "axg"
+]
 # Placeholder for seq len - required by get_dataset but not used
 _FAKE_LEN = {"inputs": 512, "targets": 512}
 
