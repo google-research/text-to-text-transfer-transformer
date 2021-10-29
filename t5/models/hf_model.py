@@ -209,7 +209,7 @@ class HfPyTorchModel(T5Model):
       self._model.cuda()
     self._step = 0
     self.load_latest_checkpoint()
-    self.to_tensor = functools.partial(torch.as_tensor, device=self._device)
+    self.to_tensor = functools.partial(torch.as_tensor, device=self._device, dtype=torch.long)
 
   @property
   def model(self):
@@ -339,7 +339,7 @@ class HfPyTorchModel(T5Model):
           input_ids=self.to_tensor(batch["inputs"]),
           attention_mask=self.to_tensor(batch["inputs_mask"]),
           decoder_attention_mask=self.to_tensor(batch["targets_mask"]),
-          lm_labels=self.to_tensor(batch["targets"]),
+          labels=self.to_tensor(batch["targets"]),
       )
       loss = outputs[0]
       loss.backward()
