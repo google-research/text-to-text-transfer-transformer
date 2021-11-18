@@ -330,6 +330,26 @@ def auc(targets, predictions, targets_threshold=None):
   }
 
 
+def score_auc(targets, scores, targets_threshold=None):
+  """Compute Area Under the ROC and PR curves.
+
+  ROC - Receiver Operating Characteristic
+  PR  - Precision and Recall
+
+  Args:
+    targets: np.ndarray of targets, either 0 or 1, or continuous values.
+    scores: np.ndarray of scores, any value.
+    targets_threshold: float, if target values are continuous values, this
+      threshold binarizes them.
+
+  Returns:
+    A dictionary with AUC-ROC and AUC-PR scores.
+  """
+
+  return auc(
+      targets=targets, predictions=scores, targets_threshold=targets_threshold)
+
+
 def sklearn_metrics_wrapper(metric_str,
                             metric_dict_str=None,
                             metric_post_process_fn=None,
