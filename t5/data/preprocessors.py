@@ -1866,7 +1866,8 @@ def span_corruption(dataset,
                     output_features,
                     mean_noise_span_length=3.0,
                     noise_density=0.15,
-                    input_feature_key='inputs'):
+                    input_feature_key='inputs',
+                    merge_examples_to_reduce_padding=True):
   """Final pretraining objective used in Raffel et al., 2019."""
   input_length, targets_length = random_spans_helper(
       extra_tokens_per_span_inputs=1,
@@ -1887,7 +1888,8 @@ def span_corruption(dataset,
       output_features=output_features,
       feature_key='targets',
       max_length=65536)
-  ds = reduce_concat_tokens(ds, feature_key='targets', batch_size=128)
+  if merge_examples_to_reduce_padding:
+    ds = reduce_concat_tokens(ds, feature_key='targets', batch_size=128)
   ds = split_tokens(
       ds,
       feature_key='targets',
