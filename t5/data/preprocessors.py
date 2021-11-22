@@ -412,11 +412,11 @@ def random_split_text(dataset,
     chunk being potentially smaller.  A random chunk is returned.
 
     Args:
-      x: a 1d tf.Tensor
-      chunk_size: an integer
-      seed: an int, a random seed.
+      x: a 1d tf.Tensor.
+      chunk_size: an integer.
+      seed: int32 [2]-Tensor, the random seed.
     Returns:
-      a 1d tf.Tensor with length <= chunk_size
+      a 1d tf.Tensor with length <= chunk_size.
     """
     size = tf.size(x)
     num_chunks = tf.maximum(1, (size - 1) // chunk_size + 1)
@@ -434,7 +434,7 @@ def random_split_text(dataset,
 
     Args:
       x: a feature dictionary
-      seeds: an int32 Tensor, shaped (2, 2).
+      seeds: an int32 Tensor, shaped (2, 2), the random seeds.
     Returns:
       a feature dictionary
     """
@@ -532,7 +532,7 @@ def fill_in_the_blank(dataset,
 
     Args:
       x: an example dict with text pre-split in `words` feature.
-      seeds: an int32 Tensor, shaped (3, 2).
+      seeds: an int32 Tensor, shaped (3, 2), the random seeds.
     Returns:
       an example dict with two inputs and two targets, one for each resulting
       preprocessed example.
@@ -2009,7 +2009,7 @@ def select_random_chunk(dataset: tf.data.Dataset,
 
     Args:
       x: a 1d Tensor
-      seeds: an int32 Tensor, shaped (2, 2).
+      seeds: an int32 Tensor, shaped (2, 2), the random seeds.
     Returns:
       a 1d Tensor
     """
@@ -2661,12 +2661,12 @@ def iid_noise_mask(length, noise_density, seeds):
   """Independent and identically distributed token noise.
 
   Args:
-    length: an int32 scalar
-    noise_density: a float - approximate density of output mask
-    seeds: an int32 Tensor, shaped (1, 2)
+    length: an int32 scalar.
+    noise_density: a float - approximate density of output mask.
+    seeds: an int32 Tensor, shaped (1, 2), the random seed.
 
   Returns:
-    a boolean tensor with shape [length]
+    a boolean tensor with shape [length].
   """
   return tf.random.stateless_uniform([length], seed=seeds[0]) < noise_density
 
@@ -2687,14 +2687,14 @@ def regular_noise_mask(length,
   [T F F F F F F T T F F F F F F T T F F F F F F T T F F]
 
   Args:
-    length: an int32 scalar
-    noise_density: a float - approximate density of output mask
-    seeds: an int32 Tensor, shaped (2, 2)
-    min_span_length: an integer
-    max_span_length: an integer
+    length: an int32 scalar.
+    noise_density: a float - approximate density of output mask.
+    seeds: an int32 Tensor, shaped (2, 2), the random seeds.
+    min_span_length: an integer.
+    max_span_length: an integer.
 
   Returns:
-    a boolean tensor with shape [length]
+    a boolean tensor with shape [length].
   """
   span_length = tf.random.stateless_uniform(
       [],
@@ -2794,16 +2794,16 @@ def random_prefix_noise_mask(length, noise_density, seeds):
   """First part of the sequence is noise (for prefix_lm).
 
   The length of the prefix is chosen uniformly between [1, length)
-  noise_density must be 0.5
-  TODO(noam): figure out some distribution to use if noise_density != 0.5
+  noise_density must be 0.5.
+  TODO(noam): figure out some distribution to use if noise_density != 0.5.
 
   Args:
-    length: an int32 scalar
-    noise_density: a float - must equal 0.5
-    seeds: an int32 Tensor, shaped (1, 2)
+    length: an int32 scalar.
+    noise_density: a float - must equal 0.5.
+    seeds: an int32 Tensor, shaped (1, 2), the random seed.
 
   Returns:
-    a boolean tensor with shape [length]
+    a boolean tensor with shape [length].
   """
   if noise_density != 0.5:
     raise NotImplementedError(
