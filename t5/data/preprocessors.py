@@ -3072,3 +3072,124 @@ def noise_token_to_random_token_or_sentinel(
           tokens, noise_mask, vocabulary, seeds=seeds[1:]),
       noise_token_to_sentinel(
           tokens, noise_mask, vocabulary, seeds=()))
+
+
+# =============== EXPERIMENTAL preprocessors (not used for the T5 paper) =======
+
+
+def trim_and_pad_dataset(dataset, sequence_length):
+  """A wrapper to use `seqio.utils.trim_and_pad_dataset` as a preprocessor."""
+  return seqio.utils.trim_and_pad_dataset(
+      dataset, feature_lengths=sequence_length)
+
+
+def targets_for_prefix_lm_objective(dataset, sequence_length, output_features):
+  """Prepares targets to be used for prefix LM objective."""
+  dataset = select_random_chunk(
+      dataset, output_features, max_length=65536, feature_key='targets')
+  dataset = seqio.preprocessors.append_eos(dataset, output_features)
+  dataset = reduce_concat_tokens(dataset, batch_size=128)
+  dataset = trim_and_pad_dataset(dataset, sequence_length)
+  return dataset
+
+
+def pack_prefix_lm_encoder_decoder(ds, sequence_length, pad_id=0):
+  """Pack two examples into one with the prefix LM objective."""
+  packed_length = next(iter(sequence_length.values()))
+  assert packed_length % 2 == 0
+  assert all(l == packed_length for l in sequence_length.values())
+
+  @seqio.utils.map_over_dataset(num_seeds=1)
+  def pack_examples(example_pair, seed):
+    split_point = tf.random.stateless_uniform((),
+                                              minval=1,
+                                              maxval=packed_length,
+                                              seed=seed,
+                                              dtype=tf.int32)
+    inputs = tf.concat([
+        example_pair['targets'][0][:split_point],
+        example_pair['targets'][1][:packed_length - split_point]
+    ],
+                       axis=0)
+    inputs = tf.reshape(inputs, (packed_length,))
+    targets = tf.concat([
+        example_pair['targets'][0][split_point:],
+        example_pair['targets'][1][packed_length - split_point:]
+    ],
+                        axis=0)
+    targets = tf.reshape(targets, (packed_length,))
+
+    encoder_segment_ids = tf.cast(
+        tf.range(packed_length) >= split_point, tf.int32) + 1
+    decoder_segment_ids = tf.cast(
+        tf.range(packed_length) >= (packed_length - split_point), tf.int32) + 1
+
+    decoder_input_tokens = seqio.utils.make_autoregressive_inputs(
+        targets, sequence_id=decoder_segment_ids)
+
+    encoder_positions = tf.concat(
+        [tf.range(split_point),
+         tf.range(packed_length - split_point)], axis=0)
+    encoder_positions = tf.reshape(encoder_positions, (packed_length,))
+    decoder_positions = tf.concat(
+        [tf.range(packed_length - split_point),
+         tf.range(split_point)], axis=0)
+    decoder_positions = tf.reshape(decoder_positions, (packed_length,))
+    decoder_loss_weights = tf.cast(
+        tf.not_equal(targets, pad_id), dtype=tf.int32)
+    return {
+        'encoder_input_tokens': inputs,
+        'decoder_target_tokens': targets,
+        'decoder_input_tokens': decoder_input_tokens,
+        'encoder_segment_ids': encoder_segment_ids,
+        'encoder_positions': encoder_positions,
+        'decoder_segment_ids': decoder_segment_ids,
+        'decoder_positions': decoder_positions,
+        'decoder_loss_weights': decoder_loss_weights,
+    }
+
+  # Note that the batch requires the lengths to be the same.
+  return pack_examples(ds.batch(2))
+
+
+def pack_prefix_lm_decoder_only(ds,
+                                sequence_length,
+                                loss_on_targets_only=True,
+                                pad_id=0):
+  """Randomly split the tokens for the prefix LM objective."""
+  packed_length = next(iter(sequence_length.values()))
+  assert packed_length % 2 == 0
+  assert all(l == packed_length for l in sequence_length.values())
+
+  @seqio.utils.map_over_dataset(num_seeds=1)
+  def pack_examples(example, seed):
+    split_point = tf.random.stateless_uniform((),
+                                              minval=1,
+                                              maxval=packed_length,
+                                              seed=seed,
+                                              dtype=tf.int32)
+    decoder_target_tokens = example['targets']
+    decoder_input_tokens = seqio.utils.make_autoregressive_inputs(
+        decoder_target_tokens)
+
+    if loss_on_targets_only:
+      decoder_loss_weights = tf.cast(
+          tf.range(packed_length) >= split_point, tf.int32)
+    else:
+      decoder_loss_weights = tf.ones((packed_length,), dtype=tf.int32)
+
+    padding_mask = tf.cast(
+        tf.not_equal(decoder_target_tokens, pad_id), dtype=tf.int32)
+    decoder_loss_weights *= padding_mask
+
+    decoder_causal_attention = tf.cast(
+        tf.range(packed_length) <= split_point, tf.int32)
+
+    return {
+        'decoder_target_tokens': decoder_target_tokens,
+        'decoder_input_tokens': decoder_input_tokens,
+        'decoder_loss_weights': decoder_loss_weights,
+        'decoder_causal_attention': decoder_causal_attention,
+    }
+
+  return pack_examples(ds)

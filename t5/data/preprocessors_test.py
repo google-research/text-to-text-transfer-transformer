@@ -1979,6 +1979,126 @@ class PreprocessorsTest(tf.test.TestCase):
           additional_feature_keys=['inputs'], max_length=4)
       _ = list(dataset.as_numpy_iterator())
 
+  def test_pack_prefix_lm_encoder_decoder(self):
+
+    x = [{'targets': [0, 1, 2, 3, 4, 5, 6, 7]},
+         {'targets': [8, 9, 10, 11, 12, 13, 14, 15]},
+         {'targets': [16, 17, 18, 19, 20, 21, 22, 23]},
+         {'targets': [24, 25, 26, 27, 28, 29, 30, 31]}]
+    ds = test_utils.create_default_dataset(
+        x, feature_names=['targets'], output_shapes={'targets': [8]})
+
+    # With this seed, split points are 3 and 5
+    with seqio.utils.map_seed_manager(2):
+      packed_ds = prep.pack_prefix_lm_encoder_decoder(
+          ds, {'inputs': 8, 'targets': 8})
+
+    expected = [
+        {
+            'encoder_input_tokens': [0, 1, 2, 8, 9, 10, 11, 12],
+            'decoder_target_tokens': [3, 4, 5, 6, 7, 13, 14, 15],
+            # The first token of the second sequence (in this case index 5)
+            # should be 0 instead of the last token of the first sequence.
+            'decoder_input_tokens': [0, 3, 4, 5, 6, 0, 13, 14],
+            'encoder_segment_ids': [1, 1, 1, 2, 2, 2, 2, 2],
+            'encoder_positions': [0, 1, 2, 0, 1, 2, 3, 4],
+            'decoder_loss_weights': [1, 1, 1, 1, 1, 1, 1, 1],
+            'decoder_segment_ids': [1, 1, 1, 1, 1, 2, 2, 2],
+            'decoder_positions': [0, 1, 2, 3, 4, 0, 1, 2],
+        },
+        {
+            'encoder_input_tokens': [16, 17, 18, 19, 20, 24, 25, 26],
+            'decoder_target_tokens': [21, 22, 23, 27, 28, 29, 30, 31],
+            'decoder_input_tokens': [0, 21, 22, 0, 27, 28, 29, 30],
+            'encoder_segment_ids': [1, 1, 1, 1, 1, 2, 2, 2],
+            'encoder_positions': [0, 1, 2, 3, 4, 0, 1, 2],
+            'decoder_loss_weights': [1, 1, 1, 1, 1, 1, 1, 1],
+            'decoder_segment_ids': [1, 1, 1, 2, 2, 2, 2, 2],
+            'decoder_positions': [0, 1, 2, 0, 1, 2, 3, 4],
+        }
+    ]
+    assert_dataset(packed_ds, expected)
+
+  def test_pack_prefix_lm_encoder_decoder_with_padding(self):
+    x = [{'targets': [9, 1, 2, 3, 4, 5, 6, 0]},
+         {'targets': [8, 9, 10, 11, 12, 13, 0, 0]}]
+    ds = test_utils.create_default_dataset(
+        x, feature_names=['targets'], output_shapes={'targets': [8]})
+
+    # With this seed, split point is 3.
+    with seqio.utils.map_seed_manager(2):
+      packed_ds = prep.pack_prefix_lm_encoder_decoder(
+          ds, {'inputs': 8, 'targets': 8})
+
+    expected = [
+        {
+            'encoder_input_tokens': [9, 1, 2, 8, 9, 10, 11, 12],
+            'decoder_target_tokens': [3, 4, 5, 6, 0, 13, 0, 0],
+            'decoder_input_tokens': [0, 3, 4, 5, 6, 0, 13, 0],
+            'encoder_segment_ids': [1, 1, 1, 2, 2, 2, 2, 2],
+            'encoder_positions': [0, 1, 2, 0, 1, 2, 3, 4],
+            'decoder_loss_weights': [1, 1, 1, 1, 0, 1, 0, 0],
+            'decoder_segment_ids': [1, 1, 1, 1, 1, 2, 2, 2],
+            'decoder_positions': [0, 1, 2, 3, 4, 0, 1, 2],
+        },
+    ]
+    assert_dataset(packed_ds, expected)
+
+  def test_pack_prefix_lm_decoder_only(self):
+    x = [{'targets': [9, 1, 2, 3, 4, 5, 6, 7]},
+         {'targets': [8, 9, 10, 11, 12, 13, 14, 15]}]
+    ds = test_utils.create_default_dataset(x, feature_names=['targets'])
+
+    # With this seed, split points are 3 and 5.
+    with seqio.utils.map_seed_manager(2):
+      packed_ds = prep.pack_prefix_lm_decoder_only(ds, {'length': 8})
+
+    expected = [{
+        'decoder_target_tokens': [9, 1, 2, 3, 4, 5, 6, 7],
+        'decoder_input_tokens': [0, 9, 1, 2, 3, 4, 5, 6],
+        'decoder_loss_weights': [0, 0, 0, 1, 1, 1, 1, 1],
+        'decoder_causal_attention': [1, 1, 1, 1, 0, 0, 0, 0],
+    }, {
+        'decoder_target_tokens': [8, 9, 10, 11, 12, 13, 14, 15],
+        'decoder_input_tokens': [0, 8, 9, 10, 11, 12, 13, 14],
+        'decoder_loss_weights': [0, 0, 0, 0, 0, 1, 1, 1],
+        'decoder_causal_attention': [1, 1, 1, 1, 1, 1, 0, 0],
+    }]
+    assert_dataset(packed_ds, expected)
+
+  def test_pack_prefix_lm_decoder_only_with_padding(self):
+    x = [{'targets': [8, 9, 10, 11, 12, 13, 0, 0]}]
+    ds = test_utils.create_default_dataset(x, feature_names=['targets'])
+
+    # With this seed, split point is 3.
+    with seqio.utils.map_seed_manager(2):
+      packed_ds = prep.pack_prefix_lm_decoder_only(ds, {'length': 8})
+
+    expected = [{
+        'decoder_target_tokens': [8, 9, 10, 11, 12, 13, 0, 0],
+        'decoder_input_tokens': [0, 8, 9, 10, 11, 12, 13, 0],
+        'decoder_loss_weights': [0, 0, 0, 1, 1, 1, 0, 0],
+        'decoder_causal_attention': [1, 1, 1, 1, 0, 0, 0, 0],
+    }]
+    assert_dataset(packed_ds, expected)
+
+  def test_pack_prefix_lm_decoder_only_with_padding_loss_on_targets_false(self):
+    x = [{'targets': [8, 9, 10, 11, 12, 13, 0, 0]}]
+    ds = test_utils.create_default_dataset(x, feature_names=['targets'])
+
+    # With this seed, split point is 3.
+    with seqio.utils.map_seed_manager(2):
+      packed_ds = prep.pack_prefix_lm_decoder_only(
+          ds, {'length': 8}, loss_on_targets_only=False)
+
+    expected = [{
+        'decoder_target_tokens': [8, 9, 10, 11, 12, 13, 0, 0],
+        'decoder_input_tokens': [0, 8, 9, 10, 11, 12, 13, 0],
+        'decoder_loss_weights': [1, 1, 1, 1, 1, 1, 0, 0],
+        'decoder_causal_attention': [1, 1, 1, 1, 0, 0, 0, 0],
+    }]
+    assert_dataset(packed_ds, expected)
+
 
 if __name__ == '__main__':
   absltest.main()
