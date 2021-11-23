@@ -410,6 +410,21 @@ TaskRegistry.add(
 sentencepiece_model_file = "gs://t5-data/vocabs/cc_all.32000.100extra/sentencepiece.model"
 
 vocab = seqio.SentencePieceVocabulary(sentencepiece_model_file)
+prefix_lm_obj_decoder_output_features = {
+    'decoder_loss_weights': decoder_loss_weights,
+    'decoder_causal_attention'
+    "decoder_target_tokens": seqio.Feature(vocabulary=vocab),
+    "decoder_input_tokens": seqio.Feature(vocabulary=vocab),
+    "encoder_segment_ids": seqio.Feature(vocabulary=vocab),
+    "encoder_positions": seqio.Feature(vocabulary=vocab),
+    "decoder_segment_ids": seqio.Feature(vocabulary=vocab),
+    "decoder_positions": seqio.Feature(vocabulary=vocab),
+    "decoder_loss_weights": seqio.Feature(vocabulary=vocab),
+    # All but the last stage of the preprocessing uses "targets" as the key. So
+    # this output feature is necessary. It not marked required because the final
+    # preprocessor drops it.
+    "targets": seqio.Feature(vocabulary=vocab, required=False),
+}
 prefix_lm_obj_output_features = {
     "encoder_input_tokens": seqio.Feature(vocabulary=vocab),
     "decoder_target_tokens": seqio.Feature(vocabulary=vocab),
@@ -440,7 +455,20 @@ seqio.TaskRegistry.add(
         preprocessors.targets_for_prefix_lm_objective,
         preprocessors.pack_prefix_lm_encoder_decoder,
     ],
-    output_features=prefix_lm_obj_output_features,
+    output_features={
+        "encoder_input_tokens": seqio.Feature(vocabulary=vocab, add_eos=False),
+        "decoder_target_tokens": seqio.Feature(vocabulary=vocab, add_eos=False),
+        "decoder_input_tokens": seqio.Feature(vocabulary=vocab, add_eos=False),
+        "encoder_segment_ids": seqio.Feature(vocabulary=vocab, add_eos=False),
+        "encoder_positions": seqio.Feature(vocabulary=vocab, add_eos=False),
+        "decoder_segment_ids": seqio.Feature(vocabulary=vocab, add_eos=False),
+        "decoder_positions": seqio.Feature(vocabulary=vocab, add_eos=False),
+        "decoder_loss_weights": seqio.Feature(vocabulary=vocab, add_eos=False),
+        # All but the last stage of the preprocessing uses "targets" as the key. So
+        # this output feature is necessary. It not marked required because the final
+        # preprocessor drops it.
+        "targets": seqio.Feature(vocabulary=vocab, required=False),
+    },
     metric_fns=[])
 
 
@@ -458,5 +486,14 @@ seqio.TaskRegistry.add(
         preprocessors.targets_for_prefix_lm_objective,
         preprocessors.pack_prefix_lm_decoder_only,
     ],
-    output_features=prefix_lm_obj_output_features,
+    output_features={
+        "decoder_target_tokens": seqio.Feature(vocabulary=vocab, add_eos=False),
+        "decoder_input_tokens": seqio.Feature(vocabulary=vocab, add_eos=False),
+        "decoder_loss_weights": seqio.Feature(vocabulary=vocab, add_eos=False),
+        "decoder_causal_attention": seqio.Feature(vocabulary=vocab, add_eos=False),
+        # All but the last stage of the preprocessing uses "targets" as the key. So
+        # this output feature is necessary. It not marked required because the final
+        # preprocessor drops it.
+        "targets": seqio.Feature(vocabulary=vocab, required=False),
+    },
     metric_fns=[])
