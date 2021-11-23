@@ -56,7 +56,7 @@ setuptools.setup(
         'scikit-learn',
         'scipy',
         'sentencepiece',
-        'seqio',
+        'seqio-nightly',
         'six>=1.14',  # TODO(adarob): Remove once rouge-score is updated.
         'tensorflow-text',
         'tfds-nightly',
