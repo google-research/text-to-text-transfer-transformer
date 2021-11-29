@@ -3089,6 +3089,8 @@ def targets_for_prefix_lm_objective(dataset, sequence_length, output_features):
       dataset, output_features, max_length=65536, feature_key='targets')
   dataset = seqio.preprocessors.append_eos(dataset, output_features)
   dataset = reduce_concat_tokens(dataset, batch_size=128)
+  dataset = split_tokens(
+      dataset, max_tokens_per_segment=sequence_length['targets'])
   dataset = trim_and_pad_dataset(dataset, sequence_length)
   return dataset
 
