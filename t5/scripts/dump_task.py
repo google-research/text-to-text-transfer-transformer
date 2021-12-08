@@ -34,6 +34,7 @@ import gin
 import seqio
 
 import tensorflow.compat.v1 as tf
+tf.compat.v1.enable_eager_execution()
 
 try:
   tf.flags.DEFINE_multi_string("gin_file", None, "Path to a Gin file.")
