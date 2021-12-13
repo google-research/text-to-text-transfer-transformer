@@ -2369,10 +2369,11 @@ def split_tokens(dataset: tf.data.Dataset,
           )
       ]):
         shape = tf.shape(x[k])[1:]
+        shape_list = x[k].shape[1:]
         padded = tf.pad(
             x[k],
             tf.concat([[[0, padding]],
-                       tf.zeros([len(shape), 2], dtype=tf.int32)],
+                       tf.zeros([len(shape_list), 2], dtype=tf.int32)],
                       axis=0))
         orig_lengths[k] = tf.concat(
             [tf.repeat(length, num_segments - 1), [length - padding]], axis=0)
