@@ -1799,26 +1799,40 @@ def preprocess_tsv(line,
                    field_delim='\t',
                    num_fields=2,
                    inputs_format='{0}',
-                   targets_format='{1}'):
+                   targets_format='{1}',
+                   field_names=None):
   r"""Parse tab-delimited strings into inputs and targets.
 
   This function takes a tf.data.Dataset of strings, each of which contains
   tab-delimited fields.  The function returns a tf.data.Dataset of feature
   dictionaries of the form {"inputs": string, "targets": string}.
 
-  inputs_format contains a template string and field numbers used to produce
-  the "inputs" string.
-  targets_format contains a template string and field numbers used to produce
-  the "targets" string.
+  inputs_format contains a template string and field numbers or names used to
+  produce the "inputs" string.
+  targets_format contains a template string and field numbers or names used to
+  produce the "targets" string.
 
-  Example:
+  Example (field numbers):
     The input dataset contains the lines:
     "6,7,42"
     "2,9,18"
     preprocess_tsv(dataset,
                    field_delim=',',
                    inputs_format='numerator: {2} denominator: {1}',
-                   targets_format='quotient: {0}'
+                   targets_format='quotient: {0}')
+    would produce a dataset containing the dictionaries:
+    {"inputs": "numerator: 42 denomnator: 7", "targets": "quotient: 6"}
+    {"inputs": "numerator: 18 denomnator: 9", "targets": "quotient: 2"}
+
+  Example (field names):
+    The input dataset contains the lines:
+    "6,7,42"
+    "2,9,18"
+    preprocess_tsv(dataset,
+                   field_delim=',',
+                   inputs_format='numerator: {numer} denominator: {denom}',
+                   targets_format='quotient: {quot}',
+                   field_names=['quot', 'denom', 'numer'])
     would produce a dataset containing the dictionaries:
     {"inputs": "numerator: 42 denomnator: 7", "targets": "quotient: 6"}
     {"inputs": "numerator: 18 denomnator: 9", "targets": "quotient: 2"}
@@ -1831,29 +1845,51 @@ def preprocess_tsv(line,
       field values.
     targets_format: a string, the desired output format with placeholders for
       field values.
+    field_names: a list of strings, the ordered names of the TSV fields.
+      defaults to None (i.e. use field number in *_format)
   Returns:
     A feature dict with 'inputs' and 'targets' features.
   """
-  def _format_part(part, field_values):
+  def _format_part_with_field_numbers(part, field_values):
     found = re.findall(r'{(\d)}', part)
     if found:
       return field_values[int(found[0])]
     else:
       return part
 
-  def _format(format_string, field_values):
-    parts = [_format_part(p, field_values)
-             for p in re.split(r'({\d})', format_string)]
+  def _format_part_with_field_names(part, field_names, field_values):
+    field_names_re = '|'.join(['{{({})}}'.format(x) for x in field_names])
+    found = re.findall(field_names_re, part)
+    if found:
+      pos = field_names.index(''.join(found[0]))
+      return field_values[int(pos)]
+    else:
+      return part
+
+  def _format(format_string, field_names, field_values):
+    if field_names is None:
+      parts = [
+          _format_part_with_field_numbers(p, field_values)
+          for p in re.split(r'({\d})', format_string)
+      ]
+    else:
+      field_names_re = '(' + '|'.join(['{{{}}}'.format(x) for x in field_names
+                                      ]) + ')'
+      parts = [
+          _format_part_with_field_names(p, field_names, field_values)
+          for p in re.split(field_names_re, format_string)
+      ]
     return tf.strings.join(parts)
 
   field_values = tf.io.decode_csv(
       line,
-      record_defaults=[''] * num_fields,
+      record_defaults=[''] *
+      (num_fields if field_names is None else len(field_names)),
       field_delim=field_delim,
       use_quote_delim=False)
   return {
-      'inputs': _format(inputs_format, field_values),
-      'targets': _format(targets_format, field_values)
+      'inputs': _format(inputs_format, field_names, field_values),
+      'targets': _format(targets_format, field_names, field_values)
   }
 
 

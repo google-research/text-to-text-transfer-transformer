@@ -1223,6 +1223,33 @@ class PreprocessorsTest(tf.test.TestCase):
     dataset = prep.parse_tsv(og_dataset, field_names=['f1', 'f2'])
     assert_dataset(dataset, [{'f1': 'a', 'f2': 'b'}, {'f1': 'c', 'f2': 'd'}])
 
+  def test_preprocess_tsv_default_args(self):
+    og_dataset = tf.data.Dataset.from_tensor_slices(['a\tb', 'c\td'])
+    dataset = prep.preprocess_tsv(og_dataset)
+    assert_dataset(dataset, [{'inputs': 'a', 'targets': 'b'},
+                             {'inputs': 'c', 'targets': 'd'}])
+
+  def test_preprocess_tsv_alternate_args(self):
+    og_dataset = tf.data.Dataset.from_tensor_slices(['a,b,c,d', 'e,f,g,h'])
+    dataset = prep.preprocess_tsv(og_dataset,
+                                  field_delim=',',
+                                  num_fields=4,
+                                  inputs_format='{0} then {1} then',
+                                  targets_format='{2}')
+    assert_dataset(dataset, [{'inputs': 'a then b then', 'targets': 'c'},
+                             {'inputs': 'e then f then', 'targets': 'g'}])
+
+  def test_preprocess_tsv_field_names(self):
+    og_dataset = tf.data.Dataset.from_tensor_slices(
+        ['a\tb\tc', 'd\te\tf'])
+    dataset = prep.preprocess_tsv(og_dataset,
+                                  num_fields=3,
+                                  inputs_format='{input}:',
+                                  targets_format='{target}',
+                                  field_names=['id', 'target', 'input'])
+    assert_dataset(dataset, [{'inputs': 'c:', 'targets': 'b'},
+                             {'inputs': 'f:', 'targets': 'e'}])
+
   def test_denoise(self):
     vocab = test_utils.sentencepiece_vocab()
     target_tokens = vocab.encode('The quick brown fox.')
