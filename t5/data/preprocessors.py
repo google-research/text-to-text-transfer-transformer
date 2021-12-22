@@ -1946,6 +1946,18 @@ def prefix_lm(dataset, sequence_length, output_features):
   return ds
 
 
+def full_lm(dataset, sequence_length, output_features):
+  """Full language modeling objective with EOS only at document boundaries."""
+  ds = dataset
+  ds = select_random_chunk(ds, output_features=output_features,
+                           feature_key='targets', max_length=65536)
+  ds = seqio.preprocessors.append_eos(ds, output_features)
+  ds = reduce_concat_tokens(ds, feature_key='targets', batch_size=128)
+  # Don't use `split_tokens_to_targets_length` since we've alrady added EOS.
+  ds = split_tokens(ds, max_tokens_per_segment=sequence_length['targets'])
+  return ds
+
+
 @gin.configurable
 def select_random_chunk(dataset: tf.data.Dataset,
                         output_features: Mapping[str, seqio.Feature],

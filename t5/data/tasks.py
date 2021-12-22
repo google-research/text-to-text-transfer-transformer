@@ -468,3 +468,22 @@ seqio.TaskRegistry.add(
         "targets": seqio.Feature(vocabulary=vocab, required=False),
     },
     metric_fns=[])
+
+
+TaskRegistry.add(
+    "c4_v220_full_lm",
+    source=seqio.TfdsDataSource(tfds_name="c4/en:2.2.0"),
+    preprocessors=[
+        functools.partial(
+            preprocessors.rekey, key_map={
+                "inputs": None,
+                "targets": "text"
+            }),
+        seqio.preprocessors.tokenize,
+        seqio.CacheDatasetPlaceholder(),
+        preprocessors.full_lm,
+    ],
+    output_features={
+        "targets": seqio.Feature(vocabulary=vocab, add_eos=True)
+    },
+    metric_fns=[])
