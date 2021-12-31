@@ -2939,7 +2939,8 @@ def noise_span_to_unique_sentinel(tokens, noise_mask, vocabulary, seeds):
 @gin.configurable()
 def nonnoise_span_to_unique_sentinel(tokens, noise_mask, vocabulary, seeds):
   return noise_span_to_unique_sentinel(
-      tokens, tf.logical_not(noise_mask), vocabulary, seeds)
+      tf.pad(tokens, [[1, 1]]),
+      tf.logical_not(tf.pad(noise_mask, [[1, 1]])), vocabulary, seeds)
 
 
 @gin.configurable()

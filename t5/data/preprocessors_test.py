@@ -117,6 +117,15 @@ class PreprocessorsTest(tf.test.TestCase):
         tokens, noise_mask, vocabulary, ()))
     self.assertAllEqual(output, expected_output)
 
+  def test_nonnoise_span_to_unique_sentinel(self):
+    vocabulary = test_utils.MockVocabulary({'foo': [10]}, vocab_size=1000)
+    tokens = tf.constant([10, 11, 12, 13, 14, 15])
+    noise_mask = tf.constant([True, True, False, False, True, False])
+    expected_output = [999, 10, 11, 998, 14, 997]
+    output = self.evaluate(prep.nonnoise_span_to_unique_sentinel(
+        tokens, noise_mask, vocabulary, ()))
+    self.assertAllEqual(output, expected_output)
+
   def test_drop_noise_tokens(self):
     vocabulary = test_utils.MockVocabulary({'foo': [10]}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
@@ -1254,14 +1263,15 @@ class PreprocessorsTest(tf.test.TestCase):
           input_feature_key='text_tokens')
 
     # Two spans corrupted, [2] and [22, 3, 2, 7, 2], replaced by unique
-    # sentinels 25 and 24 respectively.
+    # sentinels 25 and 24 respectively. Sentinel 23 is appended to the end of
+    # targets.
     assert_dataset(denoised_dataset, [
         {
             'text_tokens': [
                 3, 2, 20, 4, 25, 2, 8, 13, 2, 3, 2, 23, 7, 19, 24
             ],
             'targets': [
-                25, 3, 24, 22, 3, 2, 7, 2
+                25, 3, 24, 22, 3, 2, 7, 2, 23
             ],
         },
     ])
