@@ -2099,6 +2099,34 @@ class PreprocessorsTest(tf.test.TestCase):
     }]
     assert_dataset(packed_ds, expected)
 
+  def test_preprocess_tsv_with_field_names(self):
+    x = tf.data.Dataset.from_tensor_slices(['6,7,42'])
+    dataset = prep.preprocess_tsv(
+        x,
+        field_delim=',',
+        field_names=['quot', 'denom', 'numer'],
+        inputs_format='numerator: {numer} denominator: {denom}',
+        targets_format='quotient: {quot}')
+    expected = {
+        'inputs': 'numerator: 42 denominator: 7',
+        'targets': 'quotient: 6'
+    }
+    assert_dataset(dataset, expected)
+
+  def test_preprocess_tsv_with_positions(self):
+    x = tf.data.Dataset.from_tensor_slices(['6,7,42'])
+    dataset = prep.preprocess_tsv(
+        x,
+        num_fields=3,
+        field_delim=',',
+        inputs_format='numerator: {2} denominator: {1}',
+        targets_format='quotient: {0}')
+    expected = {
+        'inputs': 'numerator: 42 denominator: 7',
+        'targets': 'quotient: 6'
+    }
+    assert_dataset(dataset, expected)
+
 
 if __name__ == '__main__':
   absltest.main()
