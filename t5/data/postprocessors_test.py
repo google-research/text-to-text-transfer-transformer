@@ -130,7 +130,8 @@ class PostprocessorsTest(absltest.TestCase):
             "blah", example={
                 "is_correct": False,
                 "idx": np.array([10, 1]),
-            }, is_target=True), ((10, 1), False, 1))
+                "targets": [1, 2, 3],
+            }, is_target=True), ((10, 1), False, 1, 3))
 
     # The example has weight feature.
     self.assertEqual(
@@ -138,8 +139,9 @@ class PostprocessorsTest(absltest.TestCase):
             "blah", example={
                 "is_correct": False,
                 "idx": np.array([10, 1]),
+                "targets": [1, 2, 3],
                 "weight": 0
-            }, is_target=True), ((10, 1), False, 0))
+            }, is_target=True), ((10, 1), False, 0, 3))
 
 
 if __name__ == "__main__":

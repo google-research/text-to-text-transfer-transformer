@@ -379,9 +379,11 @@ def sklearn_metrics_wrapper(metric_str,
 
 
 def rank_classification(
-    targets: Sequence[Tuple[Sequence[int], bool, float]],
+    targets: Sequence[Tuple[Sequence[int], bool, float, int]],
     scores: Sequence[float],
-    num_classes: Optional[int] = None) -> Dict[str, Union[float, int]]:
+    num_classes: Optional[int] = None,
+    normalize_by_target_length: bool = False,
+) -> Dict[str, Union[float, int]]:
   """Computes standard metrics classification based on log likelihood ranking.
 
   This metric is intended to be used along with the `rank_classification`
@@ -397,13 +399,14 @@ def rank_classification(
   more labels are present, only accuracy and F-1 will be reported.
 
   Args:
-    targets: list of tuples, the 'idx', 'is_correct' and 'weight' fields from
-      ground truth examples.
+    targets: list of tuples, the 'idx', 'is_correct', 'weight' fields, and
+      length of target tokens from ground truth examples.
     scores: list of float, a flat list of log likelihood scores for each
       possible label for each example.
     num_classes: int or None, the number of possible classes for the label or
       None if the number of classes vary.
-
+    normalize_by_target_length: bool, if True the scores are normalized by the
+      target token lengths.
   Returns:
     Accuracy, f1, and AUC scores.
 
@@ -411,9 +414,18 @@ def rank_classification(
     ValueError: if `targets` is not a sequence of 3-tuples.
   """
   assert len(targets) == len(scores)
-  if len(targets[0]) != 3:
+  if len(targets[0]) != 4:
     raise ValueError(
-        f"`targets` should contain 3 elements but has {len(targets[0])}.")
+        f"`targets` should contain 4 elements but has {len(targets[0])}.")
+
+  normalized_scores = []
+  if normalize_by_target_length:
+    for target, score in zip(targets, scores):
+      _, _, _, target_length = target
+      score = score / target_length
+      normalized_scores.append(score)
+
+    scores = normalized_scores
 
   idx_0 = targets[0][0]
   if not hasattr(idx_0, "__len__") or len(idx_0) != 2:
@@ -444,9 +456,9 @@ def rank_classification(
 
   assert len(targets) % num_classes == 0, f"{len(targets)} % {num_classes} != 0"
 
-  labels_indicator = np.array([is_correct for _, is_correct, _ in targets
+  labels_indicator = np.array([is_correct for _, is_correct, _, _ in targets
                               ]).reshape((-1, num_classes))
-  weights = np.array([weight for _, _, weight in targets]).reshape(
+  weights = np.array([weight for _, _, weight, _ in targets]).reshape(
       (-1, num_classes))[:, 0]
   log_likelihoods = np.array(scores, np.float32).reshape((-1, num_classes))
   predictions = log_likelihoods.argmax(-1)

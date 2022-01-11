@@ -122,7 +122,8 @@ def rank_classification(score, example=None, is_target=False):
   """A postprocessor for the `rank_classification` preprocessor and metric."""
   if is_target:
     return (
-        tuple(example["idx"]), example["is_correct"], example.get("weight", 1.0)
+        tuple(example["idx"]), example["is_correct"],
+        example.get("weight", 1.0), len(example["targets"])
     )
   else:
     return score
