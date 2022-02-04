@@ -1,4 +1,4 @@
-# Copyright 2021 The T5 Authors.
+# Copyright 2022 The T5 Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -570,12 +570,14 @@ def coqa_f1(
 ) -> Mapping[str, float]:
   """Return mean sequence F1 score over all QA turns."""
   f1s = []
-  for (t, p) in zip(targets, predictions):
-    assert len(t) == 1
-    target_tokens = _coqa_tokenize(t[0])
+  for (target, p) in zip(targets, predictions):
+    assert isinstance(target, Sequence)
     prediction_tokens = _coqa_tokenize(p)
-    f1s.append(_sequence_f1(target_tokens, prediction_tokens))
-  return {"f1": np.mean(np.array(f1s))}
+    example_f1s = [
+        _sequence_f1(_coqa_tokenize(t), prediction_tokens) for t in target
+    ]
+    f1s.append(max(example_f1s))
+  return {"f1": np.mean(np.array(f1s)) * 100}
 
 
 def edit_distance(targets, predictions, lower=True):

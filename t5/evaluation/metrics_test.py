@@ -1,4 +1,4 @@
-# Copyright 2021 The T5 Authors.
+# Copyright 2022 The T5 Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -649,10 +649,14 @@ class MetricsTest(test_utils.BaseMetricsTest):
   def test_coqa_f1(self):
     self.assertDictClose(
         metrics.coqa_f1([["jump box"], ["maru"]], ["jump", "cat"]),
-        {"f1": 1 / 3})
+        {"f1": 1 / 3 * 100})
     self.assertDictClose(
         metrics.coqa_f1([["jump the box"], ["maru"]], ["jump", "cat"]),
-        {"f1": 1 / 3})
+        {"f1": 1 / 3 * 100})
+
+    self.assertDictClose(
+        metrics.coqa_f1([["jump the box", "climb box"]], ["jump box"]),
+        {"f1": 100})
 
   def test_edit_distance(self):
     results = metrics.edit_distance(
