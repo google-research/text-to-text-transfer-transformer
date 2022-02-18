@@ -1903,12 +1903,37 @@ def span_corruption(dataset,
                     mean_noise_span_length=3.0,
                     noise_density=0.15,
                     input_feature_key='inputs',
-                    merge_examples_to_reduce_padding=True):
-  """Final pretraining objective used in Raffel et al., 2019."""
+                    merge_examples_to_reduce_padding=True,
+                    reserved_for_packing=None):
+  """Final pretraining objective used in Raffel et al., 2019.
+
+  Args:
+    dataset: A tf.data.Dataset with dictionaries containing the key
+      `input_feature_key`.
+    sequence_length: dict mapping of feature key to int length for that feature.
+    output_features: mapping of keys to features.
+    mean_noise_span_length: the mean number of tokens per masked span per
+      example.
+    noise_density: what fraction of the tokens to mask.
+    input_feature_key: which feature to use from the dataset as the input text
+      tokens.
+    merge_examples_to_reduce_padding: if True, combines multiple input examples
+      to reduce padding.
+    reserved_for_packing: if specified, reduces the desired inputs length by the
+      specified amount to enable multiple examples to be packed together
+      downstream.
+
+  Returns:
+    a dataset
+  """
+  inputs_length = sequence_length[input_feature_key]
+  if reserved_for_packing:
+    inputs_length -= reserved_for_packing
+
   input_length, targets_length = random_spans_helper(
       extra_tokens_per_span_inputs=1,
       extra_tokens_per_span_targets=1,
-      inputs_length=sequence_length[input_feature_key],
+      inputs_length=inputs_length,
       mean_noise_span_length=mean_noise_span_length,
       noise_density=noise_density)
 
