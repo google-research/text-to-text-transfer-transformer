@@ -27,6 +27,7 @@ Usage example for fine-tuning and evaluating on CoLA:
 import functools
 
 import t5
+import t5.data.mixtures
 import t5.models
 import torch
 import transformers
