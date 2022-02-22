@@ -65,7 +65,7 @@ def bleu(targets, predictions):
   return {"bleu": bleu_score.score}
 
 
-def rouge(targets, predictions, score_keys=None):
+def rouge(targets, predictions, score_keys=None, tokenizer=None):
   """Computes rouge score.
 
   Args:
@@ -78,7 +78,7 @@ def rouge(targets, predictions, score_keys=None):
 
   if score_keys is None:
     score_keys = ["rouge1", "rouge2", "rougeLsum"]
-  scorer = rouge_scorer.RougeScorer(score_keys)
+  scorer = rouge_scorer.RougeScorer(score_keys, tokenizer=tokenizer)
   aggregator = scoring.BootstrapAggregator()
 
   def _prepare_summary(summary):

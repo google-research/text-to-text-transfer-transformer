@@ -51,7 +51,7 @@ setuptools.setup(
         'nltk',
         'numpy',
         'pandas',
-        'rouge-score',
+        'rouge-score @ git+https://github.com/google-research/google-research/#egg=rouge-score',
         'sacrebleu',
         'scikit-learn',
         'scipy',
