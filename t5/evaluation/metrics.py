@@ -65,20 +65,23 @@ def bleu(targets, predictions):
   return {"bleu": bleu_score.score}
 
 
-def rouge(targets, predictions, score_keys=None):
+def rouge(targets, predictions, score_keys=None, tokenizer=None):
   """Computes rouge score.
 
   Args:
     targets: list of strings
     predictions: list of strings
     score_keys: list of strings with the keys to compute.
+    tokenizer: Tokenizer to use. Should be an instance of
+      third_party/google_research/google_research/rouge/tokenizers.Tokenizer. If
+      not specified, tokenizers.DefaultTokenizer is used.
   Returns:
     dict with score_key: rouge score across all targets and predictions
   """
 
   if score_keys is None:
     score_keys = ["rouge1", "rouge2", "rougeLsum"]
-  scorer = rouge_scorer.RougeScorer(score_keys)
+  scorer = rouge_scorer.RougeScorer(score_keys, tokenizer=tokenizer)
   aggregator = scoring.BootstrapAggregator()
 
   def _prepare_summary(summary):
