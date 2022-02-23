@@ -1504,13 +1504,15 @@ def wnli_simple(x, label='wsc:'):
   }
 
 
-def rank_classification(ds: tf.data.Dataset,
-                        inputs_fn: Callable[[FeatureType], tf.Tensor],
-                        targets_fn: Callable[[FeatureType], tf.Tensor],
-                        is_correct_fn: Callable[[FeatureType], tf.Tensor],
-                        weight_fn: Optional[Callable[[FeatureType],
-                                                     tf.Tensor]] = None,
-                        mode: str = 'eval') -> tf.data.Dataset:
+def rank_classification(
+    ds: tf.data.Dataset,
+    inputs_fn: Callable[[FeatureType], tf.Tensor],
+    targets_fn: Callable[[FeatureType], tf.Tensor],
+    is_correct_fn: Callable[[FeatureType], tf.Tensor],
+    weight_fn: Optional[Callable[[FeatureType], tf.Tensor]] = None,
+    mode: str = 'eval',
+    passthrough_feature_keys: Optional[Sequence[str]] = None,
+) -> tf.data.Dataset:
   """Prepare dataset for rank classification scoring.
 
   Intended to be used with `rank_classification` postprocessor and metric.
@@ -1579,6 +1581,8 @@ def rank_classification(ds: tf.data.Dataset,
       every possible class value, sequentially. 'fewshot_eval' produces an
       example for every possible class value, batched together for each input
       example.
+    passthrough_feature_keys: a sequence of feature names that should be passed
+      through to the output of this preprocessor. eg: ["starburst", "tokens"]
 
   Returns:
     A tf.data.Dataset containing 'idx', inputs', 'targets', and 'is_correct'.
@@ -1608,6 +1612,10 @@ def rank_classification(ds: tf.data.Dataset,
         'targets': targets,
         'is_correct': is_correct,
     }
+
+    if passthrough_feature_keys is not None:
+      for feature_name in passthrough_feature_keys:
+        output[feature_name] = [ex[feature_name]] * len(targets)
 
     if weight_fn is not None:
       output['weight'] = tf.fill(tf.shape(is_correct), weight_fn(ex))

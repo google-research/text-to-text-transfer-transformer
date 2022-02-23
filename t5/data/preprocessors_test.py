@@ -1474,6 +1474,68 @@ class PreprocessorsTest(tf.test.TestCase):
             },
         ])
 
+  def test_rank_classification_with_passthrough_feature_keys(self):
+    dataset = tf.data.Dataset.from_tensors({
+        'left': 'the sky is blue',
+        'right': 'cats are so cute',
+        'label_idx': 1,
+        'weight': 1.0,
+        'starburst_allow_pass': [0.1, 0.2],
+        'context_allow_pass': 'the sun is out',
+        'starburst_not_allow_pass': [0.9, 0.8]
+    })
+    preprocessor = functools.partial(
+        prep.rank_classification,
+        dataset,
+        inputs_fn=lambda features: [features['right'], features['left']],
+        targets_fn=lambda features: ['class 0', 'class 1'],
+        is_correct_fn=lambda features: [False, True],
+        weight_fn=lambda features: features['weight'],
+        passthrough_feature_keys=['starburst_allow_pass', 'context_allow_pass'])
+
+    test_utils.assert_dataset(
+        preprocessor(mode='train'), [{
+            'idx': [0, 1],
+            'inputs': 'the sky is blue',
+            'targets': 'class 1',
+            'is_correct': True,
+            'weight': 1.0,
+            'starburst_allow_pass': [0.1, 0.2],
+            'context_allow_pass': 'the sun is out',
+        }])
+
+    test_utils.assert_dataset(
+        preprocessor(mode='eval'), [{
+            'idx': [0, 0],
+            'inputs': 'cats are so cute',
+            'targets': 'class 0',
+            'is_correct': False,
+            'weight': 1.0,
+            'starburst_allow_pass': [0.1, 0.2],
+            'context_allow_pass': 'the sun is out',
+        }, {
+            'idx': [0, 1],
+            'inputs': 'the sky is blue',
+            'targets': 'class 1',
+            'is_correct': True,
+            'weight': 1.0,
+            'starburst_allow_pass': [0.1, 0.2],
+            'context_allow_pass': 'the sun is out',
+        }])
+
+    test_utils.assert_dataset(
+        preprocessor(mode='fewshot_eval'), [
+            {
+                'idx': [[0, 0], [0, 1]],
+                'inputs': ['cats are so cute', 'the sky is blue'],
+                'targets': ['class 0', 'class 1'],
+                'is_correct': [False, True],
+                'weight': [1, 1],
+                'starburst_allow_pass': [[0.1, 0.2], [0.1, 0.2]],
+                'context_allow_pass': ['the sun is out', 'the sun is out']
+            },
+        ])
+
   def test_rank_classification_errors(self):
     dataset = tf.data.Dataset.from_tensors({
         'left': 'the sky is blue',
