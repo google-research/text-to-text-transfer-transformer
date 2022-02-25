@@ -2189,6 +2189,20 @@ class PreprocessorsTest(tf.test.TestCase):
     }
     assert_dataset(dataset, expected)
 
+  def test_preprocess_tsv_with_positions_10_plus_fields(self):
+    x = tf.data.Dataset.from_tensor_slices(['0,0,0,0,0,0,0,0,0,0,6,7,42'])
+    dataset = prep.preprocess_tsv(
+        x,
+        num_fields=13,
+        field_delim=',',
+        inputs_format='numerator: {12} denominator: {11}',
+        targets_format='quotient: {10}')
+    expected = {
+        'inputs': 'numerator: 42 denominator: 7',
+        'targets': 'quotient: 6'
+    }
+    assert_dataset(dataset, expected)
+
 
 if __name__ == '__main__':
   absltest.main()

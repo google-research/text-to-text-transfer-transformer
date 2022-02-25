@@ -1859,7 +1859,7 @@ def preprocess_tsv(line,
     A feature dict with 'inputs' and 'targets' features.
   """
   def _format_part_with_field_numbers(part, field_values):
-    found = re.findall(r'{(\d)}', part)
+    found = re.findall(r'{(\d+)}', part)
     if found:
       return field_values[int(found[0])]
     else:
@@ -1878,7 +1878,7 @@ def preprocess_tsv(line,
     if field_names is None:
       parts = [
           _format_part_with_field_numbers(p, field_values)
-          for p in re.split(r'({\d})', format_string)
+          for p in re.split(r'({\d+})', format_string)
       ]
     else:
       field_names_re = '(' + '|'.join(['{{{}}}'.format(x) for x in field_names
