@@ -2176,16 +2176,17 @@ class PreprocessorsTest(tf.test.TestCase):
     assert_dataset(dataset, expected)
 
   def test_preprocess_tsv_with_positions(self):
-    x = tf.data.Dataset.from_tensor_slices(['6,7,42'])
+    x = tf.data.Dataset.from_tensor_slices(
+        ['6,7,42,43,44,45,46,47,48,49,fifty,51,52'])
     dataset = prep.preprocess_tsv(
         x,
-        num_fields=3,
+        num_fields=13,
         field_delim=',',
-        inputs_format='numerator: {2} denominator: {1}',
-        targets_format='quotient: {0}')
+        inputs_format='numerator: {2} denominator: {1} fact: {12} - 50 != {0}',
+        targets_format='quotient: {0} and yes: 52 - {10} != 6')
     expected = {
-        'inputs': 'numerator: 42 denominator: 7',
-        'targets': 'quotient: 6'
+        'inputs': 'numerator: 42 denominator: 7 fact: 52 - 50 != 6',
+        'targets': 'quotient: 6 and yes: 52 - fifty != 6'
     }
     assert_dataset(dataset, expected)
 
