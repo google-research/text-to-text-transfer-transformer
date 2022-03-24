@@ -119,6 +119,16 @@ class PostprocessorsTest(absltest.TestCase):
             "fuzzy bunny",
             example={"targets_pretokenized": b"fuzzy hungry bunny"},
             is_target=False), 1)
+    self.assertEqual(
+        postprocessors.wsc_simple(
+            "",
+            example={"targets_pretokenized": b"cat"},
+            is_target=False), -1)
+    self.assertEqual(
+        postprocessors.wsc_simple(
+            "a this",
+            example={"targets_pretokenized": b"cat"},
+            is_target=False), -1)
 
   def test_rank_classification(self):
     self.assertEqual(postprocessors.rank_classification(-13.4), -13.4)

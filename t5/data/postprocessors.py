@@ -97,10 +97,15 @@ def wsc_simple(prediction, example=None, is_target=False):
     s = tf.compat.as_text(s).strip().lower()
     return " ".join([w for w in s.split(" ") if w not in determiners])
 
+  prediction = clean(prediction)
+  if not prediction:
+    # We don't want an empty prediction to accidentally return 0 and spuriously
+    # match the label.
+    return -1
+
   # We aren't using the label but rather using the extracted referent so that we
   # can see if the prediction is equivalent to the referent.
   referent = clean(example["targets_pretokenized"])
-  prediction = clean(prediction)
 
   if ("'" in prediction) != ("'" in referent):
     # Make sure we don't mark cases where the prediction is "Bob" and the
