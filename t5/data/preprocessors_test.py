@@ -210,6 +210,11 @@ class PreprocessorsTest(tf.test.TestCase):
         prep._pad_punctuation(
             '"This  is a string with "punctuation (1845-1986) ".'))
 
+  def test_pad_punctuation_i18n(self):
+    self.assertStringEqual(
+        ' " Introducción ( la vídeo ) " . ',
+        prep._pad_punctuation('"Introducción (la vídeo)".'))
+
   def test_span_answer(self):
     self.assertStringEqual(
         'start: 2 end: 3',

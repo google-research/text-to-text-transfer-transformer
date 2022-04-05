@@ -152,7 +152,7 @@ def pad_nonspaced_languages(x, text_key='text'):
 def _pad_punctuation(text):
   """Adds spaces around punctuation."""
   # Add space around punctuation.
-  text = tf.strings.regex_replace(text, r'(\W)', r' \1 ')
+  text = tf.strings.regex_replace(text, r'([[:punct:]])', r' \1 ')
   # Collapse consecutive whitespace into one space.
   text = tf.strings.regex_replace(text, r'\s+', ' ')
   return text
