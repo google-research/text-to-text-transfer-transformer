@@ -38,13 +38,14 @@ from rouge_score import rouge_scorer
 from rouge_score import scoring
 
 
-def bleu(targets, predictions):
+def bleu(targets, predictions, tokenizer="intl"):
   """Computes BLEU score.
 
   Args:
     targets: list of strings or list of list of strings if multiple references
       are present.
     predictions: list of strings
+    tokenizer: tokenizer option for corpus_bleu
 
   Returns:
     bleu_score across all targets and predictions
@@ -60,7 +61,7 @@ def bleu(targets, predictions):
                                      smooth_value=0.0,
                                      force=False,
                                      lowercase=False,
-                                     tokenize="intl",
+                                     tokenize=tokenizer,
                                      use_effective_order=False)
   return {"bleu": bleu_score.score}
 
