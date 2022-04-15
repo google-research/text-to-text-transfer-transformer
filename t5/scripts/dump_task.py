@@ -34,6 +34,7 @@ import gin
 import seqio
 
 import tensorflow.compat.v1 as tf
+
 tf.compat.v1.enable_eager_execution()
 
 try:
@@ -43,33 +44,37 @@ try:
 except tf.flags.DuplicateFlagError:
   pass
 
-
 _DEFAULT_MODULE_IMPORTS = [
+]
+
+_DEFAULT_DELIMITERS = [
 ]
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string("task", None,
-                    "A registered Task.")
-flags.DEFINE_string("mixture", None,
-                    "A registered Mixture.")
+flags.DEFINE_string("task", None, "A registered Task.")
+flags.DEFINE_string("mixture", None, "A registered Mixture.")
 flags.DEFINE_integer("max_examples", -1,
                      "maximum number of examples. -1 for no limit")
-flags.DEFINE_string(
-    "format_string",
-    "{inputs}\t{targets}", "format for printing examples")
+flags.DEFINE_string("format_string", "{inputs}\t{targets}",
+                    "format for printing examples")
 flags.DEFINE_multi_string(
     "module_import", _DEFAULT_MODULE_IMPORTS,
     "Modules to import. Use this when your Task or is defined outside "
     "of the T5 codebase so that it is registered.")
-flags.DEFINE_string(
-    "split", "train", "which split of the dataset, e.g. train or validation")
+flags.DEFINE_string("split", "train",
+                    "which split of the dataset, e.g. train or validation")
 
 flags.DEFINE_bool("detokenize", False, "If True, then decode ids to strings.")
 
 flags.DEFINE_bool("shuffle", True, "Whether to shuffle dataset or not.")
 flags.DEFINE_bool("apply_postprocess_fn", False,
                   "Whether to apply the postprocess function or not.")
+flags.DEFINE_bool("pretty", False, "Whether to print a pretty output.")
+flags.DEFINE_multi_string(
+    "delimiters", _DEFAULT_DELIMITERS,
+    "Optional. Delimiters to highlight in terminal output when pretty is enabled."
+)
 
 
 @gin.configurable
@@ -78,6 +83,7 @@ def sequence_length(value=512):
 
   Args:
     value: an integer or dictionary
+
   Returns:
     a dictionary
   """
@@ -85,6 +91,24 @@ def sequence_length(value=512):
     return {"inputs": value, "targets": value}
   else:
     return value
+
+
+def pretty(value):
+  """Optional pretty printing helper for detokenized inputs.
+
+  Makes any text delimiter regex specified in `--delimiters` bold in textual
+  output.
+
+  Args:
+    value: string representing the detokenized output
+
+  Returns:
+    a string with appropriate styling applied
+  """
+  if not FLAGS.pretty or not FLAGS.detokenize:
+    return value
+  combined_matcher = re.compile(f"({'|'.join(FLAGS.delimiters)})")
+  return combined_matcher.sub(u"\u001b[1m\\1\u001b[0m", value)
 
 
 def import_modules(modules):
@@ -120,26 +144,29 @@ def main(_):
       shuffle=FLAGS.shuffle)
 
   keys = re.findall(r"{([\w+]+)}", FLAGS.format_string)
+
   def _example_to_string(ex):
     key_to_string = {}
     for k in keys:
-      if k in ex:
-        v = ex[k].numpy().tolist()
-        if (FLAGS.detokenize
-            and v and isinstance(v, list)
-            and isinstance(v[0], int)):
-          s = task_or_mixture.output_features[k].vocabulary.decode(
-              [abs(i) for i in v])
-          if (FLAGS.apply_postprocess_fn and k == "targets"
-              and hasattr(task_or_mixture, "postprocess_fn")):
-            s = task_or_mixture.postprocess_fn(s)
-        elif isinstance(v, bytes):
-          s = v.decode("utf-8")
-        else:
-          s = " ".join(str(i) for i in v)
-        key_to_string[k] = s
-      else:
+      if k not in ex:
         key_to_string[k] = ""
+        continue
+      value = ex[k]
+      if FLAGS.detokenize:
+        try:
+          value = task_or_mixture.output_features[k].vocabulary.decode_tf(value)
+        except RuntimeError as err:
+          value = f"Error {err} while decoding {value}"
+        if (FLAGS.apply_postprocess_fn and k == "targets" and
+            hasattr(task_or_mixture, "postprocess_fn")):
+          value = task_or_mixture.postprocess_fn(value)
+      if tf.rank(value) == 0:
+        value = [value]
+      if tf.is_numeric_tensor(value):
+        value = tf.strings.format("{}", tf.squeeze(value), summarize=-1)
+      else:
+        value = tf.strings.join(value, separator="\n\n")
+      key_to_string[k] = pretty(value.numpy().decode("utf-8"))
     return FLAGS.format_string.format(**key_to_string)
 
   for ex in ds:
@@ -148,6 +175,7 @@ def main(_):
     if total_examples == FLAGS.max_examples:
       break
   return
+
 
 if __name__ == "__main__":
   app.run(main)
