@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Classes for data loading and processing.
 
 Defines legacy Tasks and TaskRegistry. It is recommended that you use
