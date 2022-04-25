@@ -1615,7 +1615,13 @@ def rank_classification(
 
     if passthrough_feature_keys is not None:
       for feature_name in passthrough_feature_keys:
-        output[feature_name] = [ex[feature_name]] * len(targets)
+        tiled_shape = tf.concat(
+            [tf.expand_dims(tf.shape(targets)[0], axis=0),
+             tf.ones(len(ex[feature_name].shape), dtype=tf.int32)],
+            axis=0)
+        output[feature_name] = tf.tile(
+            tf.expand_dims(ex[feature_name], axis=0),
+            tiled_shape)
 
     if weight_fn is not None:
       output['weight'] = tf.fill(tf.shape(is_correct), weight_fn(ex))
