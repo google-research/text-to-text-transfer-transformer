@@ -52,6 +52,21 @@ class PostprocessorsTest(absltest.TestCase):
     self.assertDictEqual(
         postprocessors.multirc("True", is_target=False), {"value": 1})
 
+  def test_record(self):
+    self.assertDictEqual(
+        postprocessors.record(
+            "answer",
+            example={"answers": [b"a1", b"a2"],
+                     "idx/passage": 1,
+                     "idx/query": 2},
+            is_target=True),
+        {"value": ["a1", "a2"], "group": (1, 2)}
+    )
+    self.assertDictEqual(
+        postprocessors.record("answer", is_target=False),
+        {"value": "answer"}
+    )
+
   def test_qa(self):
     self.assertEqual(
         postprocessors.qa(

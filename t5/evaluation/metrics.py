@@ -248,6 +248,40 @@ def f1_score_with_invalid(targets, predictions):
   return {"f1": 100 * sklearn.metrics.f1_score(targets, predictions)}
 
 
+def deduplicate_metric(metric_fn,
+                       group_key: str = "group",
+                       value_key: str = "value"):
+  """Returns a metric that only considers one example per group.
+
+  Useful for things like ReCoRD where inputs may be replicated during training
+  to handle multiple labels, but where at eval we only want a single copy of
+  each example.
+
+  Args:
+    metric_fn: function, the metric to compute on the unique examples.
+    group_key: the key for the grouping value in the target dictionary.
+    value_key: the key for the value in the dictionaries.
+
+  Returns:
+    A metric function that deduplicated based on the grouping key before
+    returning a metric.
+  """
+  def _deduplicated_metric(targets, predictions):
+    """Deduplicate targets and predictions and pass that to the metric fn."""
+    processed_groups = set()
+    deduplicated_targets = []
+    deduplicated_predictions = []
+    for targ, pred in zip(targets, predictions):
+      group = targ[group_key]
+      if group in processed_groups:
+        continue
+      processed_groups.add(group)
+      deduplicated_targets.append(targ[value_key])
+      deduplicated_predictions.append(pred[value_key])
+    return metric_fn(deduplicated_targets, deduplicated_predictions)
+  return _deduplicated_metric
+
+
 def mean_group_metric(metric_fn,
                       group_key="group",
                       value_key="value",

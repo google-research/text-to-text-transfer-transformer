@@ -186,6 +186,19 @@ class MetricsTest(test_utils.BaseMetricsTest):
         metrics.accuracy([0, 0, 2, 1], [0, 1, 2, 1]),
         {"accuracy": 75.})
 
+  def test_deduplicate_metric(self):
+    metric_fn = metrics.deduplicate_metric(metrics.accuracy)
+    self.assertDictClose(
+        metric_fn(
+            [{"group": "a", "value": 0},
+             {"group": "a", "value": 0},
+             {"group": "b", "value": 1}],
+            [{"value": 0},
+             {"value": 0},
+             {"value": 0}]),
+        # group a only counts for 1 so we only get 1/2 right.
+        {"accuracy": 50.})
+
   def test_mean_group_metric(self):
     metric_fn = metrics.mean_group_metric(metrics.accuracy)
     self.assertDictClose(

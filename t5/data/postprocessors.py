@@ -62,6 +62,17 @@ def multirc(string_label, example=None, is_target=False):
   return res
 
 
+def record(answer, example=None, is_target=False):
+  """Returns dict with answer, or all answers + grouping key for a target."""
+  if is_target:
+    return {
+        "value": [tf.compat.as_text(a) for a in example["answers"]],
+        # Add the group since the model output will not have it.
+        "group": (example["idx/passage"], example["idx/query"])
+    }
+  return {"value": answer}
+
+
 def qa(answer, example=None, is_target=False):
   """Returns answer, or all answers if the full example is provided."""
   if is_target:

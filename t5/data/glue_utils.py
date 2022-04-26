@@ -128,7 +128,7 @@ def get_glue_postprocess_fn(builder_config):
   elif builder_config.name == "multirc":
     return postprocessors.multirc
   elif builder_config.name == "record":
-    return postprocessors.qa
+    return postprocessors.record
   else:
     return functools.partial(
         postprocessors.string_label_to_class_id,
@@ -163,7 +163,7 @@ SUPERGLUE_METRICS = collections.OrderedDict([
         metrics.multirc_f1_over_all_answers,
         metrics.mean_group_metric(metrics.all_match)
     ]),
-    ("record", [metrics.squad]),
+    ("record", [metrics.deduplicate_metric(metrics.squad)]),
     ("rte", [metrics.accuracy]),
     ("wic", [metrics.accuracy]),
     ("axb", []),  # Only test set available.
