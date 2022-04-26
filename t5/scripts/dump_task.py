@@ -153,7 +153,8 @@ def main(_):
       value = ex[k]
       if FLAGS.detokenize:
         try:
-          value = task_or_mixture.output_features[k].vocabulary.decode_tf(value)
+          value = task_or_mixture.output_features[k].vocabulary.decode_tf(
+              tf.abs(value))
         except RuntimeError as err:
           value = f"Error {err} while decoding {value}"
         if (FLAGS.apply_postprocess_fn and k == "targets" and
