@@ -2479,7 +2479,7 @@ def split_tokens(dataset: tf.data.Dataset,
     # Extract passthrough keys into a separate dataset.
     def _extract_passthrough_fields(inputs):
       return {
-           k: v for k, v in inputs.items() if k in passthrough_feature_keys
+          k: v for k, v in inputs.items() if k in passthrough_feature_keys
       }
     passthrough_ds = dataset.map(
         _extract_passthrough_fields, num_parallel_calls=AUTOTUNE)
