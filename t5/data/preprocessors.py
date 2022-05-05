@@ -1814,7 +1814,8 @@ def preprocess_tsv(line,
                    num_fields=2,
                    inputs_format='{0}',
                    targets_format='{1}',
-                   field_names=None):
+                   field_names=None,
+                   use_quote_delim=False):
   r"""Parse tab-delimited strings into inputs and targets.
 
   This function takes a tf.data.Dataset of strings, each of which contains
@@ -1861,6 +1862,10 @@ def preprocess_tsv(line,
       field values.
     field_names: a list of strings, the ordered names of the TSV fields.
       defaults to None (i.e. use field number in *_format)
+    use_quote_delim: If false, treats double quotation marks as regular
+      characters inside of the string fields (ignoring RFC 4180, Section 2,
+      Bullet 5).
+
   Returns:
     A feature dict with 'inputs' and 'targets' features.
   """
@@ -1900,7 +1905,7 @@ def preprocess_tsv(line,
       record_defaults=[''] *
       (num_fields if field_names is None else len(field_names)),
       field_delim=field_delim,
-      use_quote_delim=False)
+      use_quote_delim=use_quote_delim)
   return {
       'inputs': _format(inputs_format, field_names, field_values),
       'targets': _format(targets_format, field_names, field_values)
