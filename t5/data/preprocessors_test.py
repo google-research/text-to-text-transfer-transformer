@@ -1228,6 +1228,21 @@ class PreprocessorsTest(tf.test.TestCase):
     dataset = prep.parse_tsv(og_dataset, field_names=['f1', 'f2'])
     assert_dataset(dataset, [{'f1': 'a', 'f2': 'b'}, {'f1': 'c', 'f2': 'd'}])
 
+  def test_parse_tsv_select_cols(self):
+    og_dataset = tf.data.Dataset.from_tensor_slices(
+        ['0\ta\tb\te', '1\tc\td\tf'])
+    dataset = prep.parse_tsv(
+        og_dataset, field_names=['f1', 'f2', 'f3'], field_columns=[1, 2, 3])
+    assert_dataset(dataset, [{
+        'f1': 'a',
+        'f2': 'b',
+        'f3': 'e'
+    }, {
+        'f1': 'c',
+        'f2': 'd',
+        'f3': 'f'
+    }])
+
   def test_denoise(self):
     vocab = test_utils.sentencepiece_vocab()
     target_tokens = vocab.encode('The quick brown fox.')

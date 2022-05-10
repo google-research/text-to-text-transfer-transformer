@@ -1786,7 +1786,7 @@ def rank_classification_formatter(
 
 
 @seqio.map_over_dataset
-def parse_tsv(line, field_names=None, field_delim='\t'):
+def parse_tsv(line, field_names=None, field_delim='\t', field_columns=None):
   """Splits TSV lines into dict examples mapping field name to string value.
 
   Args:
@@ -1794,18 +1794,22 @@ def parse_tsv(line, field_names=None, field_delim='\t'):
     field_names: a list of strings, the ordered names of the TSV fields.
       Defaults to "inputs" and "targets".
     field_delim: a string, the delimiter to split on e.g. ',' for csv.
+    field_columns: a list of column indices for each field.
+      Defaults to consecutive numbering of the provided `field_names`.
 
   Returns:
     A feature dict mapping field name to string value.
   """
   field_names = field_names or ['inputs', 'targets']
+  field_columns = field_columns or list(range(len(field_names)))
   return dict(
       zip(field_names,
           tf.io.decode_csv(
               line,
               record_defaults=[''] * len(field_names),
               field_delim=field_delim,
-              use_quote_delim=False)))
+              use_quote_delim=False,
+              select_cols=field_columns)))
 
 
 @seqio.map_over_dataset
