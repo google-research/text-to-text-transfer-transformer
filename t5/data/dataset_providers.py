@@ -28,13 +28,11 @@ import seqio
 from t5.data import utils
 import tensorflow.compat.v2 as tf
 
-
 _DEFAULT_FEATURE_KEYS = ["inputs", "targets"]
 
 _VALID_TASK_NAME_REGEX = re.compile(r"^[\w\d\._]+$")
 _MAX_EXAMPLES_TO_MEM_CACHE = 10000
 SHUFFLE_BUFFER_SIZE = 1000
-
 
 # ================================ Tasks =======================================
 
@@ -132,15 +130,14 @@ class TfdsTask(FunctionTask):
   between.
   """
 
-  def __init__(
-      self,
-      name,
-      tfds_name,
-      text_preprocessor,
-      metric_fns,
-      tfds_data_dir=None,
-      splits=None,
-      **task_kwargs):
+  def __init__(self,
+               name,
+               tfds_name,
+               text_preprocessor,
+               metric_fns,
+               tfds_data_dir=None,
+               splits=None,
+               **task_kwargs):
     """TfdsTask constructor.
 
     Args:
@@ -159,7 +156,7 @@ class TfdsTask(FunctionTask):
       splits: a list(string) of allowable splits to load, a dict mapping
         allowable canonical splits (e.g., 'validation') to TFDS splits or slices
         (e.g., 'train[':1%']), or None. The default, None, uses all available
-          splits from the TFDS dataset info.
+        splits from the TFDS dataset info.
       **task_kwargs: dict, additional keyword arguments for the parent `Task`
         class.
     """
@@ -188,14 +185,13 @@ class TextLineTask(FunctionTask):
   e.g. preprocessors.preprocess_tsv()
   """
 
-  def __init__(
-      self,
-      name,
-      split_to_filepattern,
-      text_preprocessor,
-      metric_fns,
-      skip_header_lines=0,
-      **task_kwargs):
+  def __init__(self,
+               name,
+               split_to_filepattern,
+               text_preprocessor,
+               metric_fns,
+               skip_header_lines=0,
+               **task_kwargs):
     """TextLineTask constructor.
 
     Args:
@@ -291,3 +287,14 @@ class TaskRegistry(seqio.TaskRegistry):
     provider = task_cls(name, **kwargs)
     super().add_provider(name, provider)
     return provider
+
+  @classmethod
+  def reset(cls) -> None:
+    """Calls seqio.TaskRegistry.reset() to keep functionality consistent.
+
+    Without this, calling t5.data.TaskRegistry.reset() initializes an empty
+    registry (dictionary) of tasks. Afterwards, any task added to
+    t5.data.TaskRegistry gets added to this newly initialized registry
+    dictionary, instead of seqio.TaskRegistry.
+    """
+    seqio.TaskRegistry.reset()
