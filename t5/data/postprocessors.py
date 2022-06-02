@@ -134,12 +134,20 @@ def wsc_simple(prediction, example=None, is_target=False):
   return int(predicted_referent)
 
 
-def rank_classification(score, example=None, is_target=False):
+def rank_classification(score,
+                        example=None,
+                        is_target=False,
+                        passthrough_feature_keys=None):
   """A postprocessor for the `rank_classification` preprocessor and metric."""
   if is_target:
-    return (
+    outputs = [
         tuple(example["idx"]), example["is_correct"],
-        example.get("weight", 1.0), len(example["targets"])
-    )
+        example.get("weight", 1.0),
+        len(example["targets"])
+    ]
+    if passthrough_feature_keys:
+      for key in passthrough_feature_keys:
+        outputs.append(example[key])
+    return tuple(outputs)
   else:
     return score

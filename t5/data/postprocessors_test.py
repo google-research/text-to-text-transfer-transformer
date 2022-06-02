@@ -152,22 +152,54 @@ class PostprocessorsTest(absltest.TestCase):
     # The example does not have weight feature.
     self.assertEqual(
         postprocessors.rank_classification(
-            "blah", example={
+            "blah",
+            example={
                 "is_correct": False,
                 "idx": np.array([10, 1]),
                 "targets": [1, 2, 3],
-            }, is_target=True), ((10, 1), False, 1, 3))
+                "passthrough": "ps_value",
+            },
+            is_target=True), ((10, 1), False, 1, 3))
+
+    self.assertEqual(
+        postprocessors.rank_classification(
+            "blah",
+            example={
+                "is_correct": False,
+                "idx": np.array([10, 1]),
+                "targets": [1, 2, 3],
+                "passthrough": "ps_value",
+            },
+            is_target=True,
+            passthrough_feature_keys=["passthrough"]),
+        ((10, 1), False, 1, 3, "ps_value"))
 
     # The example has weight feature.
     self.assertEqual(
         postprocessors.rank_classification(
-            "blah", example={
+            "blah",
+            example={
                 "is_correct": False,
                 "idx": np.array([10, 1]),
                 "targets": [1, 2, 3],
-                "weight": 0
-            }, is_target=True), ((10, 1), False, 0, 3))
+                "weight": 0,
+                "passthrough": ["pt1", "pt2"],
+            },
+            is_target=True), ((10, 1), False, 0, 3))
 
+    self.assertEqual(
+        postprocessors.rank_classification(
+            "blah",
+            example={
+                "is_correct": False,
+                "idx": np.array([10, 1]),
+                "targets": [1, 2, 3],
+                "weight": 0,
+                "passthrough": ["pt1", "pt2"],
+            },
+            is_target=True,
+            passthrough_feature_keys=["passthrough"]),
+        ((10, 1), False, 0, 3, ["pt1", "pt2"]))
 
 if __name__ == "__main__":
   absltest.main()
