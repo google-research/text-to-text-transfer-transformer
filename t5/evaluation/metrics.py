@@ -73,6 +73,7 @@ def rouge(targets, predictions, score_keys=None):
     targets: list of strings
     predictions: list of strings
     score_keys: list of strings with the keys to compute.
+
   Returns:
     dict with score_key: rouge score across all targets and predictions
   """
@@ -193,6 +194,7 @@ def sequence_accuracy(targets, predictions):
   Args:
     targets: list of strings
     predictions: list of strings
+
   Returns:
     float. Average sequence-level accuracy.
   """
@@ -237,6 +239,7 @@ def f1_score_with_invalid(targets, predictions):
   Args:
     targets: np.ndarray of targets, either 0 or 1
     predictions: np.ndarray of predictions, any integer value
+
   Returns:
     F1 score, where any prediction != 0 or 1 is counted as wrong.
   """
@@ -330,6 +333,7 @@ def multirc_f1_over_all_answers(targets, predictions):
   Args:
     targets: list of dicts, where each dict has a "value" key.
     predictions: list of dicts, where each dict has a "value" key.
+
   Returns:
     F1 score over values, where any prediction != 0 or 1 is counted as wrong.
   """
@@ -349,6 +353,7 @@ def auc(targets, predictions, targets_threshold=None):
     predictions: np.ndarray of predictions, any value.
     targets_threshold: float, if target values are continuous values, this
       threshold binarizes them.
+
   Returns:
     A dictionary with AUC-ROC and AUC-PR scores.
   """
@@ -398,6 +403,7 @@ def sklearn_metrics_wrapper(metric_str,
     metric_post_process_fn: callable, if specified the final computed metric
       will be passed through this.
     **metric_fn_kwargs: kwargs, passed to the metric function we are calling.
+
   Returns:
     the function that calculates the metric in a dict.
   """
@@ -418,6 +424,7 @@ def rank_classification(
     scores: Sequence[float],
     num_classes: Optional[int] = None,
     normalize_by_target_length: bool = False,
+    idx_len: int = 2,
 ) -> Dict[str, Union[float, int]]:
   """Computes standard metrics classification based on log likelihood ranking.
 
@@ -442,6 +449,9 @@ def rank_classification(
       None if the number of classes vary.
     normalize_by_target_length: bool, if True the scores are normalized by the
       target token lengths.
+    idx_len: int, The number of elems in the idx field in the targets. This is
+      generally 2 (input_id, target_id).
+
   Returns:
     Accuracy, f1, and AUC scores.
 
@@ -463,10 +473,9 @@ def rank_classification(
     scores = normalized_scores
 
   idx_0 = targets[0][0]
-  if not hasattr(idx_0, "__len__") or len(idx_0) != 2:
-    raise ValueError(
-        "The first element of `targets` ('idx') should be 2-dimensional. "
-        f"Got {idx_0}.")
+  if not hasattr(idx_0, "__len__") or len(idx_0) != idx_len:
+    raise ValueError("The first element of `targets` ('idx') should be "
+                     f"{idx_len}-dimensional. Got {idx_0}.")
 
   # Sort by 'idx' since the function relies on this assumption.
   # ((idx, is_correct, weight), score)
