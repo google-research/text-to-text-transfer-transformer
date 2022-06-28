@@ -200,7 +200,6 @@ def sequence_accuracy(targets, predictions):
   """
   assert len(targets) == len(predictions)
   seq_acc = 100 * np.mean([p == t for p, t in zip(predictions, targets)])
-  logging.info("sequence_accuracy = %.2f", seq_acc)
   return {"sequence_accuracy": seq_acc}
 
 
