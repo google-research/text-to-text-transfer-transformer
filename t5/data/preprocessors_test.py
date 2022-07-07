@@ -81,6 +81,20 @@ class PreprocessorsTest(tf.test.TestCase):
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1]
     self.assertAllEqual(output, expected_output)
 
+  def test_random_spans_noise_mask_no_corruption(self):
+    length = 32
+    noise_density = 0.0
+    mean_noise_span_length = 2.0
+    noise_mask = prep.random_spans_noise_mask(length, noise_density, [(1, 2),
+                                                                      (3, 4)],
+                                              mean_noise_span_length)
+    output = self.evaluate(tf.cast(noise_mask, tf.int32))
+    expected_output = [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ]
+    self.assertAllEqual(output, expected_output)
+
   def test_noise_token_to_sentinel(self):
     vocabulary = test_utils.MockVocabulary({'foo': [10]}, vocab_size=1000)
     tokens = tf.constant([10, 11, 12, 13, 14, 15])
@@ -1242,6 +1256,43 @@ class PreprocessorsTest(tf.test.TestCase):
         'f2': 'd',
         'f3': 'f'
     }])
+
+  def test_denoise_no_corruption(self):
+    vocab = test_utils.sentencepiece_vocab()
+    target_tokens = vocab.encode('The quick brown fox.')
+
+    # This is what it encodes to.
+    self.assertEqual(
+        target_tokens,
+        [3, 2, 20, 4, 3, 2, 8, 13, 2, 3, 2, 23, 7, 19, 22, 3, 2, 7, 2])
+
+    og_dataset = tf.data.Dataset.from_tensor_slices({
+        'targets': [target_tokens],
+    })
+
+    output_features = {
+        'targets': seqio.Feature(vocab),
+    }
+
+    # Using noise density 0.0 to avoid corruption
+    with seqio.map_seed_manager(42):
+      denoised_dataset = prep.denoise(
+          og_dataset,
+          output_features,
+          noise_density=0.0,
+          noise_mask_fn=prep.random_spans_noise_mask,
+          inputs_fn=prep.noise_span_to_unique_sentinel,
+          targets_fn=prep.nonnoise_span_to_unique_sentinel,
+          input_feature_key='text_tokens')
+
+    # Nothing gets corrupted
+    assert_dataset(denoised_dataset, [
+        {
+            'text_tokens':
+                [3, 2, 20, 4, 3, 2, 8, 13, 2, 3, 2, 23, 7, 19, 22, 3, 2, 7, 2],
+            'targets': [25],
+        },
+    ])
 
   def test_denoise(self):
     vocab = test_utils.sentencepiece_vocab()

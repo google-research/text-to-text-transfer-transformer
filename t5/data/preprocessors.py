@@ -2863,6 +2863,9 @@ def random_spans_noise_mask(length,
     a boolean tensor with shape [length]
   """
 
+  if noise_density == 0.0:
+    return tf.zeros(length, tf.bool)
+
   orig_length = length
   # increase length to avoid degeneracy
   length = tf.maximum(length, 2)
