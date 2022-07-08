@@ -1324,18 +1324,32 @@ class PreprocessorsTest(tf.test.TestCase):
           targets_fn=prep.nonnoise_span_to_unique_sentinel,
           input_feature_key='text_tokens')
 
-    # Two spans corrupted, [2] and [22, 3, 2, 7, 2], replaced by unique
+    # The two spans corrupted, [2] and [22, 3, 2, 7, 2], are replaced by unique
     # sentinels 25 and 24 respectively.
-    assert_dataset(denoised_dataset, [
-        {
-            'text_tokens': [
-                3, 2, 20, 4, 25, 2, 8, 13, 2, 3, 2, 23, 7, 19, 24
-            ],
-            'targets': [
-                25, 3, 24, 22, 3, 2, 7, 2
-            ],
-        },
-    ])
+    assert_dataset(
+        denoised_dataset,
+        [
+            {
+                'text_tokens': [
+                    3,
+                    2,
+                    20,
+                    4,
+                    3,
+                    2,
+                    8,
+                    13,  # unchanged
+                    25,  # replace [2]
+                    3,
+                    2,
+                    23,
+                    7,
+                    19,  # unchanged
+                    24,  # replaced [22, 3, 2, 7, 2]
+                ],
+                'targets': [25, 2, 24, 22, 3, 2, 7, 2],
+            },
+        ])
 
   def test_denoise_nested_decorators(self):
     """Test whether gin and utils.map_over_dataset decorators are compatible."""

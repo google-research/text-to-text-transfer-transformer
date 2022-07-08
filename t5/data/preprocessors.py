@@ -19,7 +19,7 @@ import collections
 import functools
 import math
 import re
-from typing import Callable, Mapping, Optional, Sequence, Union
+from typing import Any, Callable, Mapping, Optional, Protocol, Sequence, Union
 import uuid
 
 from absl import logging
@@ -2042,18 +2042,17 @@ def full_lm(dataset, sequence_length, output_features):
   return ds
 
 
-@gin.configurable
-def select_random_chunk(dataset: tf.data.Dataset,
-                        output_features: Mapping[str, seqio.Feature],
-                        max_length: Optional[int] = None,
-                        feature_key: str = 'targets',
-                        additional_feature_keys: Optional[Sequence[str]] = None,
-                        passthrough_feature_keys: Optional[
-                            Sequence[str]] = None,
-                        sequence_length: Optional[Mapping[str, int]] = None,
-                        uniform_random_start: bool = False,
-                        min_length: Optional[int] = None,
-                        **unused_kwargs) -> tf.data.Dataset:
+def single_example_select_random_chunk(
+    features: FeatureType,
+    seed: tf.Tensor,
+    output_features: Mapping[str, seqio.Feature],
+    max_length: Optional[int] = None,
+    feature_key: str = 'targets',
+    additional_feature_keys: Optional[Sequence[str]] = None,
+    passthrough_feature_keys: Optional[Sequence[str]] = None,
+    sequence_length: Optional[Mapping[str, int]] = None,
+    uniform_random_start: bool = False,
+    min_length: Optional[int] = None) -> FeatureType:
   """Token-preprocessor to extract one span of at most `max_length` tokens.
 
   If the token sequence is longer than `max_length`, then we return a random
@@ -2062,7 +2061,8 @@ def select_random_chunk(dataset: tf.data.Dataset,
   This is generally followed by split_tokens.
 
   Args:
-    dataset: A tf.data.Dataset with dictionaries containing the key feature_key.
+    features: Single example with `feature_key` containing a tokenized sequence.
+    seed: Random seed to be used.
     output_features: Mapping of keys to features.
     max_length: Typically specified in gin configs, takes priority over
       sequence_length.
@@ -2082,7 +2082,7 @@ def select_random_chunk(dataset: tf.data.Dataset,
       than min_length if at the beginning or end of the sequence.
 
   Returns:
-    a dataset
+    The features of the selected chunk.
   """
   if passthrough_feature_keys:
     chunk_keys = set([feature_key] + (additional_feature_keys or []))
@@ -2099,65 +2099,79 @@ def select_random_chunk(dataset: tf.data.Dataset,
   if max_length is None:
     raise ValueError('Must specify max_length or sequence_length.')
 
-  @seqio.map_over_dataset(num_seeds=2)
-  def _my_fn(x, seeds):
-    """Select a random chunk of tokens.
+  seeds = tf.unstack(tf.random.experimental.stateless_split(seed))
+  tokens = features[feature_key]
+  n_tokens = tf.shape(tokens)[0]
+  if min_length is not None:
+    length = tf.random.stateless_uniform([],
+                                         minval=min_length,
+                                         maxval=max_length,
+                                         dtype=tf.int32,
+                                         seed=seeds[0])
+  else:
+    length = max_length
+  if uniform_random_start:
+    start = tf.random.stateless_uniform(
+        [],
+        minval=-length + 1,  # pylint:disable=invalid-unary-operand-type
+        maxval=n_tokens,
+        dtype=tf.int32,
+        seed=seeds[1])
+    end = tf.minimum(start + length, n_tokens)
+    start = tf.maximum(start, 0)
+  else:
+    num_segments = tf.cast(
+        tf.math.ceil(
+            tf.cast(n_tokens, tf.float32) / tf.cast(length, tf.float32)),
+        tf.int32)
+    start = length * tf.random.stateless_uniform(
+        [], maxval=num_segments, dtype=tf.int32, seed=seeds[1])
+    end = tf.minimum(start + length, n_tokens)
+  chunk = {feature_key: tokens[start:end]}
+  if additional_feature_keys is not None:
+    for k in additional_feature_keys:
+      with tf.control_dependencies([
+          tf.assert_equal(
+              tf.shape(tokens)[0],
+              tf.shape(features[k])[0],
+              message=(f'Additional feature {k} is not the same size as '
+                       f'{feature_key} along axis 0 in select_random_chunk().'))
+      ]):
+        chunk[k] = features[k][start:end]
+  if passthrough_feature_keys is not None:
+    for k in passthrough_feature_keys:
+      chunk[k] = features[k]
+  return chunk
 
-    Args:
-      x: a 1d Tensor
-      seeds: an int32 Tensor, shaped (2, 2), the random seeds.
-    Returns:
-      a 1d Tensor
-    """
-    tokens = x[feature_key]
-    n_tokens = tf.shape(tokens)[0]
-    if min_length is not None:
-      length = tf.random.stateless_uniform(
-          [],
-          minval=min_length,
-          maxval=max_length,
-          dtype=tf.int32,
-          seed=seeds[0])
-    else:
-      length = max_length
-    if uniform_random_start:
-      start = tf.random.stateless_uniform(
-          [],
-          minval=-length + 1,  # pylint:disable=invalid-unary-operand-type
-          maxval=n_tokens,
-          dtype=tf.int32,
-          seed=seeds[1])
-      end = tf.minimum(start + length, n_tokens)
-      start = tf.maximum(start, 0)
-    else:
-      num_segments = tf.cast(
-          tf.math.ceil(
-              tf.cast(n_tokens, tf.float32) / tf.cast(length, tf.float32)
-          ),
-          tf.int32)
-      start = length * tf.random.stateless_uniform(
-          [],
-          maxval=num_segments,
-          dtype=tf.int32,
-          seed=seeds[1])
-      end = tf.minimum(start + length, n_tokens)
-    chunk = {feature_key: tokens[start:end]}
-    if additional_feature_keys is not None:
-      for k in additional_feature_keys:
-        with tf.control_dependencies([
-            tf.assert_equal(
-                tf.shape(tokens)[0],
-                tf.shape(x[k])[0],
-                message=(f'Additional feature {k} is not the same size as '
-                         f'{feature_key} along axis 0 in select_random_chunk().'
-                         )
-            )
-        ]):
-          chunk[k] = x[k][start:end]
-    if passthrough_feature_keys is not None:
-      for k in passthrough_feature_keys:
-        chunk[k] = x[k]
-    return chunk
+
+@gin.configurable
+def select_random_chunk(dataset: tf.data.Dataset,
+                        output_features: Mapping[str, seqio.Feature],
+                        max_length: Optional[int] = None,
+                        feature_key: str = 'targets',
+                        additional_feature_keys: Optional[Sequence[str]] = None,
+                        passthrough_feature_keys: Optional[
+                            Sequence[str]] = None,
+                        sequence_length: Optional[Mapping[str, int]] = None,
+                        uniform_random_start: bool = False,
+                        min_length: Optional[int] = None,
+                        **unused_kwargs) -> tf.data.Dataset:
+  """SeqIO wrapper for single_example_select_random_chunk()."""
+
+  @seqio.map_over_dataset(num_seeds=1)
+  def _my_fn(x, seed):
+    return single_example_select_random_chunk(
+        x,
+        seed,
+        output_features=output_features,
+        max_length=max_length,
+        feature_key=feature_key,
+        additional_feature_keys=additional_feature_keys,
+        passthrough_feature_keys=passthrough_feature_keys,
+        sequence_length=sequence_length,
+        uniform_random_start=uniform_random_start,
+        min_length=min_length)
+
   # Filter empty examples.
   dataset = dataset.filter(lambda x: tf.not_equal(tf.size(x[feature_key]), 0))
   return _my_fn(dataset)
@@ -2692,17 +2706,39 @@ def random_spans_targets_length():
 # ========================== denoise and helpers ===============================
 
 
-@gin.configurable()
-def denoise(dataset,
-            output_features,
-            noise_density=gin.REQUIRED,
-            noise_mask_fn=gin.REQUIRED,
-            inputs_fn=gin.REQUIRED,
-            targets_fn=None,
-            passthrough_feature_keys: Optional[Sequence[str]] = None,
-            input_feature_key='inputs',
-            **unused_kwargs):
-  """Gin-configurable token preprocessor for self-supervised denoising tasks.
+class DenoiseNoiseMaskFn(Protocol):
+
+  def __call__(self, num_tokens: tf.Tensor, noise_density: float,
+               seeds: tf.Tensor) -> tf.Tensor:
+    """Computes the boolean makes. Seeds should have shape [2, 2]."""
+
+
+class DenoiseInputsFn(Protocol):
+
+  def __call__(self, tokens: tf.Tensor, noise_mask: tf.Tensor, vocabulary,
+               seeds: tf.Tensor) -> tf.Tensor:
+    """Computes the input tokens. Seeds should have shape [2, 2]."""
+
+
+class DenoiseTargetsFn(Protocol):
+
+  def __call__(self, tokens: tf.Tensor, noise_mask: tf.Tensor, vocabulary,
+               seeds: tf.Tensor) -> tf.Tensor:
+    """Computes the target tokens. Seeds should have shape [2, 2]."""
+
+
+def single_example_denoise(features: FeatureType,
+                           seed: tf.Tensor,
+                           *,
+                           output_features: Mapping[str, Any],
+                           noise_density: float,
+                           noise_mask_fn: DenoiseNoiseMaskFn,
+                           inputs_fn: DenoiseInputsFn,
+                           targets_fn: Optional[DenoiseTargetsFn] = None,
+                           passthrough_feature_keys: Optional[
+                               Sequence[str]] = None,
+                           input_feature_key: str = 'inputs') -> FeatureType:
+  """Preprocessing function for self-supervised denoising tasks.
 
   This function takes a dataset containing "targets" sequences,
   and turns each sequence into a dictionary containing:
@@ -2734,7 +2770,8 @@ def denoise(dataset,
     - task labels prepended to the inputs
 
   Args:
-    dataset: A tf.data.Dataset to process.
+    features: Flat dictionary of features.
+    seed: Random seed to use.
     output_features: a dict mapping feature name to t5.data.Feature.
     noise_density: a float
     noise_mask_fn: a function from (length, noise_density) -> boolean mask
@@ -2744,38 +2781,62 @@ def denoise(dataset,
     input_feature_key: name of feature to use as inputs
 
   Returns:
-    A preprocessed tf.data.Dataset.
+    A preprocessed features.
   """
   if passthrough_feature_keys and (input_feature_key in passthrough_feature_keys
                                    or 'targets' in passthrough_feature_keys):
     raise ValueError(
         f"passthrough keys cannot contain '{input_feature_key}' or 'targets'")
 
-  @seqio.map_over_dataset(num_seeds=6)
-  def my_fn(features, seeds):
-    """Map function."""
-    tokens = features['targets']
-    vocabulary = output_features['targets'].vocabulary
-    if (input_feature_key in output_features and
-        vocabulary != output_features[input_feature_key].vocabulary):
-      raise ValueError(
-          'denoise creates inputs based on tokenized targets but was applied '
-          'to a task that uses different vocabularies for inputs and targets.')
-    noise_mask = noise_mask_fn(tf.size(tokens), noise_density, seeds=seeds[:2])
-    inputs = inputs_fn(tokens, noise_mask, vocabulary, seeds=seeds[2:4])
-    if targets_fn:
-      targets = targets_fn(tokens, noise_mask, vocabulary, seeds=seeds[4:6])
-    else:
-      targets = tokens
-    return {
-        input_feature_key: inputs,
-        'targets': targets,
-        **{
-            k: features[k]
-            for k in features
-            if passthrough_feature_keys and k in passthrough_feature_keys
-        }
-    }
+  seeds = tf.unstack(tf.random.experimental.stateless_split(seed, 6))
+  tokens = features['targets']
+  vocabulary = output_features['targets'].vocabulary
+  if (input_feature_key in output_features and
+      vocabulary != output_features[input_feature_key].vocabulary):
+    raise ValueError(
+        'denoise creates inputs based on tokenized targets but was applied '
+        'to a task that uses different vocabularies for inputs and targets.')
+  noise_mask = noise_mask_fn(tf.size(tokens), noise_density, seeds=seeds[:2])
+  inputs = inputs_fn(tokens, noise_mask, vocabulary, seeds=seeds[2:4])
+  if targets_fn:
+    targets = targets_fn(tokens, noise_mask, vocabulary, seeds=seeds[4:6])
+  else:
+    targets = tokens
+  return {
+      input_feature_key: inputs,
+      'targets': targets,
+      **{
+          k: features[k]
+          for k in features
+          if passthrough_feature_keys and k in passthrough_feature_keys
+      }
+  }
+
+
+@gin.configurable()
+def denoise(dataset,
+            output_features,
+            noise_density=gin.REQUIRED,
+            noise_mask_fn=gin.REQUIRED,
+            inputs_fn=gin.REQUIRED,
+            targets_fn=None,
+            passthrough_feature_keys: Optional[Sequence[str]] = None,
+            input_feature_key='inputs',
+            **unused_kwargs):
+  """SeqIO wrapper for single_example_denoise()."""
+
+  @seqio.map_over_dataset(num_seeds=1)
+  def my_fn(features, seed):
+    return single_example_denoise(
+        features,
+        seed,
+        output_features=output_features,
+        noise_density=noise_density,
+        noise_mask_fn=noise_mask_fn,
+        inputs_fn=inputs_fn,
+        targets_fn=targets_fn,
+        passthrough_feature_keys=passthrough_feature_keys,
+        input_feature_key=input_feature_key)
 
   return my_fn(dataset)
 
