@@ -51,7 +51,7 @@ setuptools.setup(
         'nltk',
         'numpy',
         'pandas',
-        'rouge-score',
+        'rouge-score>=0.1.2',
         'sacrebleu',
         'scikit-learn',
         'scipy',
