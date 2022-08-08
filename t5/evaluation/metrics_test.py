@@ -14,9 +14,12 @@
 
 """Tests for t5.evaluation.metrics."""
 
-from absl.testing import absltest
-import sklearn.metrics
+from unittest import mock
 
+from absl.testing import absltest
+import numpy as np
+import seqio
+import sklearn.metrics
 from t5.evaluation import metrics
 from t5.evaluation import test_utils
 
@@ -704,6 +707,214 @@ class MetricsTest(test_utils.BaseMetricsTest):
             "min_edit": 0,
             "sum_edit": 0
         })
+
+
+def mock_decode(self, ids):
+  decode_dict = {v: k for k, v in self._encode_dict.items()}
+  words = [decode_dict[token] for token in ids if token != 0]
+  return " ".join(words)
+
+
+class PassthroughSquadTest(test_utils.BaseMetricsTest):
+
+  def test_same(self):
+    ref = "this is a string"
+    inputs = [{"answers": ["", ref]}, {"answers": [ref, ref]}]
+
+    with mock.patch.object(
+        seqio.test_utils.MockVocabulary, "decode", new=mock_decode):
+      vocabulary = seqio.test_utils.MockVocabulary(
+          {
+              "this": 2,
+              "is": 3,
+              "a": 4,
+              "string": 5
+          }, vocab_size=10)
+
+      model_output = np.array([[2, 3, 4, 5], [2, 3, 4, 5]])
+      features = {"targets": seqio.Feature(vocabulary)}
+      metric = metrics.PassthroughSquad.from_model_output(
+          inputs, model_output, features)
+      self.assertDictClose(metric.actual_compute(inputs, features)[0],
+                           {"em": 100, "f1": 100})
+
+  def test_different(self):
+    ref = "this is a string"
+    inputs = [{"answers": [ref, ref]}, {"answers": [ref, ref]}]
+
+    with mock.patch.object(
+        seqio.test_utils.MockVocabulary, "decode", new=mock_decode):
+      vocabulary = seqio.test_utils.MockVocabulary(
+          {
+              "this": 2,
+              "is": 3,
+              "a": 4,
+              "string": 5,
+              "": 6
+          }, vocab_size=10)
+
+      model_output = np.array([[6], [6]])
+      features = {"targets": seqio.Feature(vocabulary)}
+      metric = metrics.PassthroughSquad.from_model_output(
+          inputs, model_output, features)
+      self.assertDictClose(metric.actual_compute(inputs, features)[0],
+                           {"em": 0, "f1": 0})
+
+  def test_big(self):
+    inputs = [
+        {"answers": ["big moose", "hippo"]},
+        {"answers": ["correct1"]},
+        {"answers": ["correct2.1", "correct2.2"]},
+        {"answers": ["a", "b"]},
+    ]
+
+    with mock.patch.object(
+        seqio.test_utils.MockVocabulary, "decode", new=mock_decode):
+      vocabulary = seqio.test_utils.MockVocabulary(
+          {
+              "‘a": 2,
+              "big": 3,
+              "Moose!‘": 4,
+              "wrong": 5,
+              "correct2.2": 6,
+              "c": 7
+          }, vocab_size=10)
+
+      model_output = np.array([[2, 3, 4], [5, 0, 0], [6, 0, 0], [7, 0, 0]])
+      features = {"targets": seqio.Feature(vocabulary)}
+      metric = metrics.PassthroughSquad.from_model_output(
+          inputs, model_output, features)
+      self.assertDictClose(metric.actual_compute(inputs, features)[0],
+                           {"em": 25., "f1": 35.}, places=2)
+
+  def test_small(self):
+    inputs = [{"answers": ["abc abd", "$$$$"]}]
+
+    with mock.patch.object(
+        seqio.test_utils.MockVocabulary, "decode", new=mock_decode):
+      vocabulary = seqio.test_utils.MockVocabulary({"abd": 2}, vocab_size=10)
+
+      model_output = np.array([[2]])
+      features = {"targets": seqio.Feature(vocabulary)}
+      metric = metrics.PassthroughSquad.from_model_output(
+          inputs, model_output, features)
+      self.assertDictClose(metric.actual_compute(inputs, features)[0],
+                           {"f1": 100 * 2.0 / 3.0, "em": 0.})
+
+
+class ShardedSquadTest(test_utils.BaseMetricsTest):
+
+  def test_same(self):
+    ref = "this is a string"
+    inputs = [{"answers": ["", ref]}, {"answers": [ref, ref]}]
+
+    with mock.patch.object(
+        seqio.test_utils.MockVocabulary, "decode", new=mock_decode):
+      vocabulary = seqio.test_utils.MockVocabulary(
+          {
+              "this": 2,
+              "is": 3,
+              "a": 4,
+              "string": 5
+          }, vocab_size=10)
+
+      model_output = np.array([[2, 3, 4, 5], [2, 3, 4, 5]])
+      features = {"targets": seqio.Feature(vocabulary)}
+      metric = metrics.ShardedSquad.from_model_output(
+          inputs, model_output, features)
+      self.assertDictClose(metric.compute(), {"em": 100, "f1": 100})
+
+  def test_different(self):
+    ref = "this is a string"
+    inputs = [{"answers": [ref, ref]}, {"answers": [ref, ref]}]
+
+    with mock.patch.object(
+        seqio.test_utils.MockVocabulary, "decode", new=mock_decode):
+      vocabulary = seqio.test_utils.MockVocabulary(
+          {
+              "this": 2,
+              "is": 3,
+              "a": 4,
+              "string": 5,
+              "": 6
+          }, vocab_size=10)
+
+      model_output = np.array([[6], [6]])
+      features = {"targets": seqio.Feature(vocabulary)}
+      metric = metrics.ShardedSquad.from_model_output(
+          inputs, model_output, features)
+      self.assertDictClose(metric.compute(), {"em": 0, "f1": 0})
+
+  def test_big(self):
+    inputs = [
+        {"answers": ["big moose", "hippo"]},
+        {"answers": ["correct1"]},
+        {"answers": ["correct2.1", "correct2.2"]},
+        {"answers": ["a", "b"]},
+    ]
+
+    with mock.patch.object(
+        seqio.test_utils.MockVocabulary, "decode", new=mock_decode):
+      vocabulary = seqio.test_utils.MockVocabulary(
+          {
+              "‘a": 2,
+              "big": 3,
+              "Moose!‘": 4,
+              "wrong": 5,
+              "correct2.2": 6,
+              "c": 7
+          }, vocab_size=10)
+
+      model_output = np.array([[2, 3, 4], [5, 0, 0], [6, 0, 0], [7, 0, 0]])
+      features = {"targets": seqio.Feature(vocabulary)}
+      metric = metrics.ShardedSquad.from_model_output(
+          inputs, model_output, features)
+      self.assertDictClose(metric.compute(), {"em": 25., "f1": 35.}, places=2)
+
+  def test_small(self):
+    inputs = [{"answers": ["abc abd", "$$$$"]}]
+
+    with mock.patch.object(
+        seqio.test_utils.MockVocabulary, "decode", new=mock_decode):
+      vocabulary = seqio.test_utils.MockVocabulary({"abd": 2}, vocab_size=10)
+
+      model_output = np.array([[2]])
+      features = {"targets": seqio.Feature(vocabulary)}
+      metric = metrics.ShardedSquad.from_model_output(
+          inputs, model_output, features)
+      self.assertDictClose(metric.compute(), {"f1": 100 * 2.0 / 3.0, "em": 0.})
+
+  def test_batch_update(self):
+    inputs1 = [
+        {"answers": ["big moose", "hippo"]},
+        {"answers": ["correct1"]}
+    ]
+    inputs2 = [
+        {"answers": ["correct2.1", "correct2.2"]},
+        {"answers": ["a", "b"]},
+    ]
+
+    with mock.patch.object(
+        seqio.test_utils.MockVocabulary, "decode", new=mock_decode):
+      vocabulary = seqio.test_utils.MockVocabulary(
+          {
+              "‘a": 2,
+              "big": 3,
+              "Moose!‘": 4,
+              "wrong": 5,
+              "correct2.2": 6,
+              "c": 7
+          }, vocab_size=10)
+
+      model_output1 = np.array([[2, 3, 4], [5, 0, 0]])
+      model_output2 = np.array([[6], [7]])
+      features = {"targets": seqio.Feature(vocabulary)}
+      metric1 = metrics.ShardedSquad.from_model_output(
+          inputs1, model_output1, features)
+      metric2 = metrics.ShardedSquad.from_model_output(
+          inputs2, model_output2, features)
+      metric = metric1.merge(metric2)
+      self.assertDictClose(metric.compute(), {"em": 25., "f1": 35.}, places=2)
 
 
 if __name__ == "__main__":
