@@ -1,6 +1,12 @@
 # T5: Text-To-Text Transfer Transformer
 
 
+### As of July 2022, we recommend using T5X:
+
+[T5X](https://github.com/google-research/t5x) is the new and improved implementation of T5 (and more) in JAX and Flax.
+T5 on Tensorflow with MeshTF is no longer actively developed. If you are new
+to T5, we recommend starting with [T5X](https://github.com/google-research/t5x).
+
 [![Build Status](https://github.com/google-research/text-to-text-transfer-transformer/workflows/build/badge.svg)](https://github.com/google-research/text-to-text-transfer-transformer/actions?query=workflow%3Abuild)
 
 The `t5` library serves primarily as code for reproducing the experiments in [_Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer_][paper]. In the paper, we demonstrate how to achieve state-of-the-art results on multiple NLP tasks using a text-to-text transformer pre-trained on a large text corpus.
