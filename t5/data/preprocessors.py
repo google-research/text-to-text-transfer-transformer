@@ -2901,7 +2901,8 @@ def regular_noise_mask(length,
 def random_spans_noise_mask(length,
                             noise_density,
                             seeds,
-                            mean_noise_span_length=3.0):
+                            mean_noise_span_length=3.0,
+                            random_roll=True):
   """Noise mask consisting of random spans of noise tokens.
 
   The number of noise tokens and the number of noise spans and non-noise spans
@@ -2919,6 +2920,7 @@ def random_spans_noise_mask(length,
     noise_density: a float - approximate density of output mask
     seeds: an int32 Tensor, shaped (2, 2)
     mean_noise_span_length: a number
+    random_roll: bool, whether to randomly roll the mask by a random offset.
 
   Returns:
     a boolean tensor with shape [length]
@@ -2974,7 +2976,16 @@ def random_spans_noise_mask(length,
       tf.ones_like(span_starts), span_starts, length)
   span_num = tf.cumsum(span_start_indicator)
   is_noise = tf.equal(span_num % 2, 1)
-  return is_noise[:orig_length]
+
+  mask = is_noise[:orig_length]
+
+  if random_roll:
+    # roll the mask by a random offset e.g. for offset=2: [1,2,3,4] => [3,4,1,2]
+    offset = tf.random.stateless_uniform(
+        [1], seed=seeds[0], dtype=tf.int32, minval=0, maxval=length)[0]
+    mask = tf.roll(mask, shift=offset, axis=0)
+
+  return mask
 
 
 @gin.configurable()
