@@ -1919,7 +1919,6 @@ def preprocess_tsv(line,
 # ======================Token Preprocessors=====================================
 
 
-# TODO(adarob): Add a test.
 def span_corruption(dataset,
                     sequence_length,
                     output_features,
@@ -1927,7 +1926,8 @@ def span_corruption(dataset,
                     noise_density=0.15,
                     input_feature_key='inputs',
                     merge_examples_to_reduce_padding=True,
-                    reserved_for_packing=None):
+                    reserved_for_packing=None,
+                    passthrough_feature_keys: Optional[Sequence[str]] = None):
   """Final pretraining objective used in Raffel et al., 2019.
 
   Args:
@@ -1945,6 +1945,9 @@ def span_corruption(dataset,
     reserved_for_packing: if specified, reduces the desired inputs length by the
       specified amount to enable multiple examples to be packed together
       downstream.
+    passthrough_feature_keys: a sequence of feature names that should be passed
+      through to the output of this preprocessor. eg: ["tokens"]. Only
+      supported if `merge_examples_to_reduce_padding` is set to False.
 
   Returns:
     a dataset
@@ -1971,14 +1974,20 @@ def span_corruption(dataset,
       ds,
       output_features=output_features,
       feature_key='targets',
-      max_length=65536)
+      max_length=65536,
+      passthrough_feature_keys=passthrough_feature_keys)
   if merge_examples_to_reduce_padding:
+    if passthrough_feature_keys:
+      raise ValueError('passthrough_feature_keys not supported with '
+                       'merge_examples_to_reduce_padding=True. '
+                       f'Got: {passthrough_feature_keys}')
     ds = reduce_concat_tokens(ds, feature_key='targets', batch_size=128)
   ds = split_tokens(
       ds,
       feature_key='targets',
       min_tokens_per_segment=None,
-      max_tokens_per_segment=input_length)
+      max_tokens_per_segment=input_length,
+      passthrough_feature_keys=passthrough_feature_keys)
   ds = denoise(
       ds,
       output_features,
@@ -1988,7 +1997,8 @@ def span_corruption(dataset,
       noise_mask_fn=functools.partial(
           random_spans_noise_mask,
           mean_noise_span_length=mean_noise_span_length),
-      input_feature_key=input_feature_key)
+      input_feature_key=input_feature_key,
+      passthrough_feature_keys=passthrough_feature_keys)
   return ds
 
 

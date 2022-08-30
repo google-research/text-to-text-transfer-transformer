@@ -2304,6 +2304,64 @@ class PreprocessorsTest(tf.test.TestCase):
     }
     assert_dataset(dataset, expected)
 
+  # TODO(adarob): Add more than a smoke test.
+  def test_span_corruption(self):
+    vocab = test_utils.sentencepiece_vocab()
+    inp = list(range(1, 100))
+    og_dataset = tf.data.Dataset.from_tensor_slices({'targets': [inp]})
+    og_dataset = og_dataset.repeat(100)
+    output_features = {
+        'targets': seqio.Feature(vocab),
+        'inputs': seqio.Feature(vocab),
+    }
+    output_dataset = prep.span_corruption(
+        og_dataset,
+        sequence_length={'targets': 100, 'inputs': 100},
+        output_features=output_features,
+        merge_examples_to_reduce_padding=True)
+    output_keys = list(output_dataset.as_numpy_iterator())[0].keys()
+    self.assertSequenceEqual(['inputs', 'targets'], list(output_keys))
+
+  def test_span_corruption_passthrough(self):
+    # No merging of examples, passthrough keys
+    vocab = test_utils.sentencepiece_vocab()
+    inp = list(range(1, 100))
+    pt = list(range(1, 20))
+    og_dataset = tf.data.Dataset.from_tensor_slices({
+        'targets': [inp],
+        'passthrough': [pt],
+    })
+    og_dataset = og_dataset.repeat(100)
+    output_features = {
+        'targets': seqio.Feature(vocab),
+        'inputs': seqio.Feature(vocab),
+        'passthrough': seqio.Feature(vocab),
+    }
+
+    output_dataset = prep.span_corruption(
+        og_dataset,
+        sequence_length={'targets': 100, 'inputs': 100},
+        output_features=output_features,
+        merge_examples_to_reduce_padding=False,
+        passthrough_feature_keys=['passthrough'])
+
+    for ex in output_dataset.as_numpy_iterator():
+      self.assertLessEqual(len(ex['inputs']), len(inp))
+      self.assertAllEqual(pt, ex['passthrough'])
+
+  def test_span_corruption_passthrough_fail(self):
+    og_dataset = tf.data.Dataset.from_tensor_slices({
+        'targets': [list(range(1, 100))],
+        'passthrough': [list(range(1, 20))],
+    })
+    with self.assertRaises(ValueError):
+      _ = prep.span_corruption(
+          og_dataset,
+          sequence_length={'targets': 100, 'inputs': 100},
+          output_features=None,
+          merge_examples_to_reduce_padding=True,
+          passthrough_feature_keys=['passthrough'])
+
 
 if __name__ == '__main__':
   absltest.main()
