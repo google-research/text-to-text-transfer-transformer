@@ -81,6 +81,44 @@ class PreprocessorsTest(tf.test.TestCase):
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1]
     self.assertAllEqual(output, expected_output)
 
+  def test_random_spans_noise_mask_with_roll(self):
+    """Test random_spans_noise_mask with roll on a fixed sample+seed."""
+    # Generate a random mask with and without rolling.
+    noise_mask_values = []
+    for random_roll in (False, True):
+      noise_mask = prep.random_spans_noise_mask(length=32,
+                                                noise_density=0.25,
+                                                seeds=[(1, 2), (3, 4)],
+                                                mean_noise_span_length=3,
+                                                random_roll=random_roll)
+      noise_mask_values += [self.evaluate(tf.cast(noise_mask, tf.int32))]
+
+    # Assert the only difference between the masks is a roll, shifted by 20.
+    mask_no_roll = noise_mask_values[0]
+    mask_yes_roll = tf.roll(noise_mask_values[1], shift=20, axis=0)
+    self.assertAllEqual(mask_yes_roll, mask_no_roll)
+
+  def test_random_spans_noise_mask_with_roll_avg(self):
+    """Test that the empirical mask density is close to the desired density."""
+    noise_density = 0.15
+    total_masked = 0
+    total_lengths = 0
+    # Sample 50 random masks and count how many positions are masked.
+    for i in range(50):
+      span_len = 3
+      length = 16 + (i % span_len)  # Vary mask length, keeping it short.
+      noise_mask = prep.random_spans_noise_mask(length=length,
+                                                noise_density=noise_density,
+                                                seeds=[(1+i, 2), (3+i, 4)],
+                                                mean_noise_span_length=span_len,
+                                                random_roll=True)
+      output = self.evaluate(tf.cast(noise_mask, tf.int32))
+      total_masked += output.sum()
+      total_lengths += length
+
+    empirical_ratio = total_masked / total_lengths
+    self.assertAllClose(empirical_ratio, noise_density, atol=0.01)
+
   def test_random_spans_noise_mask_no_corruption(self):
     length = 32
     noise_density = 0.0
