@@ -1520,7 +1520,8 @@ def rank_classification(
   `inputs_fn` and `targets_fn` must return the 'inputs' and 'targets' features,
   respectively, for each possible class label given the raw example features.
   'is_correct_fn' must return the 'is_correct' feature, a boolean for whether
-  each label is correct.
+  each label is matching with the ground truth target before the examples are
+  expanded.
 
   In 'train' mode, only the inputs / targets marked correct will be produced.
   In 'eval' mode, all inputs / targets will be produced.
