@@ -1,0 +1,13 @@
+# -*-Python-*-
+
+infer_checkpoint_step = "all"
+input_filenames = ["/path/to/inputs"]
+output_filenames = ["/path/to/outputs"]
+
+utils.run.mode = "infer"
+utils.run.eval_checkpoint_step = %infer_checkpoint_step
+
+infer_model.decode_fn = @decode_from_files
+
+decode_from_files.input_filenames = %input_filenames
+decode_from_files.output_filenames = %output_filenames
