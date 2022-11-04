@@ -19,7 +19,7 @@ import functools
 from absl import logging
 import gin
 import mesh_tensorflow.transformer.dataset as transformer_dataset
-import t5.data
+import seqio
 from t5.models import utils as model_utils
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
@@ -31,7 +31,7 @@ DEPRECATED_GIN_REFERENCES = (
     "maybe_print_dataset",
     "num_parallel_calls",
     "SentencePieceVocabulary",
-    "t5.data.sentencepiece_vocabulary.SentencePieceVocabulary",
+    "seqio.sentencepiece_vocabulary.SentencePieceVocabulary",
     "t5.models.mesh_transformer.get_sentencepiece_model_path",
     "train_model",
     "vocabularies.Vocabulary",
@@ -72,7 +72,7 @@ def mesh_train_dataset_fn(
     A tf.data.Dataset of preprocessed, tokenized, and batched examples.
   """
   del vocabulary
-  mixture_or_task = t5.data.get_mixture_or_task(mixture_or_task_name)
+  mixture_or_task = seqio.get_mixture_or_task(mixture_or_task_name)
 
   ds = mixture_or_task.get_dataset(
       sequence_length, split=dataset_split, use_cached=use_cached,
@@ -142,7 +142,7 @@ def mesh_inference_dataset_fn(
     A list of mesh_tensorflow.transformer.dataset.EvalDataset tuples.
   """
   del vocabulary
-  mixture_or_task = t5.data.get_mixture_or_task(mixture_or_task_name)
+  mixture_or_task = seqio.get_mixture_or_task(mixture_or_task_name)
 
   def _split_targets_for_primed_inference(ex):
     ex["inputs"] = ex["targets"][:priming_sequence_length]
@@ -196,7 +196,7 @@ def mesh_inference_dataset_fn(
 
   outputs = []
 
-  for task in t5.data.get_subtasks(mixture_or_task):
+  for task in seqio.get_subtasks(mixture_or_task):
     if dataset_split not in task.splits:
       logging.info("Task %s has no '%s' split, skipping inference.",
                    task.name, dataset_split)
@@ -261,7 +261,7 @@ def mesh_eval_dataset_fn(
   """
   del vocabulary
 
-  mixture_or_task = t5.data.get_mixture_or_task(mixture_or_task_name)
+  mixture_or_task = seqio.get_mixture_or_task(mixture_or_task_name)
 
   def _get_dataset_for_single_task(task, sequence_length):
     """Get a tensorflow.data.Dataset for the provided task."""
@@ -297,7 +297,7 @@ def mesh_eval_dataset_fn(
 
   outputs = []
 
-  for task in t5.data.get_subtasks(mixture_or_task):
+  for task in seqio.get_subtasks(mixture_or_task):
     if dataset_split not in task.splits:
       logging.info(
           "Task %s has no '%s' split, skipping eval.", task.name, dataset_split
@@ -351,7 +351,7 @@ def get_vocabulary(mixture_or_task_name=None):
       appropriate registry. Must be specified via gin.
 
   Returns:
-    Either a single t5.data.vocabularies.Vocabulary or a tuple of
-    t5.data.vocabularies.Vocabulary for inputs and targets.
+    Either a single seqio.vocabularies.Vocabulary or a tuple of
+    seqio.vocabularies.Vocabulary for inputs and targets.
   """
   return model_utils.get_vocabulary(mixture_or_task_name)

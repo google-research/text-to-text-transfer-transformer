@@ -87,7 +87,7 @@ import time
 
 from absl import logging
 import mesh_tensorflow.transformer.dataset as transformer_dataset
-import t5.data
+import seqio
 from t5.models import utils
 from t5.models.t5_model import T5Model
 import tensorflow.compat.v1 as tf
@@ -166,7 +166,7 @@ def _get_dataset(mixture_or_task_or_name,
     A generator that produces batches of numpy examples.
   """
   if isinstance(mixture_or_task_or_name, str):
-    task = t5.data.get_mixture_or_task(mixture_or_task_or_name)
+    task = seqio.get_mixture_or_task(mixture_or_task_or_name)
   else:
     task = mixture_or_task_or_name
 
@@ -319,7 +319,7 @@ class HfPyTorchModel(T5Model):
     """
     self._model.train()
     ds = _get_dataset(mixture_or_task_name, sequence_length, split)
-    task = t5.data.get_mixture_or_task(mixture_or_task_name)
+    task = seqio.get_mixture_or_task(mixture_or_task_name)
     ds = tokens_to_batches(ds, sequence_length, batch_size,
                            tuple(task.output_features), task)
     # Repeat dataset forever
@@ -501,7 +501,7 @@ class HfPyTorchModel(T5Model):
         inputs = [l.strip() for l in f]
 
     if vocabulary is None:
-      vocab = t5.data.get_default_vocabulary()
+      vocab = seqio.get_default_vocabulary()
       vocabs = {"inputs": vocab, "targets": vocab}
     elif isinstance(vocabulary, t5.data.vocabularies.Vocabulary):
       vocabs = {"inputs": vocabulary, "targets": vocabulary}
