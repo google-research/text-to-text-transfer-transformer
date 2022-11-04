@@ -23,6 +23,7 @@ from t5.data.utils import *
 # For backward compatibility
 # TODO(adarob): Remove need for these imports.
 from seqio.dataset_providers import *
+from seqio.dataset_providers_helpers import *
 from t5.data.dataset_providers import TaskRegistry
 from t5.data.dataset_providers import FunctionTask as Task
 from seqio.test_utils import assert_dataset
