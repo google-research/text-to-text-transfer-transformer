@@ -2023,7 +2023,8 @@ def iid_denoising(dataset, sequence_length, output_features):
   return ds
 
 
-def prefix_lm(dataset, sequence_length, output_features):
+def prefix_lm(dataset, sequence_length, output_features,
+              noise_density=0.5):
   """Prefix language modeling objective used in Raffel et al. 2019."""
   ds = dataset
   ds = select_random_chunk(ds, output_features=output_features,
@@ -2035,7 +2036,7 @@ def prefix_lm(dataset, sequence_length, output_features):
       output_features,
       inputs_fn=drop_nonnoise_tokens,
       targets_fn=drop_noise_tokens,
-      noise_density=0.5,
+      noise_density=noise_density,
       noise_mask_fn=random_prefix_noise_mask,
   )
   return ds
@@ -3010,21 +3011,26 @@ def random_prefix_noise_mask(length, noise_density, seeds):
 
   The length of the prefix is chosen uniformly between [1, length)
   noise_density must be 0.5.
-  TODO(noam): figure out some distribution to use if noise_density != 0.5.
 
   Args:
     length: an int32 scalar.
-    noise_density: a float - must equal 0.5.
+    noise_density: a float - must not exceed 0.5.
     seeds: an int32 Tensor, shaped (1, 2), the random seed.
 
   Returns:
     a boolean tensor with shape [length].
   """
-  if noise_density != 0.5:
+  if noise_density > 0.5:
     raise NotImplementedError(
-        'noise density must equal 0.5 for random_prefix_noise_mask')
+        'noise density must not exceed 0.5 for random_prefix_noise_mask')
   max_input_tokens = length - 1
-  min_input_tokens = tf.minimum(max_input_tokens, 1)
+  min_input_tokens = tf.minimum(
+      max_input_tokens,
+      tf.maximum(
+          1,
+          tf.cast(
+              tf.math.round((1 - 2 * noise_density) *
+                            tf.cast(max_input_tokens, tf.float32)), tf.int32)))
   num_input_tokens = tf.random.stateless_uniform(
       [],
       minval=min_input_tokens,
