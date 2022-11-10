@@ -795,6 +795,24 @@ class PreprocessorsTest(tf.test.TestCase):
     _verify_split(100, 1)
     _verify_split(1000, 1)
 
+  def test_split_tokens_passthrough_shuffled(self):
+    original = [[i] * 10 for i in range(100)]
+    original_passthrough = [[i] for i in range(100)]
+    og_dataset = tf.data.Dataset.from_tensor_slices({
+        'targets': original,
+        'passthrough': original_passthrough
+    }).shuffle(10, seed=42)
+    ds = prep.split_tokens(
+        og_dataset, unused_vocabulary=None, max_tokens_per_segment=5,
+        passthrough_feature_keys=['passthrough'])
+    outputs = list(test_utils.dataset_as_text(ds))
+    self.assertLen(outputs, 200)
+    for ex in outputs:
+      self.assertLen(ex['targets'], 5)
+      # After split, passthrough and targets from the same original example
+      # should still correspond.
+      self.assertAllEqual(ex['targets'], tf.tile(ex['passthrough'], [5]))
+
   def test_split_tokens_to_targets_length(self):
     original = list(range(2, 102))
     og_dataset = tf.data.Dataset.from_tensors({'targets': original})

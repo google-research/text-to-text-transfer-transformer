@@ -2499,55 +2499,37 @@ def split_tokens(dataset: tf.data.Dataset,
             [tf.repeat(length, num_segments - 1), [length - padding]], axis=0)
         outputs[k] = tf.reshape(
             padded, tf.concat([[-1, length], shape], axis=0))
-    return outputs, orig_lengths
 
-  def _strip_padding(inputs, orig_lengths):
+    # To avoid memory issues, don't just replicate the passthrough features
+    # for every segment; use tf.data to do it so the copies don't get
+    # instantiated all at once.
+    outputs_ds = tf.data.Dataset.from_tensor_slices(outputs)
+    orig_lengths_ds = tf.data.Dataset.from_tensor_slices(orig_lengths)
+    if passthrough_feature_keys:
+      passthrough = {k: v for k, v in x.items()
+                     if k in passthrough_feature_keys}
+      passthrough_ds = tf.data.Dataset.from_tensors(passthrough).repeat(
+          tf.cast(num_segments, tf.int64))
+      return tf.data.Dataset.zip((outputs_ds, orig_lengths_ds, passthrough_ds))
+    else:
+      return tf.data.Dataset.zip((outputs_ds, orig_lengths_ds))
+
+  def _strip_padding_and_merge_passthrough(
+      inputs, orig_lengths, passthrough=None):
     output = {}
     for k, v in inputs.items():
       output[k] = v[:orig_lengths[k]]
+    if passthrough:
+      for k, v in passthrough.items():
+        output[k] = passthrough[k]
     return output
 
   # Filter empty examples.
   dataset = dataset.filter(lambda x: tf.not_equal(tf.size(x[feature_key]), 0))
 
-  if passthrough_feature_keys:
-    # Extract passthrough keys into a separate dataset.
-    def _extract_passthrough_fields(inputs):
-      return {
-          k: v for k, v in inputs.items() if k in passthrough_feature_keys
-      }
-    passthrough_ds = dataset.map(
-        _extract_passthrough_fields, num_parallel_calls=AUTOTUNE)
-
-  dataset = _split_tokens(dataset)
-
-  if passthrough_feature_keys:
-    # Get number of segments from each example in original dataset.
-    def _extract_num_segments(inputs, orig_lengths):
-      del orig_lengths
-      return tf.shape(inputs[feature_key], out_type=tf.int64)[0]
-    num_segments_ds = dataset.map(
-        _extract_num_segments, num_parallel_calls=AUTOTUNE)
-
-    # Construct a dataset where the passthrough fields are repeated once for
-    # each segment.
-    def _repeat_passthrough_fields(inputs, num_segments):
-      return tf.data.Dataset.from_tensors(inputs).repeat(num_segments)
-    passthrough_ds = tf.data.Dataset.zip(
-        (passthrough_ds, num_segments_ds)).flat_map(_repeat_passthrough_fields)
-
-  dataset = dataset.unbatch()
-  dataset = dataset.map(_strip_padding, num_parallel_calls=AUTOTUNE)
-
-  if passthrough_feature_keys:
-    # Add the passthrough fields back to the original dataset.
-    def _merge_passthrough_fields(inputs, passthrough_inputs):
-      outputs = {}
-      outputs.update(inputs)
-      outputs.update(passthrough_inputs)
-      return outputs
-    dataset = tf.data.Dataset.zip((dataset, passthrough_ds)).map(
-        _merge_passthrough_fields, num_parallel_calls=AUTOTUNE)
+  dataset = _split_tokens(dataset).flat_map(lambda z: z)
+  dataset = dataset.map(
+      _strip_padding_and_merge_passthrough, num_parallel_calls=AUTOTUNE)
 
   return dataset
 
