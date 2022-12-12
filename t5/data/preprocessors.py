@@ -1841,8 +1841,8 @@ def preprocess_tsv(line,
                    inputs_format='numerator: {2} denominator: {1}',
                    targets_format='quotient: {0}'
     would produce a dataset containing the dictionaries:
-    {"inputs": "numerator: 42 denomnator: 7", "targets": "quotient: 6"}
-    {"inputs": "numerator: 18 denomnator: 9", "targets": "quotient: 2"}
+    {"inputs": "numerator: 42 denominator: 7", "targets": "quotient: 6"}
+    {"inputs": "numerator: 18 denominator: 9", "targets": "quotient: 2"}
 
   Example (field names):
     The input dataset contains the lines:
