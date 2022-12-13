@@ -292,7 +292,7 @@ You can also use `greedy_decode.gin` or `sample_decode.gin` instead of `beam_sea
 
 ### Decode
 
-In order to produce predictions from a model in the T5 framework, you need to specify the model directory, decoding method, and which checkpoint step(s) to use for decoding. Assuming you have a text file of input sequences stored at `/path/to/intputs.txt`, an example command would be:
+In order to produce predictions from a model in the T5 framework, you need to specify the model directory, decoding method, and which checkpoint step(s) to use for decoding. Assuming you have a text file of input sequences stored at `/path/to/inputs.txt`, an example command would be:
 
 ```sh
 t5_mesh_transformer \
