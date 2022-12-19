@@ -17,7 +17,7 @@
 import functools
 import os
 import re
-from typing import Iterable, Mapping, MutableSequence, Optional, Sequence, Union
+from typing import Any, Callable, Iterable, Mapping, MutableSequence, Optional, Sequence, Tuple, Union
 
 from absl import logging
 
@@ -232,13 +232,11 @@ class PredictOrScoreFnCallable(typing_extensions.Protocol):
   """Signature for `predict_or_score_fn` passed to `run_eval`."""
 
   def __call__(
-      self,
-      checkpoint_step: int,
-      vocabulary: seqio.Vocabulary,
-      tasks: Sequence[seqio.Task],
-      datasets: Mapping[str, tf.data.Dataset],
+      self, checkpoint_step: int, vocabulary: seqio.Vocabulary,
+      tasks: Sequence[seqio.Task], datasets: Mapping[str, tf.data.Dataset],
       sequence_length: Union[None, Mapping[str, int]]
-  ) -> MutableSequence[Union[str, float]]: ...
+  ) -> MutableSequence[Union[str, float]]:
+    ...
 
 
 class DatasetFnCallable(typing_extensions.Protocol):
@@ -248,7 +246,76 @@ class DatasetFnCallable(typing_extensions.Protocol):
       task: seqio.Task,
       sequence_length: Mapping[str, int],
       split: str,
-  ) -> tf.data.Dataset: ...
+  ) -> tf.data.Dataset:
+    ...
+
+
+def get_targets_and_examples(
+    tasks: Sequence[seqio.Task],
+    dataset_fn: Callable[[seqio.Task], tf.data.Dataset],
+    sequence_dims: Mapping[str, int],
+    num_examples: Optional[int] = None,
+    use_memory_cache: bool = True,
+    target_field_name: str = "targets"
+) -> Tuple[Mapping[str, Any], Mapping[str, tf.data.Dataset], Mapping[str, int]]:
+  """Get targets, cached datasets, and maximum sequence lengths per feature.
+
+  Args:
+    tasks: tasks objects to get targets and examples for.
+    dataset_fn: function, returns the dataset from the task object.
+    sequence_dims: dict of feature names to their sequence dimension.
+    num_examples: an optional maximum number of examples to take from the
+      beginning of each task dataset.
+    use_memory_cache: whether to use tf.data.Dataset#cache. may cause memory
+      issues for large datasets.
+    target_field_name: Field name of the target in the input dataset examples.
+
+  Returns:
+    cached_targets: unpreprocessed targets for each task
+    cached_task_datasets: cached datasets for each task, with cardinality set
+    max_sequence_length: maximum sequence lengths for inputs and targets across
+      all tasks.
+  """
+  # Pre-load in all of the targets once before entering continuous eval loop
+  cached_targets = {}
+  cached_task_datasets = {}
+  max_sequence_length = {k: 0 for k in tasks[0].output_features.keys()}
+
+  for task in tasks:
+    assert max_sequence_length.keys() == task.output_features.keys(), (
+        "all tasks must have the same features")
+
+  for task in tasks:
+    ds = dataset_fn(task)
+    if num_examples:
+      ds = ds.take(num_examples)
+    if use_memory_cache:
+      ds = ds.cache()
+
+    targets = []
+
+    for ex in tfds.as_numpy(ds):
+      for k in max_sequence_length:
+        sequence_dim = sequence_dims.get(k, 0)
+        sequence_length = ex[k].shape[sequence_dim]
+        max_sequence_length[k] = max(max_sequence_length[k], sequence_length)
+
+      # Create list of postprocessed targets
+      pretokenized_target_field_name = target_field_name + "_pretokenized"
+      if pretokenized_target_field_name in ex:
+        target = ex[pretokenized_target_field_name]
+      else:
+        target = task.output_features[target_field_name].vocabulary.decode(
+            list(ex[target_field_name]))
+      if isinstance(target, bytes):
+        target = target.decode("utf-8")
+      targets.append(task.postprocess_fn(target, example=ex, is_target=True))
+
+    cached_targets[task.name] = targets
+    cached_task_datasets[task.name] = ds.apply(
+        tf.data.experimental.assert_cardinality(len(targets)))
+
+  return cached_targets, cached_task_datasets, max_sequence_length
 
 
 def run_eval(
@@ -300,7 +367,7 @@ def run_eval(
   summary_writer = None
 
   cached_targets, cached_datasets, max_sequence_length = (
-      seqio.evaluation.get_targets_and_examples(
+      get_targets_and_examples(
           tasks=tasks,
           dataset_fn=functools.partial(
               dataset_fn, split=split, sequence_length=None),
