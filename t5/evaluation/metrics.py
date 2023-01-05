@@ -66,21 +66,22 @@ def bleu(targets, predictions, tokenizer="intl"):
   return {"bleu": bleu_score.score}
 
 
-def rouge(targets, predictions, score_keys=None, tokenizer=None):
+def rouge(targets,
+          predictions,
+          score_keys=("rouge1", "rouge2", "rougeLsum"),
+          **kwargs):
   """Computes rouge score.
 
   Args:
     targets: list of strings
     predictions: list of strings
     score_keys: list of strings with the keys to compute.
-    tokenizer: Tokenizer object which has a tokenize() method.
+    **kwargs: additional keyword arguments for RougeScorer.
   Returns:
     dict with score_key: rouge score across all targets and predictions
   """
 
-  if score_keys is None:
-    score_keys = ["rouge1", "rouge2", "rougeLsum"]
-  scorer = rouge_scorer.RougeScorer(score_keys, tokenizer=tokenizer)
+  scorer = rouge_scorer.RougeScorer(rouge_types=score_keys, **kwargs)
   aggregator = scoring.BootstrapAggregator()
 
   def _prepare_summary(summary):
