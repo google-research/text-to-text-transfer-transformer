@@ -160,7 +160,7 @@ for b in tfds.text.glue.Glue.builder_configs.values():
 # =============================== CNN DailyMail ================================
 TaskRegistry.add(
     "cnn_dailymail_v002",
-    source=seqio.TfdsDataSource(tfds_name="cnn_dailymail:3.1.0"),
+    source=seqio.TfdsDataSource(tfds_name="cnn_dailymail:3.4.0"),
     preprocessors=[
         functools.partial(
             preprocessors.summarize,
