@@ -46,6 +46,7 @@ setuptools.setup(
         'absl-py',
         'babel',
         'editdistance',
+        'immutabledict',
         'gin-config',
         'mesh-tensorflow[transformer]>=0.1.13',
         'nltk',

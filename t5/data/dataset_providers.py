@@ -22,6 +22,7 @@ separate preprocessing into text and token stages, with optional caching in
 between.
 """
 
+from collections.abc import Mapping
 import re
 
 import seqio
@@ -88,7 +89,7 @@ class FunctionTask(seqio.Task):
       raise ValueError("output_features must be non-empty.")
     if output_features is None:
       output_features = seqio.Feature(utils.get_default_vocabulary())
-    if isinstance(output_features, dict):
+    if isinstance(output_features, Mapping):
       pass
     elif isinstance(output_features, seqio.Feature):
       output_features = {k: output_features for k in _DEFAULT_FEATURE_KEYS}

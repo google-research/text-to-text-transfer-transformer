@@ -16,6 +16,7 @@
 import os
 
 from absl.testing import absltest
+import immutabledict
 import seqio
 from seqio import test_utils
 from t5.data import dataset_providers
@@ -51,6 +52,15 @@ class TasksTest(test_utils.FakeTaskTest):
   def test_tfds_task(self):
     _add_t5_task(
         "t5_tfds_task", dataset_providers.TfdsTask, tfds_name="fake:0.0.0")
+    self.verify_task_matches_fake_datasets("t5_tfds_task", use_cached=False)
+
+  def test_immutabledict_features(self):
+    _add_t5_task(
+        "t5_tfds_task", dataset_providers.TfdsTask, tfds_name="fake:0.0.0",
+        output_features=immutabledict.immutabledict({
+            "inputs": seqio.Feature(test_utils.sentencepiece_vocab()),
+            "targets": seqio.Feature(test_utils.sentencepiece_vocab())
+        }))
     self.verify_task_matches_fake_datasets("t5_tfds_task", use_cached=False)
 
   def test_function_task(self):
