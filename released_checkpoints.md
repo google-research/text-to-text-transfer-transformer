@@ -8,7 +8,7 @@ These checkpoints are not officially supported - use at your own risk!
 
 Similar to the models described in our [paper][paper], with the following improvements:
 
-*  GEGLU activation in feed-forward hidden layer, rather than ReLU - see https://arxiv.org/abs/2002.05202 .
+*  GELU activation in feed-forward hidden layer, rather than ReLU - see https://arxiv.org/abs/2002.05202 .
 
 * Dropout was turned off in pre-training (quality win).  Dropout should be re-enabled during fine-tuning.
 
