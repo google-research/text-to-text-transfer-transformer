@@ -1614,19 +1614,27 @@ def rank_classification(
         'is_correct': is_correct,
     }
 
-    if passthrough_feature_keys is not None:
-      for feature_name in passthrough_feature_keys:
-        tiled_shape = tf.concat(
-            [tf.expand_dims(tf.shape(targets)[0], axis=0),
-             tf.ones(len(ex[feature_name].shape), dtype=tf.int32)],
-            axis=0)
-        output[feature_name] = tf.tile(
-            tf.expand_dims(ex[feature_name], axis=0),
-            tiled_shape)
-
     if weight_fn is not None:
       output['weight'] = tf.fill(tf.shape(is_correct), weight_fn(ex))
       output['weight'] = tf.cast(output['weight'], tf.float32)
+
+    for feature_name in passthrough_feature_keys or []:
+      if feature_name in output:
+        raise ValueError(
+            f'The feature {feature_name} to pass through, already exists'
+            'in the preprocessed output. Try renaming it to something else.'
+        )
+
+      tiled_shape = tf.concat(
+          [
+              tf.expand_dims(tf.shape(targets)[0], axis=0),
+              tf.ones(len(ex[feature_name].shape), dtype=tf.int32),
+          ],
+          axis=0,
+      )
+      output[feature_name] = tf.tile(
+          tf.expand_dims(ex[feature_name], axis=0), tiled_shape
+      )
 
     return output
 
