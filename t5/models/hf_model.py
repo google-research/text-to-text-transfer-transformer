@@ -88,6 +88,7 @@ import time
 from absl import logging
 import mesh_tensorflow.transformer.dataset as transformer_dataset
 import seqio
+import t5.data
 from t5.models import utils
 from t5.models.t5_model import T5Model
 import tensorflow.compat.v1 as tf
@@ -501,9 +502,9 @@ class HfPyTorchModel(T5Model):
         inputs = [l.strip() for l in f]
 
     if vocabulary is None:
-      vocab = seqio.get_default_vocabulary()
+      vocab = t5.data.get_default_vocabulary()
       vocabs = {"inputs": vocab, "targets": vocab}
-    elif isinstance(vocabulary, t5.data.vocabularies.Vocabulary):
+    elif isinstance(vocabulary, seqio.Vocabulary):
       vocabs = {"inputs": vocabulary, "targets": vocabulary}
     elif isinstance(vocabulary, dict):
       vocabs = vocabulary
