@@ -1,4 +1,4 @@
-# Copyright 2022 The T5 Authors.
+# Copyright 2023 The T5 Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,4 +17,4 @@ r"""Separate file for storing the current version of T5.
 Stored in a separate file so that setup.py can reference the version without
 pulling in all the dependencies in __init__.py.
 """
-__version__ = '0.9.3'
+__version__ = '0.9.4'

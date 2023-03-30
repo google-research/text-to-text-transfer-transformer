@@ -1,4 +1,4 @@
-# Copyright 2022 The T5 Authors.
+# Copyright 2023 The T5 Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -60,22 +60,33 @@ setuptools.setup(
         'seqio-nightly',
         'six>=1.14',  # TODO(adarob): Remove once rouge-score is updated.
         'tfds-nightly',
-        'torch',
         'transformers>=2.7.0',
     ],
     extras_require={
         'gcp': [
-            'gevent', 'google-api-python-client', 'google-compute-engine',
-            'google-cloud-storage', 'oauth2client'
+            'gevent',
+            'google-api-python-client',
+            'google-compute-engine',
+            'google-cloud-storage',
+            'oauth2client',
         ],
         'cache-tasks': ['apache-beam'],
-        'test': ['pytest'],
+        'test': ['pytest', 'torch'],
     },
     entry_points={
         'console_scripts': [
-            't5_mesh_transformer = t5.models.mesh_transformer_main:console_entry_point',
-            't5_cache_tasks = seqio.scripts.cache_tasks_main:console_entry_point',
-            't5_inspect_tasks = seqio.scripts.inspect_tasks_main:console_entry_point',
+            (
+                't5_mesh_transformer ='
+                ' t5.models.mesh_transformer_main:console_entry_point'
+            ),
+            (
+                't5_cache_tasks ='
+                ' seqio.scripts.cache_tasks_main:console_entry_point'
+            ),
+            (
+                't5_inspect_tasks ='
+                ' seqio.scripts.inspect_tasks_main:console_entry_point'
+            ),
         ],
     },
     classifiers=[
