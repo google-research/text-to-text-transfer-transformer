@@ -24,18 +24,26 @@ import collections
 import itertools
 import re
 import string
-from typing import Dict, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Mapping, Optional, Sequence, Tuple, Union
 
 from absl import logging
 import editdistance
+import flax
+import jax.numpy as jnp
 import numpy as np
 import sacrebleu
 import scipy.stats
+import seqio
 import sklearn.metrics
 from t5.evaluation import qa_utils
+import tensorflow.compat.v2 as tf
 
 from rouge_score import rouge_scorer
 from rouge_score import scoring
+
+
+ModelOutputType = seqio.metrics.ModelOutputType
+CollectingMetric = seqio.metrics.CollectingMetric
 
 
 def bleu(targets, predictions, tokenizer="intl"):
@@ -643,3 +651,103 @@ def edit_distance(targets, predictions, lower=True):
           "mean_edit": np.mean(edit_distances),
           "median_edit": np.median(edit_distances),
           "sum_edit": sum(edit_distances)}
+
+
+@flax.struct.dataclass
+class ShardedSquad(seqio.metrics.Metric):
+  """Implements SQuAD metrics, maximizing over answers per question."""
+
+  f1: float = 0.0
+  em: float = 0.0
+  count: int = 0
+  model_output_type: ModelOutputType = ModelOutputType.PREDICTION
+
+  @classmethod
+  def empty(cls) -> "ShardedSquad":
+    return cls(f1=0.0, em=0.0, count=0)
+
+  @classmethod
+  def from_model_output(
+      cls,
+      inputs: Sequence[Mapping[str, Any]],
+      model_output: np.ndarray,
+      features: Mapping[str, seqio.Feature],
+      target_field_name: str = "targets",
+      mask: Optional[np.ndarray] = None,
+      indices_2d: Optional[np.ndarray] = None) -> "ShardedSquad":
+
+    del indices_2d
+    if mask is None:
+      mask = jnp.ones((len(inputs),))
+
+    # Postprocesses the targets here.
+    postprocessed_targets = [[
+        tf.compat.as_text(answers) for answers in example["answers"]
+    ] for example, included in zip(inputs, mask) if included]
+
+    # Decodes the predictions here.
+    vocab = features[target_field_name].vocabulary
+    predictions = [
+        vocab.decode(tokens)
+        for tokens, included in zip(model_output, mask)
+        if included
+    ]
+
+    squad_result = squad(targets=postprocessed_targets, predictions=predictions)
+    return cls(f1=squad_result["f1"], em=squad_result["em"], count=mask.sum())
+
+  def merge(self, other: "ShardedSquad") -> "ShardedSquad":
+    """Returns `Squad` that is the accumulation of `self` and `other`.
+
+    Args:
+      other: A `Squad` whose inermediate values should be accumulated onto the
+        values of `self`. Note that in a distributed setting, `other` will
+        typically be the output of a `jax.lax` parallel operator and thus have a
+        dimension added to the dataclass returned by `.from_model_output()`.
+
+    Returns:
+      A new `Squad` that accumulates the value from both `self` and `other`.
+    """
+    count = self.count + other.count
+    f1 = (self.f1 * self.count + other.f1 * other.count)/count
+    em = (self.em * self.count + other.em * other.count)/count
+
+    return type(self)(f1=f1, em=em, count=count)
+
+  def compute(self):
+    return {"f1": self.f1, "em": self.em}
+
+
+@flax.struct.dataclass
+class PassthroughSquad(CollectingMetric):
+  """Implements SQuAD metrics, maximizing over answers per question."""
+
+  model_output_type: ModelOutputType = ModelOutputType.PREDICTION
+
+  def actual_compute(self, task_dataset_as_numpy, task_output_features,
+                     target_field_name: str = "targets"):
+    # Postprocesses the targets here.
+    postprocessed_targets = [[
+        tf.compat.as_text(answers) for answers in example["answers"]
+    ] for example in task_dataset_as_numpy]
+
+    # We process the model outputs here by the steps below.
+    # Step 1: removes padded examples using mask.
+    indices_2d = self.values["indices_2d"][self.values["mask"] == 1]
+    model_output = self.values["model_output"][self.values["mask"] == 1]
+    assert len(postprocessed_targets) == len(indices_2d)
+
+    # Step 2: sorts the model outputs by 2d-indices, namely (shard_id,
+    # index_within_shard) to align with targets.
+    permutation = np.lexsort((indices_2d[:, 1], indices_2d[:, 0]))
+    model_output = [
+        model_output[permutation[i]] for i in range(len(permutation))
+    ]
+
+    # Decodes the predictions here.
+    target_vocab = task_output_features[target_field_name].vocabulary
+    predictions = [
+        target_vocab.decode(tokens) for tokens in model_output
+    ]
+
+    return squad(postprocessed_targets, predictions), None
