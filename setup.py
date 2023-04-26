@@ -51,7 +51,8 @@ setuptools.setup(
         'mesh-tensorflow[transformer]>=0.1.13',
         'nltk',
         'numpy',
-        'pandas',
+        # TODO(kehanghan): Remove once test_log_csv can use new pandas APIs.
+        'pandas<2.0.0',
         'rouge-score>=0.1.2',
         'sacrebleu',
         'scikit-learn',
