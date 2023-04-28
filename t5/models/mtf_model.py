@@ -353,7 +353,7 @@ class MtfModel(T5Model):
                          if compute_sequence_length else self._sequence_length),
         batch_size=self._batch_size)
 
-  def finetune(self,
+  def finetune(self,  # pytype: disable=signature-mismatch  # overriding-parameter-count-checks
                mixture_or_task_name,
                finetune_steps,
                pretrained_model_dir,
@@ -385,7 +385,7 @@ class MtfModel(T5Model):
                init_checkpoint=os.path.join(pretrained_model_dir, model_ckpt),
                split=split)
 
-  def predict(self, input_file, output_file, checkpoint_steps=-1,
+  def predict(self, input_file, output_file, checkpoint_steps=-1,  # pytype: disable=signature-mismatch  # overriding-parameter-count-checks
               beam_size=1, temperature=1.0, keep_top_k=-1, vocabulary=None):
     """Predicts targets from the given inputs.
 
