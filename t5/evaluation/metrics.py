@@ -489,6 +489,26 @@ def rank_classification(
   get_idx = lambda x: x[0][0]
   targets, scores = zip(*sorted(zip(targets, scores), key=get_idx))
 
+  def all_unique(indices):
+    seen = set()
+    for idx in indices:
+      if idx in seen:
+        return False
+      seen.add(idx)
+    return True
+
+  indices = (t[0] for t in targets)
+  if not all_unique(indices):
+    err_msg = (
+        "rank_classification metric function received targets list with"
+        " non-unique indices. There's no way to distinguish the items, so the"
+        " metric can't be computed. Most likely, this is caused by using SeqIO"
+        " rank_classification preprocessor (or a similar one) in a multi-host"
+        " experiment. To fix this, either use Pathways, or make the ids random"
+        " with big enough range to make them unique."
+    )
+    raise ValueError(err_msg)
+
   if not num_classes:
     # Assuming variable classes. Can only compute accuracy.
     num_correct = 0
