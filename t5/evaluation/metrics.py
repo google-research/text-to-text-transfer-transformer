@@ -463,7 +463,7 @@ def rank_classification(
     Accuracy, f1, and AUC scores.
 
   Raises:
-    ValueError: if `targets` is not a sequence of 3-tuples.
+    ValueError: if `targets` is not a sequence of 4-tuples.
   """
   assert len(targets) == len(scores)
   if len(targets[0]) != 4:
@@ -485,7 +485,7 @@ def rank_classification(
                      f"{idx_len}-dimensional. Got {idx_0}.")
 
   # Sort by 'idx' since the function relies on this assumption.
-  # ((idx, is_correct, weight), score)
+  # ((idx, is_correct, weight, target_length), score)
   get_idx = lambda x: x[0][0]
   targets, scores = zip(*sorted(zip(targets, scores), key=get_idx))
 
@@ -514,7 +514,7 @@ def rank_classification(
     num_correct = 0
     total = 0
 
-    # (((input idx, output idx), is_correct, weight), score)
+    # (((input idx, output idx), is_correct, weight, target_length), score)
     get_grp = lambda x: x[0][0][0]
 
     for _, grp in itertools.groupby(zip(targets, scores), get_grp):
