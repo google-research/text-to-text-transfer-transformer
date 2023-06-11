@@ -1925,6 +1925,56 @@ def preprocess_tsv(line,
   }
 
 
+@seqio.utils.map_over_dataset
+def preprocess_tensorflow_examples(example, inputs_format, targets_format):
+  """Parse dict of tf.tensors into inputs and targets.
+
+  This function takes a tf.data.Dataset of strings. The function returns a
+  tf.data.Dataset of feature dictionaries of the form {"inputs": string,
+  "targets": string}.
+
+  inputs_format contains a template string used to produce the "inputs" string.
+  targets_format contains a template string used to produce the "targets"
+  string.
+
+  Args:
+    example (Dict[str, tf.Tensor]): The example to preprocess, represented as a
+      dictionary where the keys are the feature names and the values are
+      TensorFlow tensors.
+    inputs_format (str): A format string specifying how to preprocess the
+      inputs. The format string can include placeholder fields surrounded by
+      curly braces, which will be replaced by the corresponding values from the
+      example dictionary. For example, if the inputs_format is "Summarize this
+      {text}", the format string "{text}" will be replaced by the actual
+      tensor value.
+    targets_format (str): A format string specifying how to preprocess the
+      targets. It follows the same rules as the `inputs_format`.
+
+  Returns:
+    Dict[str, tf.Tensor]: The preprocessed example, where the inputs and targets
+    have been formatted according to the provided format strings.
+  """
+
+  def _format(format_string, ex):
+    field_names = ex.keys()
+    field_names_re = (
+        '(' + '|'.join(['{{{}}}'.format(x) for x in field_names]) + ')'
+    )
+    parts = []
+    for p in re.split(field_names_re, format_string):
+      p_name = p[1:-1]
+      if p_name in field_names:
+        parts.append(ex[p_name])
+      else:
+        parts.append(p)
+    return tf.strings.join(parts)
+
+  return {
+      'inputs': _format(inputs_format, example),
+      'targets': _format(targets_format, example),
+  }
+
+
 # ======================Token Preprocessors=====================================
 
 

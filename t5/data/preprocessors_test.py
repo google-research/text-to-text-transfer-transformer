@@ -2360,6 +2360,43 @@ class PreprocessorsTest(tf.test.TestCase):
     }
     assert_dataset(dataset, expected)
 
+  def test_preprocess_tensorflow_examples(self):
+    example = {
+        'text': tf.constant(['Hello1', 'Hello2']),
+        'label': tf.constant(['World1', 'World2']),
+    }
+    dataset = tf.data.Dataset.from_tensor_slices(example)
+
+    inputs_format = 'Input: {text}'
+    targets_format = 'Output: {label}'
+
+    expected_inputs = ['Input: Hello1', 'Input: Hello2']
+    expected_targets = ['Output: World1', 'Output: World2']
+
+    preprocessed_dataset = prep.preprocess_tensorflow_examples(
+        dataset, inputs_format, targets_format
+    )
+
+    preprocessed_examples = list(preprocessed_dataset)
+
+    self.assertLen(preprocessed_examples, 2)
+
+    self.assertEqual(
+        preprocessed_examples[0]['inputs'].numpy().decode(), expected_inputs[0]
+    )
+    self.assertEqual(
+        preprocessed_examples[0]['targets'].numpy().decode(),
+        expected_targets[0],
+    )
+
+    self.assertEqual(
+        preprocessed_examples[1]['inputs'].numpy().decode(), expected_inputs[1]
+    )
+    self.assertEqual(
+        preprocessed_examples[1]['targets'].numpy().decode(),
+        expected_targets[1],
+    )
+
   # TODO(adarob): Add more than a smoke test.
   def test_span_corruption(self):
     vocab = test_utils.sentencepiece_vocab()
