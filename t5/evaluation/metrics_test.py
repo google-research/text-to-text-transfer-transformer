@@ -49,12 +49,20 @@ class MetricsTest(test_utils.BaseMetricsTest):
     self.assertDictClose(
         metrics.rouge([ref, ref], [ref, ref]),
         {"rouge1": 100, "rouge2": 100, "rougeLsum": 100})
+    self.assertDictClose(
+        metrics.rouge_mean([ref, ref], [ref, ref]),
+        {"rouge1": 100, "rouge2": 100, "rougeLsum": 100},
+    )
 
   def test_different_rouge(self):
     ref = "this is a string"
     self.assertDictClose(
         metrics.rouge([ref, ref], ["", ""]),
         {"rouge1": 0, "rouge2": 0, "rougeLsum": 0})
+    self.assertDictClose(
+        metrics.rouge_mean([ref, ref], ["", ""]),
+        {"rouge1": 0, "rouge2": 0, "rougeLsum": 0},
+    )
 
   def test_same_squad(self):
     ref = "this is a string"

@@ -73,17 +73,27 @@ def bleu(targets, predictions, tokenizer="intl"):
   return {"bleu": bleu_score.score}
 
 
-def rouge(targets,
-          predictions,
-          score_keys=("rouge1", "rouge2", "rougeLsum"),
-          **kwargs):
-  """Computes rouge score.
+def _prepare_summary_rouge(summary):
+  # Make sure the summary is not bytes-type
+  # Add newlines between sentences so that rougeLsum is computed correctly.
+  summary = summary.replace(" . ", " .\n")
+  return summary
+
+
+def rouge(
+    targets,
+    predictions,
+    score_keys=("rouge1", "rouge2", "rougeLsum"),
+    **kwargs,
+):
+  """Computes rouge score nondeterministically using the bootstrap.
 
   Args:
     targets: list of strings
     predictions: list of strings
     score_keys: list of strings with the keys to compute.
     **kwargs: additional keyword arguments for RougeScorer.
+
   Returns:
     dict with score_key: rouge score across all targets and predictions
   """
@@ -91,15 +101,9 @@ def rouge(targets,
   scorer = rouge_scorer.RougeScorer(rouge_types=score_keys, **kwargs)
   aggregator = scoring.BootstrapAggregator()
 
-  def _prepare_summary(summary):
-    # Make sure the summary is not bytes-type
-    # Add newlines between sentences so that rougeLsum is computed correctly.
-    summary = summary.replace(" . ", " .\n")
-    return summary
-
   for prediction, target in zip(predictions, targets):
-    target = _prepare_summary(target)
-    prediction = _prepare_summary(prediction)
+    target = _prepare_summary_rouge(target)
+    prediction = _prepare_summary_rouge(prediction)
     aggregator.add_scores(scorer.score(target=target, prediction=prediction))
   result = aggregator.aggregate()
   for key in score_keys:
@@ -111,6 +115,40 @@ def rouge(targets,
         result[key].high.fmeasure*100,
     )
   return {key: result[key].mid.fmeasure*100 for key in score_keys}
+
+
+def rouge_mean(
+    targets,
+    predictions,
+    score_keys=("rouge1", "rouge2", "rougeLsum"),
+    **kwargs,
+):
+  """Computes rouge score deterministically (no bootstrap).
+
+  Args:
+    targets: list of strings
+    predictions: list of strings
+    score_keys: list of strings with the keys to compute
+    **kwargs: additional keyword arguments for RougeScorer.
+
+  Returns:
+    dict with score_key: rouge score across all targets and predictions
+  """
+
+  scorer = rouge_scorer.RougeScorer(rouge_types=score_keys, **kwargs)
+  count = 0
+  sum_scores = collections.defaultdict(float)
+  for prediction, target in zip(predictions, targets):
+    target = _prepare_summary_rouge(target)
+    prediction = _prepare_summary_rouge(prediction)
+    scores = scorer.score(target=target, prediction=prediction)
+    count += 1
+    for k, v in scores.items():
+      sum_scores[k] += v.fmeasure
+  if count == 0:
+    raise ValueError("Predictions and targets must both have nonzero length")
+  result = {k: v / count for k, v in sum_scores.items()}
+  return {key: result[key] * 100 for key in score_keys}
 
 
 def span_squad(targets, predictions):
@@ -735,4 +773,3 @@ class ShardedSquad(seqio.metrics.Metric):
 
   def compute(self):
     return {"f1": self.f1, "em": self.em}
-
