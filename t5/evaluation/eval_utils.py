@@ -238,7 +238,7 @@ def metric_group_max(df, metric_names=None):
   group_max_step = group_df.fillna(-1e9).idxmax(axis=0)
   metric_max = pd.Series()
   metric_max_step = pd.Series()
-  for group_name, max_step in group_max_step.iteritems():
+  for group_name, max_step in group_max_step.items():
     for metric in group_to_metrics[group_name]:
       metric_max[metric] = df[metric][max_step]
       metric_max_step[metric] = max_step
