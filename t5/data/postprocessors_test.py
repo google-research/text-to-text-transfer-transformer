@@ -36,6 +36,8 @@ class PostprocessorsTest(absltest.TestCase):
     self.assertEqual(postprocessors.string_label_to_class_id("two", cls), 1)
     self.assertEqual(postprocessors.string_label_to_class_id("foo", cls), -1)
     self.assertEqual(postprocessors.string_label_to_class_id("foo", cls, 2), 2)
+    self.assertEqual(postprocessors.string_label_to_class_id(
+        "foo", cls, use_default=False), "foo")
 
   def test_multirc(self):
     self.assertDictEqual(
