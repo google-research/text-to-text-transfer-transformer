@@ -48,7 +48,10 @@ setuptools.setup(
         'editdistance',
         'immutabledict',
         'gin-config',
-        'mesh-tensorflow[transformer]>=0.1.13',
+        (
+            'mesh-tensorflow[transformer] @'
+            ' git+https://github.com/tensorflow/mesh#egg=mesh-tensorflow'
+        ),
         'nltk',
         'numpy',
         # TODO(kehanghan): Remove once test_log_csv can use new pandas APIs.
