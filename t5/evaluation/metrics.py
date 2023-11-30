@@ -84,14 +84,16 @@ def rouge(
     targets,
     predictions,
     score_keys=("rouge1", "rouge2", "rougeLsum"),
+    verbose=True,
     **kwargs,
 ):
   """Computes rouge score nondeterministically using the bootstrap.
 
   Args:
-    targets: list of strings
-    predictions: list of strings
+    targets: list of strings.
+    predictions: list of strings.
     score_keys: list of strings with the keys to compute.
+    verbose: whether to enable additional logging.
     **kwargs: additional keyword arguments for RougeScorer.
 
   Returns:
@@ -106,14 +108,15 @@ def rouge(
     prediction = _prepare_summary_rouge(prediction)
     aggregator.add_scores(scorer.score(target=target, prediction=prediction))
   result = aggregator.aggregate()
-  for key in score_keys:
-    logging.info(
-        "%s = %.2f, 95%% confidence [%.2f, %.2f]",
-        key,
-        result[key].mid.fmeasure*100,
-        result[key].low.fmeasure*100,
-        result[key].high.fmeasure*100,
-    )
+  if verbose:
+    for key in score_keys:
+      logging.info(
+          "%s = %.2f, 95%% confidence [%.2f, %.2f]",
+          key,
+          result[key].mid.fmeasure*100,
+          result[key].low.fmeasure*100,
+          result[key].high.fmeasure*100,
+      )
   return {key: result[key].mid.fmeasure*100 for key in score_keys}
 
 
