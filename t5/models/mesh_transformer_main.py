@@ -155,6 +155,7 @@ def main(_):
     t5.data.set_tfds_data_dir_override(FLAGS.t5_tfds_data_dir)
 
   # Add search path for gin files stored in package.
+  assert pkg_resources.resource_filename is not None
   gin.add_config_file_search_path(
       pkg_resources.resource_filename(__name__, "gin"))
   try:
