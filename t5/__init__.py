@@ -16,6 +16,7 @@
 
 import t5.data
 import t5.evaluation
+import t5.models
 
 # Version number.
 from t5.version import __version__
