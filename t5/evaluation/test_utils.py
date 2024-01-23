@@ -26,3 +26,11 @@ class BaseMetricsTest(absltest.TestCase):
         self.assertAlmostEqual(a[k], b[k], delta=delta, places=places)
       except AssertionError as e:
         raise AssertionError(str(e) + " for key '%s'" % k)
+
+  def assertDictContainsSubset(self, expected_subset, actual_set):
+    self.assertContainsSubset(expected_subset.keys(), actual_set.keys())
+    for k in expected_subset:
+      try:
+        self.assertEqual(expected_subset[k], actual_set[k])
+      except AssertionError as e:
+        raise AssertionError(str(e) + " for key '%s'" % k) from None
