@@ -1,4 +1,4 @@
-# Copyright 2023 The T5 Authors.
+# Copyright 2024 The T5 Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ import functools
 
 from absl.testing import absltest
 import gin
+import jax
+import numpy as np
 import seqio
 from seqio import test_utils
 from t5.data import preprocessors as prep
@@ -2417,6 +2419,44 @@ class PreprocessorsTest(tf.test.TestCase):
           output_features=None,
           merge_examples_to_reduce_padding=True,
           passthrough_feature_keys=['passthrough'])
+
+  def test_cast_seeds_works_with_jax_rngs(self):
+    jax_rng = jax.random.PRNGKey(0)
+    cast_rng = prep.maybe_cast_seed(jax_rng)
+    tf_seed = tf.random.experimental.stateless_split(cast_rng)
+    expected_seed = tf.constant(
+        [
+            [-6856063536328932722, -6061095977527908230],
+            [6624627857932008774, -9000103707649019216],
+        ],
+        shape=(2, 2),
+        dtype=tf.int64,
+    )
+    tf.assert_equal(tf_seed, expected_seed)
+
+  def test_cast_seeds_works_with_tf_rngs(self):
+    # This imitates seqio seed generation, which is how seeds are commonly
+    # passed to t5 preprocessors.
+    base_seed = 42
+    random_ds_seeds = np.arange(base_seed, base_seed + 2).reshape(-1, 2)
+    random_ds_seeds = tuple(tuple(s) for s in random_ds_seeds)
+    seed_ds = tf.nest.map_structure(
+        tf.data.experimental.RandomDataset, random_ds_seeds
+    )
+    range_ds = tf.data.Dataset.from_tensor_slices(range(1))
+    zip_ds = tf.data.Dataset.zip(range_ds, seed_ds)
+    for d in zip_ds:
+      seed_tuple = d[1][0]
+      cast_rng = prep.maybe_cast_seed(seed_tuple)
+      tf_seed = tf.random.experimental.stateless_split(cast_rng)
+      expected_seed = tf.constant(
+          [
+              [-9175096281216858533, 7122269515015050198],
+              [-2581824382145232558, -4001119725515448663],
+          ],
+          dtype=tf.int64,
+      )
+      tf.assert_equal(tf_seed, expected_seed)
 
 
 if __name__ == '__main__':

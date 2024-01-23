@@ -1,4 +1,4 @@
-# Copyright 2023 The T5 Authors.
+# Copyright 2024 The T5 Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -2050,6 +2050,20 @@ def prefix_lm(dataset, sequence_length, output_features,
   return ds
 
 
+def maybe_cast_seed(seed):
+  """Cast seed to int64 if needed."""
+  def _maybe_cast_seed(s):
+    if s.dtype == tf.int64 or s.dtype == tf.int32:
+      return s
+    return tf.cast(s, tf.int64)
+
+  # seed is either a Tensor or a pair of Tensors.
+  if isinstance(seed, tf.Tensor):
+    return _maybe_cast_seed(seed)
+  else:
+    return _maybe_cast_seed(seed[0]), _maybe_cast_seed(seed[1])
+
+
 def full_lm(dataset, sequence_length, output_features):
   """Full language modeling objective with EOS only at document boundaries."""
   ds = dataset
@@ -2119,6 +2133,7 @@ def single_example_select_random_chunk(
   if max_length is None:
     raise ValueError('Must specify max_length or sequence_length.')
 
+  seed = maybe_cast_seed(seed)
   seeds = tf.unstack(tf.random.experimental.stateless_split(seed))
   tokens = features[feature_key]
   n_tokens = tf.shape(tokens)[0]
@@ -2790,6 +2805,7 @@ def single_example_denoise(features: FeatureType,
     raise ValueError(
         f"passthrough keys cannot contain '{input_feature_key}' or 'targets'")
 
+  seed = maybe_cast_seed(seed)
   seeds = tf.unstack(tf.random.experimental.stateless_split(seed, 6))
   tokens = features['targets']
   vocabulary = output_features['targets'].vocabulary
