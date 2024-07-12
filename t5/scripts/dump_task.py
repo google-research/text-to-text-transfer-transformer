@@ -20,6 +20,10 @@ python -m t5.scripts.dump_task \
     --max_examples=100
 
 
+Note: this binary is outdated. The recommended alternative is to write a
+seqio_binaries() build rule with your tasks module as dependencies;
+and then run inspect_tasks: seqio/scripts/inspect_tasks_main.py
+
 """
 
 import importlib
