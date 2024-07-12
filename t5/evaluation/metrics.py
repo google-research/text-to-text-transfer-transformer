@@ -45,7 +45,7 @@ from rouge_score import scoring
 ModelOutputType = seqio.metrics.ModelOutputType
 
 
-def bleu(targets, predictions, tokenizer="intl"):
+def bleu(targets, predictions, tokenizer="intl", use_effective_order=False):
   """Computes BLEU score.
 
   Args:
@@ -53,6 +53,7 @@ def bleu(targets, predictions, tokenizer="intl"):
       are present.
     predictions: list of strings
     tokenizer: tokenizer option for corpus_bleu
+    use_effective_order: whether to use effective order when computing BLEU.
 
   Returns:
     bleu_score across all targets and predictions
@@ -69,7 +70,7 @@ def bleu(targets, predictions, tokenizer="intl"):
                                      force=False,
                                      lowercase=False,
                                      tokenize=tokenizer,
-                                     use_effective_order=False)
+                                     use_effective_order=use_effective_order)
   return {"bleu": bleu_score.score}
 
 
