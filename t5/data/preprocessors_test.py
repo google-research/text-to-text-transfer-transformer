@@ -2440,9 +2440,7 @@ class PreprocessorsTest(tf.test.TestCase):
     base_seed = 42
     random_ds_seeds = np.arange(base_seed, base_seed + 2).reshape(-1, 2)
     random_ds_seeds = tuple(tuple(s) for s in random_ds_seeds)
-    seed_ds = tf.nest.map_structure(
-        tf.data.experimental.RandomDataset, random_ds_seeds
-    )
+    seed_ds = tf.nest.map_structure(tf.data.Dataset.random, random_ds_seeds)
     range_ds = tf.data.Dataset.from_tensor_slices(range(1))
     zip_ds = tf.data.Dataset.zip(range_ds, seed_ds)
     for d in zip_ds:
