@@ -2,7 +2,7 @@ This directory contains configurations for unsupervised training objectives.
 
 Naming conventions:
 
-Most files follow the follwing naming scheme:
+Most files follow the following naming scheme:
 
 <noise-pattern>_<noise-density-percentage>_<inputs-encoding>_<targets-encoding>
 
