@@ -144,7 +144,7 @@ def main(_):
 
   if FLAGS.super:
     lines = [
-        json.dumps({"idx": int(i), "label": p}) + os.linesep
+        json.dumps({"idx": int(i), "label": p}) + os.linesep  # pytype: disable=wrong-arg-types
         for i, p in zip(indices, predictions)
     ]
     with tf.io.gfile.GFile(out_file.format(extension="jsonl"), "w") as f:
