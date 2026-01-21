@@ -65,21 +65,11 @@ _finetune_tasks = [
     "wmt16_enro_v003"
 ]
 
-# ========================== GLUE and SuperGLUE ================================
+# ========================== GLUE ==============================================
 
 MixtureRegistry.add(
     "glue_v002_proportional",
     _glue_tasks_with_weight)
-
-
-MixtureRegistry.add(
-    "super_glue_v102_proportional",
-    _super_glue_tasks_with_weight)
-
-
-MixtureRegistry.add(
-    "super_glue_v102_proportional_sentinel",
-    _super_glue_tasks_with_weight_sentinel)
 
 
 # mnli and its associated dev sets: mnli_matched and mnli_mismatched
