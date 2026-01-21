@@ -145,7 +145,7 @@ for b in tfds.text.glue.Glue.builder_configs.values():
   TaskRegistry.add(
       "glue_%s_v002" % b.name,
       source=seqio.TfdsDataSource(
-          tfds_name="glue/%s:1.0.0" % b.name,
+          tfds_name="glue/%s:2.0.0" % b.name,
           splits=["test"] if b.name == "ax" else None),
       preprocessors=[
           get_glue_text_preprocessor(b),
