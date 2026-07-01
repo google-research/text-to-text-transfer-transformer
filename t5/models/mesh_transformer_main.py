@@ -1,4 +1,4 @@
-# Copyright 2025 The T5 Authors.
+# Copyright 2026 The T5 Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -231,11 +231,11 @@ def main(_):
       if isinstance(checkpoint_steps, list):
         checkpoint_steps = checkpoint_steps[0]
 
-      model.finetune(
+      model.finetune(  # pyrefly: ignore[missing-argument]
           mixture_or_task_name=FLAGS.mixture_or_task,
-          steps=FLAGS.train_steps,
+          steps=FLAGS.train_steps,  # pyrefly: ignore[unexpected-keyword]
           pretrained_model_dir=FLAGS.pretrained_model_dir,
-          checkpoint_steps=checkpoint_steps)
+          checkpoint_steps=checkpoint_steps)  # pyrefly: ignore[unexpected-keyword]
     elif FLAGS.mode == "predict":
       model.predict(
           checkpoint_steps=checkpoint_steps,

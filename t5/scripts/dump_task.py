@@ -1,4 +1,4 @@
-# Copyright 2025 The T5 Authors.
+# Copyright 2026 The T5 Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -136,7 +136,7 @@ def main(_):
   elif FLAGS.mixture is not None:
     task_or_mixture = seqio.MixtureRegistry.get(FLAGS.mixture)
 
-  ds = task_or_mixture.get_dataset(
+  ds = task_or_mixture.get_dataset(  # pyrefly: ignore[unbound-name]
       sequence_length=sequence_length(),
       split=FLAGS.split,
       use_cached=False,

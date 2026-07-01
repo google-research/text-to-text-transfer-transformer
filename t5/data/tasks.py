@@ -1,4 +1,4 @@
-# Copyright 2025 The T5 Authors.
+# Copyright 2026 The T5 Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ DEFAULT_OUTPUT_FEATURES = {
 # Final pretraining task used in Raffel et al., 2019.
 TaskRegistry.add(
     "c4_v220_span_corruption",
-    source=seqio.TfdsDataSource(tfds_name="c4/en:2.2.0"),
+    source=seqio.TfdsDataSource(tfds_name="c4/en:2.2.0"),  # pyrefly: ignore[bad-argument-type]
     preprocessors=[
         functools.partial(
             preprocessors.rekey, key_map={
@@ -64,7 +64,7 @@ TaskRegistry.add(
 # Baseline pretraining task used in Raffel et al., 2019.
 TaskRegistry.add(
     "c4_v220_iid_denoising",
-    source=seqio.TfdsDataSource(tfds_name="c4/en:2.2.0"),
+    source=seqio.TfdsDataSource(tfds_name="c4/en:2.2.0"),  # pyrefly: ignore[bad-argument-type]
     preprocessors=[
         functools.partial(
             preprocessors.rekey, key_map={
@@ -83,7 +83,7 @@ TaskRegistry.add(
 # Prefix language modeling pretraining task used in Raffel et al., 2019.
 TaskRegistry.add(
     "c4_v220_prefix_lm",
-    source=seqio.TfdsDataSource(tfds_name="c4/en:2.2.0"),
+    source=seqio.TfdsDataSource(tfds_name="c4/en:2.2.0"),  # pyrefly: ignore[bad-argument-type]
     preprocessors=[
         functools.partial(
             preprocessors.rekey, key_map={
@@ -104,7 +104,7 @@ _c4_config_suffixes = ["", ".noclean", ".realnewslike", ".webtextlike"]
 for config_suffix in _c4_config_suffixes:
   TaskRegistry.add(
       "c4{name}_v020_unsupervised".format(name=config_suffix.replace(".", "_")),
-      source=seqio.TfdsDataSource(tfds_name="c4/en{config}:2.2.0".format(
+      source=seqio.TfdsDataSource(tfds_name="c4/en{config}:2.2.0".format(  # pyrefly: ignore[bad-argument-type]
           config=config_suffix)),
       preprocessors=[
           functools.partial(
@@ -124,7 +124,7 @@ for config_suffix in _c4_config_suffixes:
 # ================================ Wikipedia ===================================
 TaskRegistry.add(
     "wikipedia_20190301.en_v003_unsupervised",
-    source=seqio.TfdsDataSource(tfds_name="wikipedia/20190301.en:1.0.0"),
+    source=seqio.TfdsDataSource(tfds_name="wikipedia/20190301.en:1.0.0"),  # pyrefly: ignore[bad-argument-type]
     preprocessors=[
         functools.partial(
             preprocessors.rekey, key_map={
@@ -144,7 +144,7 @@ TaskRegistry.add(
 for b in tfds.text.glue.Glue.builder_configs.values():
   TaskRegistry.add(
       "glue_%s_v002" % b.name,
-      source=seqio.TfdsDataSource(
+      source=seqio.TfdsDataSource(  # pyrefly: ignore[bad-argument-type]
           tfds_name="glue/%s:1.0.0" % b.name,
           splits=["test"] if b.name == "ax" else None),
       preprocessors=[
@@ -160,7 +160,7 @@ for b in tfds.text.glue.Glue.builder_configs.values():
 # =============================== CNN DailyMail ================================
 TaskRegistry.add(
     "cnn_dailymail_v002",
-    source=seqio.TfdsDataSource(tfds_name="cnn_dailymail:3.4.0"),
+    source=seqio.TfdsDataSource(tfds_name="cnn_dailymail:3.4.0"),  # pyrefly: ignore[bad-argument-type]
     preprocessors=[
         functools.partial(
             preprocessors.summarize,
@@ -191,7 +191,7 @@ b_configs = [
 for prefix, b, tfds_version in b_configs:
   TaskRegistry.add(
       "wmt%s_%s%s_v003" % (prefix, b.language_pair[1], b.language_pair[0]),
-      source=seqio.TfdsDataSource(tfds_name="wmt%s_translate/%s:%s" %
+      source=seqio.TfdsDataSource(tfds_name="wmt%s_translate/%s:%s" %  # pyrefly: ignore[bad-argument-type]
                                   (prefix, b.name, tfds_version)),
       preprocessors=[
           functools.partial(
@@ -210,7 +210,7 @@ for prefix, b, tfds_version in b_configs:
 b = tfds.translate.wmt_t2t.WmtT2tTranslate.builder_configs["de-en"]
 TaskRegistry.add(
     "wmt_t2t_ende_v003",
-    source=seqio.TfdsDataSource(tfds_name="wmt_t2t_translate/de-en:1.0.0"),
+    source=seqio.TfdsDataSource(tfds_name="wmt_t2t_translate/de-en:1.0.0"),  # pyrefly: ignore[bad-argument-type]
     preprocessors=[
         functools.partial(
             preprocessors.translate,
@@ -252,7 +252,7 @@ for b in tfds.text.super_glue.SuperGlue.builder_configs.values():
     ]
   TaskRegistry.add(
       "super_glue_%s_v102" % b.name,
-      source=seqio.TfdsDataSource(
+      source=seqio.TfdsDataSource(  # pyrefly: ignore[bad-argument-type]
           tfds_name="super_glue/%s:1.0.2" % b.name,
           splits=["test"] if b.name in ["axb", "axg"] else None),
       preprocessors=glue_preprocessors,
@@ -267,7 +267,7 @@ for b in tfds.text.super_glue.SuperGlue.builder_configs.values():
 # ======================== Definite Pronoun Resolution =========================
 TaskRegistry.add(
     "dpr_v001_simple",
-    source=seqio.TfdsDataSource(tfds_name="definite_pronoun_resolution:1.1.0"),
+    source=seqio.TfdsDataSource(tfds_name="definite_pronoun_resolution:1.1.0"),  # pyrefly: ignore[bad-argument-type]
     preprocessors=[
         preprocessors.definite_pronoun_resolution_simple,
         seqio.preprocessors.tokenize,
@@ -283,7 +283,7 @@ seqio.experimental.add_task_with_sentinels("dpr_v001_simple", num_sentinels=1)
 # =================================== WSC ======================================
 TaskRegistry.add(
     "super_glue_wsc_v102_simple_train",
-    source=seqio.TfdsDataSource(
+    source=seqio.TfdsDataSource(  # pyrefly: ignore[bad-argument-type]
         tfds_name="super_glue/wsc.fixed:1.0.2", splits=["train"]),
     preprocessors=[
         functools.partial(preprocessors.wsc_simple, correct_referent_only=True),
@@ -300,7 +300,7 @@ seqio.experimental.add_task_with_sentinels("super_glue_wsc_v102_simple_train",
 
 TaskRegistry.add(
     "super_glue_wsc_v102_simple_eval",
-    source=seqio.TfdsDataSource(
+    source=seqio.TfdsDataSource(  # pyrefly: ignore[bad-argument-type]
         tfds_name="super_glue/wsc.fixed:1.0.2", splits=["validation", "test"]),
     preprocessors=[
         functools.partial(
@@ -319,7 +319,7 @@ seqio.experimental.add_task_with_sentinels("super_glue_wsc_v102_simple_eval",
 # =================================== WNLI =====================================
 TaskRegistry.add(
     "glue_wnli_v002_simple_eval",
-    source=seqio.TfdsDataSource(
+    source=seqio.TfdsDataSource(  # pyrefly: ignore[bad-argument-type]
         tfds_name="glue/wnli:1.0.0", splits=["validation", "test"]),
     preprocessors=[
         preprocessors.wnli_simple,
@@ -335,7 +335,7 @@ TaskRegistry.add(
 # Maximized evaluation metrics over all answers.
 TaskRegistry.add(
     "squad_v010_allanswers",
-    source=seqio.TfdsDataSource(tfds_name="squad/v1.1:3.0.0"),
+    source=seqio.TfdsDataSource(tfds_name="squad/v1.1:3.0.0"),  # pyrefly: ignore[bad-argument-type]
     preprocessors=[
         preprocessors.squad,
         seqio.preprocessors.tokenize,
@@ -350,7 +350,7 @@ TaskRegistry.add(
 # Maximized evaluation metrics over all answers.
 TaskRegistry.add(
     "squad_v010_context_free",
-    source=seqio.TfdsDataSource(tfds_name="squad/v1.1:3.0.0"),
+    source=seqio.TfdsDataSource(tfds_name="squad/v1.1:3.0.0"),  # pyrefly: ignore[bad-argument-type]
     preprocessors=[
         functools.partial(preprocessors.squad, include_context=False),
         seqio.preprocessors.tokenize,
@@ -364,7 +364,7 @@ TaskRegistry.add(
 # Squad span prediction task instead of text.
 TaskRegistry.add(
     "squad_v010_allanswers_span",
-    source=seqio.TfdsDataSource(tfds_name="squad/v1.1:3.0.0"),
+    source=seqio.TfdsDataSource(tfds_name="squad/v1.1:3.0.0"),  # pyrefly: ignore[bad-argument-type]
     preprocessors=[
         preprocessors.squad_span_space_tokenized,
         seqio.preprocessors.tokenize,
@@ -378,7 +378,7 @@ TaskRegistry.add(
 # Deprecated: Use `squad_v010_allanswers` instead.
 TaskRegistry.add(
     "squad_v010",
-    source=seqio.TfdsDataSource(tfds_name="squad/v1.1:3.0.0"),
+    source=seqio.TfdsDataSource(tfds_name="squad/v1.1:3.0.0"),  # pyrefly: ignore[bad-argument-type]
     preprocessors=[
         preprocessors.squad,
         seqio.preprocessors.tokenize,
@@ -391,7 +391,7 @@ TaskRegistry.add(
 # ================================= TriviaQA ===================================
 TaskRegistry.add(
     "trivia_qa_v010",
-    source=seqio.TfdsDataSource(tfds_name="trivia_qa/rc:1.1.0"),
+    source=seqio.TfdsDataSource(tfds_name="trivia_qa/rc:1.1.0"),  # pyrefly: ignore[bad-argument-type]
     preprocessors=[
         preprocessors.trivia_qa,
         seqio.preprocessors.tokenize,
@@ -413,7 +413,7 @@ vocab = seqio.SentencePieceVocabulary(sentencepiece_model_file)
 
 seqio.TaskRegistry.add(
     "c4_prefix_lm_objective_encoder_decoder_architecture",
-    source=seqio.TfdsDataSource(tfds_name="c4/en:2.2.0"),
+    source=seqio.TfdsDataSource(tfds_name="c4/en:2.2.0"),  # pyrefly: ignore[bad-argument-type]
     preprocessors=[
         functools.partial(
             preprocessors.rekey, key_map={
@@ -444,7 +444,7 @@ seqio.TaskRegistry.add(
 
 seqio.TaskRegistry.add(
     "c4_prefix_lm_objective_decoder_architecture",
-    source=seqio.TfdsDataSource(tfds_name="c4/en:2.2.0"),
+    source=seqio.TfdsDataSource(tfds_name="c4/en:2.2.0"),  # pyrefly: ignore[bad-argument-type]
     preprocessors=[
         functools.partial(
             preprocessors.rekey, key_map={
@@ -472,7 +472,7 @@ seqio.TaskRegistry.add(
 
 TaskRegistry.add(
     "c4_v220_full_lm",
-    source=seqio.TfdsDataSource(tfds_name="c4/en:2.2.0"),
+    source=seqio.TfdsDataSource(tfds_name="c4/en:2.2.0"),  # pyrefly: ignore[bad-argument-type]
     preprocessors=[
         functools.partial(
             preprocessors.rekey, key_map={

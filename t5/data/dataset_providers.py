@@ -1,4 +1,4 @@
-# Copyright 2025 The T5 Authors.
+# Copyright 2026 The T5 Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -107,7 +107,7 @@ class FunctionTask(seqio.Task):
       postprocess_fns = postprocess_fn
 
       def postprocess_fn(x, **postprocess_kwargs):  # pylint:disable=function-redefined
-        for post_fn in postprocess_fns:
+        for post_fn in postprocess_fns:  # pyrefly: ignore[not-iterable]
           x = post_fn(x, **postprocess_kwargs)
         return x
 
@@ -284,7 +284,7 @@ class TaskRegistry(seqio.TaskRegistry):
   """
 
   @classmethod
-  def add(cls, name: str, task_cls=FunctionTask, **kwargs) -> seqio.Task:
+  def add(cls, name: str, task_cls=FunctionTask, **kwargs) -> seqio.Task:  # pyrefly: ignore[bad-override]
     provider = task_cls(name, **kwargs)
     super().add_provider(name, provider)
     return provider

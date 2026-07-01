@@ -1,4 +1,4 @@
-# Copyright 2025 The T5 Authors.
+# Copyright 2026 The T5 Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ def mesh_train_dataset_fn(
     mixture_or_task_name,
     sequence_length,
     vocabulary=None,
-    dataset_split=tfds.Split.TRAIN,
+    dataset_split=tfds.Split.TRAIN,  # pyrefly: ignore[missing-attribute]
     shuffle=True,
     seed=None,
     use_cached=False,

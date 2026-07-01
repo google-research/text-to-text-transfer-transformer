@@ -1,4 +1,4 @@
-# Copyright 2025 The T5 Authors.
+# Copyright 2026 The T5 Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -58,7 +58,7 @@ def multirc(string_label, example=None, is_target=False):
   }
   # Add the group, if present, since the model outputs will not have it.
   if is_target:
-    res["group"] = example["idx/question"]
+    res["group"] = example["idx/question"]  # pyrefly: ignore[unsupported-operation]
   return res
 
 
@@ -66,9 +66,9 @@ def record(answer, example=None, is_target=False):
   """Returns dict with answer, or all answers + grouping key for a target."""
   if is_target:
     return {
-        "value": [tf.compat.as_text(a) for a in example["answers"]],
+        "value": [tf.compat.as_text(a) for a in example["answers"]],  # pyrefly: ignore[unsupported-operation]
         # Add the group since the model output will not have it.
-        "group": (example["idx/passage"], example["idx/query"])
+        "group": (example["idx/passage"], example["idx/query"])  # pyrefly: ignore[unsupported-operation]
     }
   return {"value": answer}
 
@@ -76,7 +76,7 @@ def record(answer, example=None, is_target=False):
 def qa(answer, example=None, is_target=False):
   """Returns answer, or all answers if the full example is provided."""
   if is_target:
-    return [tf.compat.as_text(a) for a in example["answers"]]
+    return [tf.compat.as_text(a) for a in example["answers"]]  # pyrefly: ignore[unsupported-operation]
   return answer
 
 
@@ -85,8 +85,8 @@ def span_qa(answer, example=None, is_target=False):
 
   if is_target:
     return {
-        "answers": [tf.compat.as_text(a) for a in example["answers"]],
-        "context": tf.compat.as_text(example["context"])
+        "answers": [tf.compat.as_text(a) for a in example["answers"]],  # pyrefly: ignore[unsupported-operation]
+        "context": tf.compat.as_text(example["context"])  # pyrefly: ignore[unsupported-operation]
     }
 
   return answer
@@ -95,7 +95,7 @@ def span_qa(answer, example=None, is_target=False):
 def wsc_simple(prediction, example=None, is_target=False):
   """Sees whether we predicted the referent or not."""
   if is_target:
-    return example["label"]
+    return example["label"]  # pyrefly: ignore[unsupported-operation]
 
   determiners = {
       "a", "an", "few", "her", "his", "each", "every", "many", "much", "my",
@@ -116,7 +116,7 @@ def wsc_simple(prediction, example=None, is_target=False):
 
   # We aren't using the label but rather using the extracted referent so that we
   # can see if the prediction is equivalent to the referent.
-  referent = clean(example["targets_pretokenized"])
+  referent = clean(example["targets_pretokenized"])  # pyrefly: ignore[unsupported-operation]
 
   if ("'" in prediction) != ("'" in referent):
     # Make sure we don't mark cases where the prediction is "Bob" and the
@@ -141,13 +141,13 @@ def rank_classification(score,
   """A postprocessor for the `rank_classification` preprocessor and metric."""
   if is_target:
     outputs = [
-        tuple(example["idx"]), example["is_correct"],
-        example.get("weight", 1.0),
-        len(example["targets"])
+        tuple(example["idx"]), example["is_correct"],  # pyrefly: ignore[unsupported-operation]
+        example.get("weight", 1.0),  # pyrefly: ignore[missing-attribute]
+        len(example["targets"])  # pyrefly: ignore[unsupported-operation]
     ]
     if passthrough_feature_keys:
       for key in passthrough_feature_keys:
-        outputs.append(example[key])
+        outputs.append(example[key])  # pyrefly: ignore[unsupported-operation]
     return tuple(outputs)
   else:
     return score

@@ -1,4 +1,4 @@
-# Copyright 2025 The T5 Authors.
+# Copyright 2026 The T5 Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1744,10 +1744,10 @@ def rank_classification_formatter(
           'of list or tuple, but do not have matching lengths.')
   elif isinstance(inputs_formats, (list, tuple)):
     num_classes = len(inputs_formats)
-    targets_formats = [targets_formats] * num_classes
+    targets_formats = [targets_formats] * num_classes  # pyrefly: ignore[bad-assignment]
   elif isinstance(targets_formats, (list, tuple)):
     num_classes = len(targets_formats)
-    inputs_formats = [inputs_formats] * num_classes
+    inputs_formats = [inputs_formats] * num_classes  # pyrefly: ignore[bad-assignment]
   else:
     raise ValueError(
         'One of the inputs_formats and targets_formats has to '
@@ -2119,7 +2119,7 @@ def single_example_select_random_chunk(
     The features of the selected chunk.
   """
   if passthrough_feature_keys:
-    chunk_keys = set([feature_key] + (additional_feature_keys or []))
+    chunk_keys = set([feature_key] + (additional_feature_keys or []))  # pyrefly: ignore[unsupported-operation]
     overlap_keys = chunk_keys & set(passthrough_feature_keys)
     if overlap_keys:
       raise ValueError(
@@ -2432,7 +2432,7 @@ def unsupervised(dataset,
 @gin.configurable
 def split_tokens(dataset: tf.data.Dataset,
                  min_tokens_per_segment: Optional[int] = None,
-                 max_tokens_per_segment: int = gin.REQUIRED,
+                 max_tokens_per_segment: int = gin.REQUIRED,  # pyrefly: ignore[bad-function-definition]
                  feature_key: str = 'targets',
                  additional_feature_keys: Optional[Sequence[str]] = None,
                  passthrough_feature_keys: Optional[Sequence[str]] = None,
@@ -2463,7 +2463,7 @@ def split_tokens(dataset: tf.data.Dataset,
     a dataset
   """
   if passthrough_feature_keys:
-    split_keys = set([feature_key] + (additional_feature_keys or []))
+    split_keys = set([feature_key] + (additional_feature_keys or []))  # pyrefly: ignore[unsupported-operation]
     overlap_keys = split_keys & set(passthrough_feature_keys)
     if overlap_keys:
       raise ValueError(
@@ -2679,16 +2679,16 @@ def random_spans_helper(inputs_length=gin.REQUIRED,
   def _tokens_length_to_inputs_length_targets_length(tokens_length):
     num_noise_tokens = int(round(tokens_length * noise_density))
     num_nonnoise_tokens = tokens_length - num_noise_tokens
-    num_noise_spans = int(round(num_noise_tokens / mean_noise_span_length))
+    num_noise_spans = int(round(num_noise_tokens / mean_noise_span_length))  # pyrefly: ignore[unsupported-operation]
     # inputs contain all nonnoise tokens, sentinels for all noise spans
     # and one EOS token.
     return (
         num_nonnoise_tokens +
-        num_noise_spans * extra_tokens_per_span_inputs + 1,
+        num_noise_spans * extra_tokens_per_span_inputs + 1,  # pyrefly: ignore[unsupported-operation]
         num_noise_tokens +
-        num_noise_spans * extra_tokens_per_span_targets + 1)
+        num_noise_spans * extra_tokens_per_span_targets + 1)  # pyrefly: ignore[unsupported-operation]
 
-  tokens_length = inputs_length - 1
+  tokens_length = inputs_length - 1  # pyrefly: ignore[unsupported-operation]
   while (_tokens_length_to_inputs_length_targets_length(tokens_length + 1)[0]
          <= inputs_length):
     tokens_length += 1
@@ -2823,7 +2823,7 @@ def single_example_denoise(
     # support a batch_size arg.
     noise_mask_fn = functools.partial(noise_mask_fn, batch_size=batch_size)
     inputs_fn = functools.partial(inputs_fn, batch_size=batch_size)
-    targets_fn = functools.partial(targets_fn, batch_size=batch_size)
+    targets_fn = functools.partial(targets_fn, batch_size=batch_size)  # pyrefly: ignore[bad-argument-type]
   length = tf.size(tokens) // (batch_size or 1)
   noise_mask = noise_mask_fn(length, noise_density, seeds=seeds[:2])  # pytype: disable=wrong-keyword-args
   inputs = inputs_fn(tokens, noise_mask, vocabulary, seeds=seeds[2:4])  # pytype: disable=wrong-keyword-args
@@ -2860,9 +2860,9 @@ def denoise(dataset,
         features,
         seed,
         output_features=output_features,
-        noise_density=noise_density,
-        noise_mask_fn=noise_mask_fn,
-        inputs_fn=inputs_fn,
+        noise_density=noise_density,  # pyrefly: ignore[bad-argument-type]
+        noise_mask_fn=noise_mask_fn,  # pyrefly: ignore[bad-argument-type]
+        inputs_fn=inputs_fn,  # pyrefly: ignore[bad-argument-type]
         targets_fn=targets_fn,
         passthrough_feature_keys=passthrough_feature_keys,
         input_feature_key=input_feature_key)

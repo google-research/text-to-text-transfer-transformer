@@ -1,4 +1,4 @@
-# Copyright 2025 The T5 Authors.
+# Copyright 2026 The T5 Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -727,7 +727,7 @@ class ShardedSquad(seqio.metrics.Metric):
     return cls(f1=0.0, em=0.0, count=0)
 
   @classmethod
-  def from_model_output(
+  def from_model_output(  # pyrefly: ignore[bad-override]
       cls,
       inputs: Sequence[Mapping[str, Any]],
       model_output: np.ndarray,
@@ -738,23 +738,23 @@ class ShardedSquad(seqio.metrics.Metric):
 
     del indices_2d
     if mask is None:
-      mask = jnp.ones((len(inputs),))
+      mask = jnp.ones((len(inputs),))  # pyrefly: ignore[bad-assignment]
 
     # Postprocesses the targets here.
     postprocessed_targets = [[
         tf.compat.as_text(answers) for answers in example["answers"]
-    ] for example, included in zip(inputs, mask) if included]
+    ] for example, included in zip(inputs, mask) if included]  # pyrefly: ignore[bad-argument-type]
 
     # Decodes the predictions here.
     vocab = features[target_field_name].vocabulary
     predictions = [
         vocab.decode(tokens)
-        for tokens, included in zip(model_output, mask)
+        for tokens, included in zip(model_output, mask)  # pyrefly: ignore[bad-argument-type]
         if included
     ]
 
     squad_result = squad(targets=postprocessed_targets, predictions=predictions)
-    return cls(f1=squad_result["f1"], em=squad_result["em"], count=mask.sum())
+    return cls(f1=squad_result["f1"], em=squad_result["em"], count=mask.sum())  # pyrefly: ignore[missing-attribute]
 
   def merge(self, other: "ShardedSquad") -> "ShardedSquad":
     """Returns `Squad` that is the accumulation of `self` and `other`.

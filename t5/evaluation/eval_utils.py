@@ -1,4 +1,4 @@
-# Copyright 2025 The T5 Authors.
+# Copyright 2026 The T5 Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -131,7 +131,7 @@ def get_eval_metric_values(events, task_name=None):
         _, metric_name = tag.split("/")
       else:
         _, task_name_from_tag, metric_name = tag.split("/")
-      eval_task_name = task_name if task_name else task_name_from_tag
+      eval_task_name = task_name if task_name else task_name_from_tag  # pyrefly: ignore[unbound-name]
       eval_values["{}/{}".format(eval_task_name, metric_name)] = event_values
   return eval_values
 
@@ -177,7 +177,7 @@ def compute_avg_glue(df, metric_names=None):
         group_avg = np.mean([df[k] for k in metrics], axis=0)
         accum = group_avg if accum is None else accum + group_avg
       # Compute average across all groups
-      average = accum/len(group_to_metrics)
+      average = accum/len(group_to_metrics)  # pyrefly: ignore[unsupported-operation]
       df[average_key] = average
   return df
 

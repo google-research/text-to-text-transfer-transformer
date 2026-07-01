@@ -1,4 +1,4 @@
-# Copyright 2025 The T5 Authors.
+# Copyright 2026 The T5 Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -356,7 +356,7 @@ def run_eval(
 
   tasks = t5.data.get_subtasks(
       t5.data.get_mixture_or_task(mixture_or_task_name))
-  tasks = seqio.evaluation.get_valid_eval_tasks(tasks, split)
+  tasks = seqio.evaluation.get_valid_eval_tasks(tasks, split)  # pyrefly: ignore[bad-argument-type]
 
   if not tasks:
     logging.info(
@@ -441,7 +441,7 @@ def run_eval(
             tag = "eval/{}/{}".format(task.name, metric_name)
             logging.info("%s at step %d: %.3f", tag, step, metric_value)
             if summary_dir:
-              summary.value.add(tag=tag, simple_value=metric_value)
+              summary.value.add(tag=tag, simple_value=metric_value)  # pyrefly: ignore[unbound-name]
               summary_writer.add_summary(summary, step)  # pytype: disable=attribute-error
         if summary_dir:
           summary_writer.flush()  # pytype: disable=attribute-error
