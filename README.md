@@ -444,6 +444,7 @@ We have released the following checkpoints for pre-trained models described in o
 
 See [here][released_checkpoints] for a list of additional experimental pre-trained model checkpoints.
 
+
 # How to Cite
 If you extend or use this work, please cite the [paper][paper] where it was introduced:
 
