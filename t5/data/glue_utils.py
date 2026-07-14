@@ -129,6 +129,11 @@ def get_glue_postprocess_fn(builder_config):
     return postprocessors.multirc
   elif builder_config.name == "record":
     return postprocessors.record
+  elif builder_config.name == "boolq":
+    return functools.partial(
+        postprocessors.fuzzy_string_label_to_class_id,
+        label_classes=builder_config.label_classes,
+    )
   else:
     return functools.partial(
         postprocessors.string_label_to_class_id,

@@ -49,6 +49,34 @@ def string_label_to_class_id(string_label,
     return default
 
 
+def fuzzy_string_label_to_class_id(string_label,
+                                   label_classes,
+                                   default=-1,
+                                   **unused_kwargs):
+  """'Fuzzy' version of string_label_to_class_id that matches prefixes.
+
+  This is part of a best effort strategy to decode from models that haven't
+  learned to output class labels properly. For example, if string_label is
+  'Falseeeee' and label_classes is {'True', 'False'}, we return the index of
+  'False' since 'False' is a prefix of 'Falseeeee'.
+
+  Args:
+    string_label: an input string that we want to match against labels in
+      label_classes.
+    label_classes: a Sequence of strings to be matched against.
+    default: fallback label if there is no match.
+
+  Returns:
+    label_index: index of matched label or default.
+  """
+
+  for candidate in label_classes:
+    if string_label.startswith(candidate):
+      return label_classes.index(candidate)
+
+  return default
+
+
 def multirc(string_label, example=None, is_target=False):
   """Returns dict containing the class with the question index for grouping."""
   res = {
