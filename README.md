@@ -235,8 +235,8 @@ The correct pre-trained checkpoint path is included in the operative config.
 
 You may also define additional tasks and mixtures in a new file and import it using the `--module_import` flag.
 
-Alternatively, you could fine-tune with a TSV file where each line is formatted as `<input>\t<target>` (see [above](#using-a-tsv-file-directly)). For example, you could try one of the paired translation datasets from WMT '19 [News Commentary 14](http://data.statmt.org/news-commentary/v14/training/) training set
-(e.g., [English-French](http://data.statmt.org/news-commentary/v14/training/news-commentary-v14.en-fr.tsv.gz)). When using a TSV file, you would replace the `MIXTURE_NAME` flag with:
+Alternatively, you could fine-tune with a TSV file where each line is formatted as `<input>\t<target>` (see [above](#using-a-tsv-file-directly)). For example, you could try one of the paired translation datasets from WMT '19 [News Commentary 14](https://data.statmt.org/news-commentary/v14/training/) training set
+(e.g., [English-French](https://data.statmt.org/news-commentary/v14/training/news-commentary-v14.en-fr.tsv.gz)). When using a TSV file, you would replace the `MIXTURE_NAME` flag with:
 
 ```sh
 --gin_param="utils.run.train_dataset_fn = @t5.models.mesh_transformer.tsv_dataset_fn"
@@ -456,7 +456,7 @@ If you extend or use this work, please cite the [paper][paper] where it was intr
   volume  = {21},
   number  = {140},
   pages   = {1-67},
-  url     = {http://jmlr.org/papers/v21/20-074.html}
+  url     = {https://jmlr.org/papers/v21/20-074.html}
 }
 ```
 
