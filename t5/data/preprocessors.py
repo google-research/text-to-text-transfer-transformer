@@ -1795,7 +1795,7 @@ def rank_classification_formatter(
 
 
 @seqio.map_over_dataset
-def parse_tsv(line, field_names=None, field_delim='\t', field_columns=None):
+def parse_tsv(line, field_names=None, field_delim='\t', use_quote_delim=False, field_columns=None):
   """Splits TSV lines into dict examples mapping field name to string value.
 
   Args:
@@ -1817,7 +1817,7 @@ def parse_tsv(line, field_names=None, field_delim='\t', field_columns=None):
               line,
               record_defaults=[''] * len(field_names),
               field_delim=field_delim,
-              use_quote_delim=False,
+              use_quote_delim=use_quote_delim,
               select_cols=field_columns)))
 
 
