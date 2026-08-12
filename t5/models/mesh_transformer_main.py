@@ -177,7 +177,7 @@ def main(_):
           mesh_transformer.DEPRECATED_GIN_REFERENCES +
           tuple(FLAGS.additional_deprecated_gin_references))),
       finalize_config=False)
-  # We must overide this binding explicitly since it is set to a deprecated
+  # We must overidde this binding explicitly since it is set to a deprecated
   # function or class in many existing configs.
   gin.bind_parameter("run.vocabulary", mesh_transformer.get_vocabulary())
   gin.finalize()
