@@ -41,12 +41,16 @@ def lower_text(string, **unused_kwargs):
 def string_label_to_class_id(string_label,
                              label_classes,
                              default=-1,
+                             use_default=True,
                              **unused_kwargs):
   """Returns index of string_label in label_classes or default if not found."""
   if string_label in label_classes:
     return label_classes.index(string_label)
   else:
-    return default
+    if use_default:
+      return default
+    else:
+      return string_label
 
 
 def multirc(string_label, example=None, is_target=False):
