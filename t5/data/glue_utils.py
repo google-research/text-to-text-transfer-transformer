@@ -148,7 +148,7 @@ GLUE_METRICS = collections.OrderedDict([
     ("qnli", [metrics.accuracy]),
     ("rte", [metrics.accuracy]),
     ("wnli", [metrics.accuracy]),
-    ("ax", []),  # Only test set available.
+    ("ax", [metrics.accuracy]),  # Only test set available.
 ])
 
 
@@ -166,8 +166,8 @@ SUPERGLUE_METRICS = collections.OrderedDict([
     ("record", [metrics.deduplicate_metric(metrics.squad)]),
     ("rte", [metrics.accuracy]),
     ("wic", [metrics.accuracy]),
-    ("axb", []),  # Only test set available.
-    ("axg", []),  # Only test set available.
+    ("axb", [metrics.accuracy]),  # Only test set available.
+    ("axg", [metrics.accuracy]),  # Only test set available.
 ])
 
 
