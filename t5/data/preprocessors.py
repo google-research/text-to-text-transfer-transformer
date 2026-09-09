@@ -2432,7 +2432,7 @@ def unsupervised(dataset,
 @gin.configurable
 def split_tokens(dataset: tf.data.Dataset,
                  min_tokens_per_segment: Optional[int] = None,
-                 max_tokens_per_segment: int = gin.REQUIRED,  # pyrefly: ignore[bad-function-definition]
+                 max_tokens_per_segment: int = gin.REQUIRED,
                  feature_key: str = 'targets',
                  additional_feature_keys: Optional[Sequence[str]] = None,
                  passthrough_feature_keys: Optional[Sequence[str]] = None,
