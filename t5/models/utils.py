@@ -370,7 +370,7 @@ def run_eval(
       get_targets_and_examples(
           tasks=tasks,
           dataset_fn=functools.partial(
-              dataset_fn, split=split, sequence_length=None),
+              dataset_fn, split=split, sequence_length=None),  # pyrefly: ignore[bad-argument-type]
           sequence_dims={}))
 
   if summary_dir:

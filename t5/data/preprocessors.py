@@ -2821,9 +2821,9 @@ def single_example_denoise(
   if batch_size:
     # This step will fail if the noise_mask_fn, inputs_fn or targets_fn don't
     # support a batch_size arg.
-    noise_mask_fn = functools.partial(noise_mask_fn, batch_size=batch_size)
-    inputs_fn = functools.partial(inputs_fn, batch_size=batch_size)
-    targets_fn = functools.partial(targets_fn, batch_size=batch_size)  # pyrefly: ignore[bad-argument-type]
+    noise_mask_fn = functools.partial(noise_mask_fn, batch_size=batch_size)  # pyrefly: ignore[unexpected-keyword]
+    inputs_fn = functools.partial(inputs_fn, batch_size=batch_size)  # pyrefly: ignore[unexpected-keyword]
+    targets_fn = functools.partial(targets_fn, batch_size=batch_size)  # pyrefly: ignore[bad-argument-type, not-callable]
   length = tf.size(tokens) // (batch_size or 1)
   noise_mask = noise_mask_fn(length, noise_density, seeds=seeds[:2])  # pytype: disable=wrong-keyword-args
   inputs = inputs_fn(tokens, noise_mask, vocabulary, seeds=seeds[2:4])  # pytype: disable=wrong-keyword-args
