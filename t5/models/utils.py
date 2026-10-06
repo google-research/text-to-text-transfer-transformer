@@ -442,9 +442,9 @@ def run_eval(
             logging.info("%s at step %d: %.3f", tag, step, metric_value)
             if summary_dir:
               summary.value.add(tag=tag, simple_value=metric_value)  # pyrefly: ignore[unbound-name]
-              summary_writer.add_summary(summary, step)  # pytype: disable=attribute-error
+              summary_writer.add_summary(summary, step)  # pyrefly: ignore[missing-attribute]
         if summary_dir:
-          summary_writer.flush()  # pytype: disable=attribute-error
+          summary_writer.flush()  # pyrefly: ignore[missing-attribute]
 
     # Only padding should remain.
     if batch_size:

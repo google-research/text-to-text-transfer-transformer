@@ -273,7 +273,7 @@ class MtfModel(T5Model):
             utils.filter_features,
             num_parallel_calls=tf.data.experimental.AUTOTUNE)
         combined_ds = ds if not combined_ds else combined_ds.concatenate(ds)
-      combined_ds = combined_ds.batch(self.batch_size, drop_remainder=False)  # pytype:disable=attribute-error
+      combined_ds = combined_ds.batch(self.batch_size, drop_remainder=False)  # pyrefly: ignore[missing-attribute]
       # Pad the final batch.
       combined_ds = transformer_dataset.trim_and_pad_dataset(
           combined_ds, length=self.batch_size)
@@ -353,7 +353,7 @@ class MtfModel(T5Model):
                          if compute_sequence_length else self._sequence_length),
         batch_size=self._batch_size)
 
-  def finetune(self,  # pytype: disable=signature-mismatch  # overriding-parameter-count-checks
+  def finetune(self,  # pyrefly: ignore[bad-override]
                mixture_or_task_name,
                finetune_steps,
                pretrained_model_dir,
@@ -385,7 +385,7 @@ class MtfModel(T5Model):
                init_checkpoint=os.path.join(pretrained_model_dir, model_ckpt),
                split=split)
 
-  def predict(self, input_file, output_file, checkpoint_steps=-1,  # pytype: disable=signature-mismatch  # overriding-parameter-count-checks
+  def predict(self, input_file, output_file, checkpoint_steps=-1,  # pyrefly: ignore[bad-override]
               beam_size=1, temperature=1.0, keep_top_k=-1, vocabulary=None):
     """Predicts targets from the given inputs.
 

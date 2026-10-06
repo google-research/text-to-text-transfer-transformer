@@ -2679,16 +2679,16 @@ def random_spans_helper(inputs_length=gin.REQUIRED,
   def _tokens_length_to_inputs_length_targets_length(tokens_length):
     num_noise_tokens = int(round(tokens_length * noise_density))
     num_nonnoise_tokens = tokens_length - num_noise_tokens
-    num_noise_spans = int(round(num_noise_tokens / mean_noise_span_length))  # pyrefly: ignore[unsupported-operation]
+    num_noise_spans = int(round(num_noise_tokens / mean_noise_span_length))
     # inputs contain all nonnoise tokens, sentinels for all noise spans
     # and one EOS token.
     return (
         num_nonnoise_tokens +
-        num_noise_spans * extra_tokens_per_span_inputs + 1,  # pyrefly: ignore[unsupported-operation]
+        num_noise_spans * extra_tokens_per_span_inputs + 1,
         num_noise_tokens +
-        num_noise_spans * extra_tokens_per_span_targets + 1)  # pyrefly: ignore[unsupported-operation]
+        num_noise_spans * extra_tokens_per_span_targets + 1)
 
-  tokens_length = inputs_length - 1  # pyrefly: ignore[unsupported-operation]
+  tokens_length = inputs_length - 1
   while (_tokens_length_to_inputs_length_targets_length(tokens_length + 1)[0]
          <= inputs_length):
     tokens_length += 1
@@ -2825,10 +2825,10 @@ def single_example_denoise(
     inputs_fn = functools.partial(inputs_fn, batch_size=batch_size)  # pyrefly: ignore[unexpected-keyword]
     targets_fn = functools.partial(targets_fn, batch_size=batch_size)  # pyrefly: ignore[bad-argument-type, not-callable]
   length = tf.size(tokens) // (batch_size or 1)
-  noise_mask = noise_mask_fn(length, noise_density, seeds=seeds[:2])  # pytype: disable=wrong-keyword-args
-  inputs = inputs_fn(tokens, noise_mask, vocabulary, seeds=seeds[2:4])  # pytype: disable=wrong-keyword-args
+  noise_mask = noise_mask_fn(length, noise_density, seeds=seeds[:2])
+  inputs = inputs_fn(tokens, noise_mask, vocabulary, seeds=seeds[2:4])
   if targets_fn:
-    targets = targets_fn(tokens, noise_mask, vocabulary, seeds=seeds[4:6])  # pytype: disable=wrong-keyword-args
+    targets = targets_fn(tokens, noise_mask, vocabulary, seeds=seeds[4:6])
   else:
     targets = tokens
   return {
@@ -2860,9 +2860,9 @@ def denoise(dataset,
         features,
         seed,
         output_features=output_features,
-        noise_density=noise_density,  # pyrefly: ignore[bad-argument-type]
-        noise_mask_fn=noise_mask_fn,  # pyrefly: ignore[bad-argument-type]
-        inputs_fn=inputs_fn,  # pyrefly: ignore[bad-argument-type]
+        noise_density=noise_density,
+        noise_mask_fn=noise_mask_fn,
+        inputs_fn=inputs_fn,
         targets_fn=targets_fn,
         passthrough_feature_keys=passthrough_feature_keys,
         input_feature_key=input_feature_key)
