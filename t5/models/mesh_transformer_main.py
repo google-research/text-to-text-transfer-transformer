@@ -15,6 +15,7 @@
 r"""Main file for launching training/eval/predictions of mesh-transformer model."""
 
 import importlib
+import importlib.resources
 import os
 import sys
 
@@ -23,7 +24,6 @@ from absl import flags
 from absl import logging
 import gin
 from mesh_tensorflow.transformer import utils
-import pkg_resources
 import t5
 from t5.models import mesh_transformer
 from t5.models import mtf_model
@@ -155,9 +155,8 @@ def main(_):
     t5.data.set_tfds_data_dir_override(FLAGS.t5_tfds_data_dir)
 
   # Add search path for gin files stored in package.
-  assert pkg_resources.resource_filename is not None
   gin.add_config_file_search_path(
-      pkg_resources.resource_filename(__name__, "gin"))
+      str(importlib.resources.files(__name__).joinpath("gin")))
   try:
     suffix = 0
     command_dir = os.path.join(FLAGS.model_dir, "commands")
