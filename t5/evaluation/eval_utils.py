@@ -21,7 +21,6 @@ from absl import logging
 import numpy as np
 import pandas as pd
 import tensorflow.compat.v1 as tf
-import tensorflow_datasets as tfds
 
 
 class Metric(object):
@@ -93,19 +92,11 @@ def parse_events_files(tb_summary_dir, seqio_summaries=False):
   events = collections.defaultdict(list)
   for events_file in tf.io.gfile.glob(os.path.join(tb_summary_dir, "events.*")):
     try:
-      serialized_events = list(
-          tfds.as_numpy(tf.data.TFRecordDataset(events_file)))[1:]
-      for idx, e in enumerate(tf.train.summary_iterator(events_file)):
+      for e in tf.train.summary_iterator(events_file):
         for v in e.summary.value:
-          if seqio_summaries:
-            event = tf.compat.v1.Event.FromString(
-                serialized_events[idx-1]).summary.value[0]
-            # Need to check if event has a tensor or scalar since we need to
-            # handle both cases.
-            if event.HasField("tensor"):
-              metric_value = tf.make_ndarray(event.tensor)
-            else:
-              metric_value = event.simple_value
+          # SeqIO may write either tensor or scalar summaries.
+          if seqio_summaries and v.HasField("tensor"):
+            metric_value = tf.make_ndarray(v.tensor)
           else:
             metric_value = v.simple_value
           events[v.tag].append(Event(e.step, metric_value))
