@@ -1,5 +1,9 @@
 # T5: Text-To-Text Transfer Transformer
 
+<p align="center">
+  <b>English</b> · <a href="https://github.com/google-research/text-to-text-transfer-transformer/blob/main/README.zh.md">简体中文</a>
+</p>
+
 
 ### As of July 2022, we recommend using T5X:
 
