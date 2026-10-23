@@ -64,7 +64,7 @@ setuptools.setup(
         'seqio-nightly',
         'six>=1.14',  # TODO(adarob): Remove once rouge-score is updated.
         'tfds-nightly',
-        'transformers>=2.7.0',
+        'transformers>=3.0.0',
     ],
     extras_require={
         'gcp': [
